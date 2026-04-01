@@ -452,48 +452,75 @@ function Render-Placeholder ($Title) {
 # --- 1. Fungsi Disable Update (Pause hingga 2075) ---
 function Action-UpdateDisable {
     try {
-        $regPath = "HKLM:\SOFTWARE\Microsoft\WindowsUpdate\UX\Settings"
-        if (-not (Test-Path $regPath)) { New-Item -Path $regPath -Force | Out-Null }
+        [System.Windows.Forms.Cursor]::Current = [System.Windows.Forms.Cursors]::WaitCursor
+
+        # Matikan & Disable semua Services
+        $services = @("wuauserv", "bits", "dosvc", "UsoSvc", "WaaSMedicSvc")
+        foreach ($svc in $services) {
+            Stop-Service -Name $svc -Force -ErrorAction SilentlyContinue
+            Set-Service -Name $svc -StartupType Disabled -ErrorAction SilentlyContinue
+        }
+
+        # Atur Tanggal Pause mentok sampai 2075
+        $now = "2025-01-01T00:00:00Z"
+        $future = "2075-01-01T00:00:00Z"
         
-        $now = [DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
-        $future = "2075-12-31T23:59:59Z" # Set mentok sampai akhir tahun 2075
-        
-        # Eksekusi ke Registry
-        Set-ItemProperty -Path $regPath -Name "PauseUpdatesStartTime" -Value $now -Force
-        Set-ItemProperty -Path $regPath -Name "PauseFeatureUpdatesStartTime" -Value $now -Force
-        Set-ItemProperty -Path $regPath -Name "PauseQualityUpdatesStartTime" -Value $now -Force
-        
-        Set-ItemProperty -Path $regPath -Name "PauseUpdatesExpiryTime" -Value $future -Force
-        Set-ItemProperty -Path $regPath -Name "PauseFeatureUpdatesEndTime" -Value $future -Force
-        Set-ItemProperty -Path $regPath -Name "PauseQualityUpdatesEndTime" -Value $future -Force
-        
-        # Restart service agar sistem langsung sadar
-        Restart-Service -Name wuauserv -Force -ErrorAction SilentlyContinue
-        
-        [System.Windows.Forms.MessageBox]::Show("Windows Update berhasil dimatikan (dipause) hingga tahun 2075!", "Sukses", "OK", "Information")
+        # Eksekusi Registry UX Settings
+        $uxPath = "HKLM:\SOFTWARE\Microsoft\WindowsUpdate\UX\Settings"
+        if (-not (Test-Path $uxPath)) { New-Item -Path $uxPath -Force | Out-Null }
+        Set-ItemProperty -Path $uxPath -Name "PauseUpdatesStartTime" -Value $now -Force
+        Set-ItemProperty -Path $uxPath -Name "PauseFeatureUpdatesStartTime" -Value $now -Force
+        Set-ItemProperty -Path $uxPath -Name "PauseQualityUpdatesStartTime" -Value $now -Force
+        Set-ItemProperty -Path $uxPath -Name "PauseUpdatesExpiryTime" -Value $future -Force
+        Set-ItemProperty -Path $uxPath -Name "PauseFeatureUpdatesEndTime" -Value $future -Force
+        Set-ItemProperty -Path $uxPath -Name "PauseQualityUpdatesEndTime" -Value $future -Force
+
+        # Eksekusi Registry UpdatePolicy
+        $upPath = "HKLM:\SOFTWARE\Microsoft\WindowsUpdate\UpdatePolicy\Settings"
+        if (-not (Test-Path $upPath)) { New-Item -Path $upPath -Force | Out-Null }
+        Set-ItemProperty -Path $upPath -Name "PausedFeatureStatus" -Value 1 -Type DWord -Force
+        Set-ItemProperty -Path $upPath -Name "PausedQualityStatus" -Value 1 -Type DWord -Force
+        Set-ItemProperty -Path $upPath -Name "PausedFeatureDate" -Value $now -Force
+        Set-ItemProperty -Path $upPath -Name "PausedQualityDate" -Value $now -Force
+
+        [System.Windows.Forms.Cursor]::Current = [System.Windows.Forms.Cursors]::Default
+        [System.Windows.Forms.MessageBox]::Show("Windows Update beserta layanannya berhasil dimatikan secara paksa hingga tahun 2075!", "Sukses", "OK", "Information")
     } catch {
+        [System.Windows.Forms.Cursor]::Current = [System.Windows.Forms.Cursors]::Default
         [System.Windows.Forms.MessageBox]::Show("Gagal mematikan Windows Update.`nDetail: $($_.Exception.Message)", "Error", "OK", "Error")
     }
 }
 
-# --- 2. Fungsi Enable Update (Kembali ke standar) ---
 function Action-UpdateEnable {
     try {
-        $regPath = "HKLM:\SOFTWARE\Microsoft\WindowsUpdate\UX\Settings"
-        if (Test-Path $regPath) {
-            # Hapus semua kunci pause dari Registry
-            $properties = @("PauseUpdatesStartTime", "PauseFeatureUpdatesStartTime", "PauseQualityUpdatesStartTime", "PauseUpdatesExpiryTime", "PauseFeatureUpdatesEndTime", "PauseQualityUpdatesEndTime")
-            foreach ($prop in $properties) {
-                Remove-ItemProperty -Path $regPath -Name $prop -ErrorAction SilentlyContinue
-            }
+        [System.Windows.Forms.Cursor]::Current = [System.Windows.Forms.Cursors]::WaitCursor
+
+        # Aktifkan & Start Services ke Default
+        $autoServices = @("wuauserv", "bits", "dosvc", "UsoSvc")
+        foreach ($svc in $autoServices) {
+            Set-Service -Name $svc -StartupType Automatic -ErrorAction SilentlyContinue
+            Start-Service -Name $svc -ErrorAction SilentlyContinue
         }
-        
-        # Pastikan service Windows Update nyala
-        Set-Service -Name wuauserv -StartupType Manual -ErrorAction SilentlyContinue
-        Start-Service -Name wuauserv -ErrorAction SilentlyContinue
-        
+        Set-Service -Name "WaaSMedicSvc" -StartupType Manual -ErrorAction SilentlyContinue
+        Start-Service -Name "WaaSMedicSvc" -ErrorAction SilentlyContinue
+
+        # Hapus Kunci Pause
+        $uxPath = "HKLM:\SOFTWARE\Microsoft\WindowsUpdate\UX\Settings"
+        if (Test-Path $uxPath) {
+            $props = @("PauseUpdatesStartTime", "PauseFeatureUpdatesStartTime", "PauseQualityUpdatesStartTime", "PauseUpdatesExpiryTime", "PauseFeatureUpdatesEndTime", "PauseQualityUpdatesEndTime")
+            foreach ($prop in $props) { Remove-ItemProperty -Path $uxPath -Name $prop -ErrorAction SilentlyContinue }
+        }
+
+        # Hapus Registry Tweak
+        $polAU = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU"
+        if (Test-Path $polAU) { Remove-Item -Path $polAU -Recurse -Force -ErrorAction SilentlyContinue }
+        $upPath = "HKLM:\SOFTWARE\Microsoft\WindowsUpdate\UpdatePolicy\Settings"
+        if (Test-Path $upPath) { Remove-Item -Path $upPath -Recurse -Force -ErrorAction SilentlyContinue }
+
+        [System.Windows.Forms.Cursor]::Current = [System.Windows.Forms.Cursors]::Default
         [System.Windows.Forms.MessageBox]::Show("Windows Update berhasil diaktifkan kembali ke standar pabrik.", "Sukses", "OK", "Information")
     } catch {
+        [System.Windows.Forms.Cursor]::Current = [System.Windows.Forms.Cursors]::Default
         [System.Windows.Forms.MessageBox]::Show("Gagal mengaktifkan Windows Update.`nDetail: $($_.Exception.Message)", "Error", "OK", "Error")
     }
 }
@@ -501,35 +528,63 @@ function Action-UpdateEnable {
 # --- 3. Fungsi Reset Komponen (Hapus Cache & Restart Service) ---
 function Action-UpdateReset {
     try {
-        # Ubah kursor jadi loading karena ini butuh waktu beberapa detik
+        # Ubah kursor jadi loading karena proses ini memakan waktu lumayan lama
         [System.Windows.Forms.Cursor]::Current = [System.Windows.Forms.Cursors]::WaitCursor
         
-        # Matikan service yang berhubungan dengan Update & Download
-        Stop-Service -Name bits -Force -ErrorAction SilentlyContinue
-        Stop-Service -Name wuauserv -Force -ErrorAction SilentlyContinue
-        Stop-Service -Name appidsvc -Force -ErrorAction SilentlyContinue
-        Stop-Service -Name cryptsvc -Force -ErrorAction SilentlyContinue
-        
-        # Bersihkan folder cache SoftwareDistribution (Tempat download update)
+        # 1. Matikan services terkait Windows Update
+        $services = @("wuauserv", "cryptSvc", "bits", "msiserver")
+        foreach ($svc in $services) {
+            Stop-Service -Name $svc -Force -ErrorAction SilentlyContinue
+        }
+
+        # 2. Hapus file qmgr*.dat (Antrean BITS)
+        $qmgrPath = "$env:ALLUSERSPROFILE\Application Data\Microsoft\Network\Downloader\qmgr*.dat"
+        Remove-Item -Path $qmgrPath -Force -ErrorAction SilentlyContinue
+
+        # 3. Rename folder SoftwareDistribution & catroot2 (Hapus yang .old lama, lalu rename yang sekarang)
         $sdPath = "$env:windir\SoftwareDistribution"
-        if (Test-Path $sdPath) {
-            Remove-Item -Path "$sdPath\*" -Recurse -Force -ErrorAction SilentlyContinue
-        }
-        
-        # Bersihkan folder catroot2 (Sistem file update)
+        if (Test-Path "$sdPath.old") { Remove-Item -Path "$sdPath.old" -Recurse -Force -ErrorAction SilentlyContinue }
+        if (Test-Path $sdPath) { Rename-Item -Path $sdPath -NewName "SoftwareDistribution.old" -ErrorAction SilentlyContinue }
+
         $crPath = "$env:windir\System32\catroot2"
-        if (Test-Path $crPath) {
-            Remove-Item -Path "$crPath\*" -Recurse -Force -ErrorAction SilentlyContinue
+        if (Test-Path "$crPath.old") { Remove-Item -Path "$crPath.old" -Recurse -Force -ErrorAction SilentlyContinue }
+        if (Test-Path $crPath) { Rename-Item -Path $crPath -NewName "catroot2.old" -ErrorAction SilentlyContinue }
+
+        # 4. Reset Security Descriptor BITS & WUAUSERV
+        & sc.exe sdset bits "D:(A;;CCLCSWRPWPDTLOCRRC;;;SY)(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;BA)" | Out-Null
+        & sc.exe sdset wuauserv "D:(A;;CCLCSWRPWPDTLOCRRC;;;SY)(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;BA)" | Out-Null
+
+        # 5. Re-register Windows Update DLLs
+        $dlls = @(
+            "atl.dll", "urlmon.dll", "mshtml.dll", "shdocvw.dll", "browseui.dll", "jscript.dll", "vbscript.dll", 
+            "scrrun.dll", "msxml.dll", "msxml3.dll", "msxml6.dll", "actxprxy.dll", "softpub.dll", "wintrust.dll", 
+            "dssenh.dll", "rsaenh.dll", "gpkcsp.dll", "sccbase.dll", "slbcsp.dll", "cryptdlg.dll", "oleaut32.dll", 
+            "ole32.dll", "shell32.dll", "initpki.dll", "wuapi.dll", "wuaueng.dll", "wuaueng1.dll", "wucltui.dll", 
+            "wups.dll", "wups2.dll", "wuweb.dll", "qmgr.dll", "qmgrprxy.dll", "wucltux.dll", "muweb.dll", "wuwebv.dll"
+        )
+        
+        # Simpan lokasi saat ini, lalu pindah ke System32
+        $currentLocation = Get-Location
+        Set-Location "$env:windir\System32"
+        
+        foreach ($dll in $dlls) {
+            Start-Process -FilePath "regsvr32.exe" -ArgumentList "/s $dll" -Wait -WindowStyle Hidden -ErrorAction SilentlyContinue
         }
         
-        # Nyalakan kembali service
-        Start-Service -Name bits -ErrorAction SilentlyContinue
-        Start-Service -Name wuauserv -ErrorAction SilentlyContinue
-        Start-Service -Name appidsvc -ErrorAction SilentlyContinue
-        Start-Service -Name cryptsvc -ErrorAction SilentlyContinue
+        # Kembalikan direktori kerja
+        Set-Location $currentLocation
+
+        # 6. Reset Network (Winsock & WinHTTP Proxy)
+        & netsh winsock reset | Out-Null
+        & netsh winhttp reset proxy | Out-Null
+
+        # 7. Nyalakan kembali services
+        foreach ($svc in $services) {
+            Start-Service -Name $svc -ErrorAction SilentlyContinue
+        }
         
         [System.Windows.Forms.Cursor]::Current = [System.Windows.Forms.Cursors]::Default
-        [System.Windows.Forms.MessageBox]::Show("Servis Windows Update dan folder Cache berhasil direset!`nJika sebelumnya ada update yang nyangkut/error, silakan coba cek update lagi.", "Sukses", "OK", "Information")
+        [System.Windows.Forms.MessageBox]::Show("Full Reset Windows Update Component berhasil!`n`nSemua Service, Cache, DLL, dan Jaringan telah dikembalikan ke kondisi awal.`nSangat disarankan untuk RESTART PC setelah ini.", "Sukses", "OK", "Information")
     } catch {
         [System.Windows.Forms.Cursor]::Current = [System.Windows.Forms.Cursors]::Default
         [System.Windows.Forms.MessageBox]::Show("Terjadi kesalahan saat mereset komponen.`nDetail: $($_.Exception.Message)", "Error", "OK", "Error")
@@ -739,9 +794,9 @@ function Render-WindowsUpdates {
     Add-UpdateCard "Reset Update Components" "Perbaiki error download dengan mereset servis & folder cache." 0xE823 "Orange" { Action-UpdateReset }
     Add-UpdateCard "Hide/Show Updates" "Alat resmi Microsoft untuk sembunyikan update bermasalah." 0xE890 "DeepSkyBlue" { Action-UpdateHide }
 
-    # --- SPECIAL CARD: LOCK TARGET VERSION (FULL WIDTH) ---
+    # --- SPECIAL CARD: LOCK TARGET VERSION (FULL WIDTH DENGAN UI KERENMU) ---
     $lockCard = New-Object System.Windows.Forms.Panel
-    $lockCard.Size = New-Object System.Drawing.Size(719, 105) # Lebar penuh menyesuaikan batas FlowGrid
+    $lockCard.Size = New-Object System.Drawing.Size(719, 105)
     $lockCard.Margin = New-Object System.Windows.Forms.Padding(0, 10, 15, 10)
     $lockCard.BackColor = if ($global:IsDarkMode) {[System.Drawing.Color]::FromArgb(45, 45, 50)} else {[System.Drawing.Color]::White}
     
@@ -812,14 +867,21 @@ function Render-WindowsUpdates {
     $btnLock.Add_Click({
         $cOS = $this.Parent.Controls["ComboOS"]
         $cVer = $this.Parent.Controls["ComboVer"]
+        
+        # Format tulisan harus "Windows10" atau "Windows11" tanpa spasi
         $prod = $cOS.SelectedItem.ToString().Replace(" ", "")
         $ver = $cVer.SelectedItem.ToString()
-        $Path = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate"
-        if (-not (Test-Path $Path)) { New-Item -Path $Path -Force | Out-Null }
-        Set-ItemProperty -Path $Path -Name "ProductVersion" -Value $prod -Force
-        Set-ItemProperty -Path $Path -Name "TargetReleaseVersion" -Value 1 -Type DWord -Force
-        Set-ItemProperty -Path $Path -Name "TargetReleaseVersionInfo" -Value $ver -Force
-        [System.Windows.Forms.MessageBox]::Show("Berhasil dikunci ke $prod versi $ver", "Success", "OK", "Information")
+        
+        try {
+            $Path = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate"
+            if (-not (Test-Path $Path)) { New-Item -Path $Path -Force | Out-Null }
+            Set-ItemProperty -Path $Path -Name "ProductVersion" -Value $prod -Force
+            Set-ItemProperty -Path $Path -Name "TargetReleaseVersion" -Value 1 -Type DWord -Force
+            Set-ItemProperty -Path $Path -Name "TargetReleaseVersionInfo" -Value $ver -Force
+            [System.Windows.Forms.MessageBox]::Show("Berhasil dikunci!`nSistem tidak akan melewati versi $prod $ver.`nSilakan Restart PC untuk menerapkan.", "Success", "OK", "Information")
+        } catch {
+            [System.Windows.Forms.MessageBox]::Show("Gagal mengunci versi. Pastikan Anda menjalankan aplikasi sebagai Administrator.", "Error", "OK", "Error")
+        }
     })
     $lockCard.Controls.Add($btnLock)
 
@@ -832,11 +894,15 @@ function Render-WindowsUpdates {
     $btnClear.Location = New-Object System.Drawing.Point(635, 37)
     $btnClear.Cursor = "Hand"
     $btnClear.Add_Click({
-        $Path = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate"
-        Remove-ItemProperty -Path $Path -Name "ProductVersion" -ErrorAction SilentlyContinue
-        Remove-ItemProperty -Path $Path -Name "TargetReleaseVersion" -ErrorAction SilentlyContinue
-        Remove-ItemProperty -Path $Path -Name "TargetReleaseVersionInfo" -ErrorAction SilentlyContinue
-        [System.Windows.Forms.MessageBox]::Show("Kunci Versi OS berhasil dihapus!", "Success", "OK", "Information")
+        try {
+            $Path = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate"
+            Remove-ItemProperty -Path $Path -Name "ProductVersion" -ErrorAction SilentlyContinue
+            Remove-ItemProperty -Path $Path -Name "TargetReleaseVersion" -ErrorAction SilentlyContinue
+            Remove-ItemProperty -Path $Path -Name "TargetReleaseVersionInfo" -ErrorAction SilentlyContinue
+            [System.Windows.Forms.MessageBox]::Show("Kunci Versi OS berhasil dihapus! Sistem akan menerima update otomatis kembali.", "Success", "OK", "Information")
+        } catch {
+            [System.Windows.Forms.MessageBox]::Show("Gagal menghapus kunci versi.", "Error", "OK", "Error")
+        }
     })
     $lockCard.Controls.Add($btnClear)
 
