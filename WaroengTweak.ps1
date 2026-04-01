@@ -72,6 +72,12 @@ $form.FormBorderStyle = "FixedSingle"
 $form.MaximizeBox = $false
 $form.BackColor = $p.Bg
 
+try {
+    $form.Icon = [System.Drawing.Icon]::ExtractAssociatedIcon("$env:windir\System32\iscsicpl.exe")
+} catch {
+    Write-Host "Gagal memuat icon, menggunakan icon default."
+}
+
 # ========================================================
 # FUNGSI SWITCH THEME (LOGIC)
 # ========================================================
@@ -1353,21 +1359,37 @@ $global:SoftwareDatabase = @(
 
 # --- FUNGSI INISIALISASI PACKAGE MANAGER ---
 function Action-InitPackageManagers {
-    # Menyimpan teks command persis seperti panduan resmi
+    # Menyimpan teks command persis seperti panduan resmi, DITAMBAH fungsi REFRESH PATH dan UPDATE
     $scriptContent = @'
-Write-Host "=== MENGINISIALISASI PACKAGE MANAGERS ===" -ForegroundColor Cyan
+Write-Host "=== PACKAGE MANAGERS INITIALIZATION & UPDATE ===" -ForegroundColor Cyan
 
-Write-Host "`n[1] Memeriksa & Menginstal Chocolatey..." -ForegroundColor Yellow
+# ---------------------------------------------------------
+# FUNGSI UNTUK REFRESH ENVIRONMENT VARIABLES (PATH)
+# ---------------------------------------------------------
+function Refresh-Path {
+    $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+}
+
+Write-Host "`n[1] Memeriksa Chocolatey..." -ForegroundColor Yellow
 if (!(Get-Command choco -ErrorAction SilentlyContinue)) {
     Write-Host "Menginstal Chocolatey, mohon tunggu..." -ForegroundColor White
     
     # --- COMMAND RESMI CHOCOLATEY ---
     Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
     
-    Write-Host "`nChocolatey berhasil diinstal!" -ForegroundColor Green
-    Write-Host "PENTING: Harap tutup seluruh aplikasi Waroeng Tools ini lalu buka ulang agar Choco terdeteksi!" -ForegroundColor Yellow
+    # Refresh PATH agar Choco langsung bisa dipakai tanpa restart aplikasi
+    Refresh-Path
+    
+    if (Get-Command choco -ErrorAction SilentlyContinue) {
+        Write-Host "`nChocolatey berhasil diinstal dan siap digunakan!" -ForegroundColor Green
+    } else {
+        Write-Host "`nInstalasi selesai, tapi Choco belum terdeteksi. Mungkin butuh restart aplikasi." -ForegroundColor Red
+    }
 } else {
-    Write-Host "Chocolatey sudah terinstal di sistem." -ForegroundColor Green
+    Write-Host "Chocolatey sudah terinstal." -ForegroundColor Green
+    Write-Host "Memeriksa pembaruan (Update) untuk Chocolatey..." -ForegroundColor Cyan
+    # Command untuk update choco itu sendiri
+    choco upgrade chocolatey -y
 }
 
 Write-Host "`n[2] Memeriksa Winget..." -ForegroundColor Yellow
@@ -1375,7 +1397,10 @@ if (!(Get-Command winget -ErrorAction SilentlyContinue)) {
     Write-Host "Winget tidak ditemukan! Membuka Microsoft Store untuk update App Installer..." -ForegroundColor Red
     Start-Process "ms-windows-store://pdp/?ProductId=9nblggh4nns1"
 } else {
-    Write-Host "Winget sudah terinstal di sistem." -ForegroundColor Green
+    Write-Host "Winget sudah terinstal." -ForegroundColor Green
+    Write-Host "Memeriksa pembaruan (Update) untuk Winget..." -ForegroundColor Cyan
+    # Karena winget diupdate lewat MS Store, kita paksa upgrade App Installer via winget
+    winget upgrade --id Microsoft.AppInstaller -e --accept-package-agreements --accept-source-agreements
 }
 
 Write-Host "`n=== PROSES SELESAI ===" -ForegroundColor Cyan
