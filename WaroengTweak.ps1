@@ -9,6 +9,29 @@
     4. FIXED: Error matematika pada System.Drawing.Point (v5.5.1 fix included).
 #>
 
+# ========================================================
+# AUTO-ELEVATE TO ADMINISTRATOR (Meminta Akses Admin Otomatis)
+# ========================================================
+$isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+
+if (-not $isAdmin) {
+    try {
+        # Mengecek apakah script sudah disave sebagai file .ps1
+        if ($PSCommandPath) {
+            # Jalankan ulang script ini dengan hak akses Admin (Verb RunAs)
+            Start-Process powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs
+            Exit # Tutup jendela PowerShell yang tidak punya akses Admin
+        } else {
+            [System.Windows.Forms.MessageBox]::Show("Harap simpan script ini sebagai file .ps1 terlebih dahulu agar fitur Auto-Admin bisa bekerja.", "Error", "OK", "Error")
+            Exit
+        }
+    } catch {
+        # Jika user menekan "No" pada prompt UAC Windows
+        Exit
+    }
+}
+# ========================================================
+
 # --- 1. SETUP SYSTEM ---
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
@@ -46,6 +69,7 @@ $form.Text = "Waroeng Tools v5.6 [Theme Edition]"
 $form.Size = New-Object System.Drawing.Size(1150, 800)
 $form.StartPosition = "CenterScreen"
 $form.FormBorderStyle = "FixedSingle"
+$form.MaximizeBox = $false
 $form.BackColor = $p.Bg
 
 # ========================================================
@@ -422,10 +446,208 @@ function Render-Placeholder ($Title) {
     $contentPanel.Controls.Add($lbl)
 }
 
+# ==========================================
+#    RENDER WINDOWS UPDATES (MODERN UI)
+# ==========================================
+# --- 1. Fungsi Disable Update (Pause hingga 2075) ---
+function Action-UpdateDisable {
+    try {
+        $regPath = "HKLM:\SOFTWARE\Microsoft\WindowsUpdate\UX\Settings"
+        if (-not (Test-Path $regPath)) { New-Item -Path $regPath -Force | Out-Null }
+        
+        $now = [DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
+        $future = "2075-12-31T23:59:59Z" # Set mentok sampai akhir tahun 2075
+        
+        # Eksekusi ke Registry
+        Set-ItemProperty -Path $regPath -Name "PauseUpdatesStartTime" -Value $now -Force
+        Set-ItemProperty -Path $regPath -Name "PauseFeatureUpdatesStartTime" -Value $now -Force
+        Set-ItemProperty -Path $regPath -Name "PauseQualityUpdatesStartTime" -Value $now -Force
+        
+        Set-ItemProperty -Path $regPath -Name "PauseUpdatesExpiryTime" -Value $future -Force
+        Set-ItemProperty -Path $regPath -Name "PauseFeatureUpdatesEndTime" -Value $future -Force
+        Set-ItemProperty -Path $regPath -Name "PauseQualityUpdatesEndTime" -Value $future -Force
+        
+        # Restart service agar sistem langsung sadar
+        Restart-Service -Name wuauserv -Force -ErrorAction SilentlyContinue
+        
+        [System.Windows.Forms.MessageBox]::Show("Windows Update berhasil dimatikan (dipause) hingga tahun 2075!", "Sukses", "OK", "Information")
+    } catch {
+        [System.Windows.Forms.MessageBox]::Show("Gagal mematikan Windows Update.`nDetail: $($_.Exception.Message)", "Error", "OK", "Error")
+    }
+}
+
+# --- 2. Fungsi Enable Update (Kembali ke standar) ---
+function Action-UpdateEnable {
+    try {
+        $regPath = "HKLM:\SOFTWARE\Microsoft\WindowsUpdate\UX\Settings"
+        if (Test-Path $regPath) {
+            # Hapus semua kunci pause dari Registry
+            $properties = @("PauseUpdatesStartTime", "PauseFeatureUpdatesStartTime", "PauseQualityUpdatesStartTime", "PauseUpdatesExpiryTime", "PauseFeatureUpdatesEndTime", "PauseQualityUpdatesEndTime")
+            foreach ($prop in $properties) {
+                Remove-ItemProperty -Path $regPath -Name $prop -ErrorAction SilentlyContinue
+            }
+        }
+        
+        # Pastikan service Windows Update nyala
+        Set-Service -Name wuauserv -StartupType Manual -ErrorAction SilentlyContinue
+        Start-Service -Name wuauserv -ErrorAction SilentlyContinue
+        
+        [System.Windows.Forms.MessageBox]::Show("Windows Update berhasil diaktifkan kembali ke standar pabrik.", "Sukses", "OK", "Information")
+    } catch {
+        [System.Windows.Forms.MessageBox]::Show("Gagal mengaktifkan Windows Update.`nDetail: $($_.Exception.Message)", "Error", "OK", "Error")
+    }
+}
+
+# --- 3. Fungsi Reset Komponen (Hapus Cache & Restart Service) ---
+function Action-UpdateReset {
+    try {
+        # Ubah kursor jadi loading karena ini butuh waktu beberapa detik
+        [System.Windows.Forms.Cursor]::Current = [System.Windows.Forms.Cursors]::WaitCursor
+        
+        # Matikan service yang berhubungan dengan Update & Download
+        Stop-Service -Name bits -Force -ErrorAction SilentlyContinue
+        Stop-Service -Name wuauserv -Force -ErrorAction SilentlyContinue
+        Stop-Service -Name appidsvc -Force -ErrorAction SilentlyContinue
+        Stop-Service -Name cryptsvc -Force -ErrorAction SilentlyContinue
+        
+        # Bersihkan folder cache SoftwareDistribution (Tempat download update)
+        $sdPath = "$env:windir\SoftwareDistribution"
+        if (Test-Path $sdPath) {
+            Remove-Item -Path "$sdPath\*" -Recurse -Force -ErrorAction SilentlyContinue
+        }
+        
+        # Bersihkan folder catroot2 (Sistem file update)
+        $crPath = "$env:windir\System32\catroot2"
+        if (Test-Path $crPath) {
+            Remove-Item -Path "$crPath\*" -Recurse -Force -ErrorAction SilentlyContinue
+        }
+        
+        # Nyalakan kembali service
+        Start-Service -Name bits -ErrorAction SilentlyContinue
+        Start-Service -Name wuauserv -ErrorAction SilentlyContinue
+        Start-Service -Name appidsvc -ErrorAction SilentlyContinue
+        Start-Service -Name cryptsvc -ErrorAction SilentlyContinue
+        
+        [System.Windows.Forms.Cursor]::Current = [System.Windows.Forms.Cursors]::Default
+        [System.Windows.Forms.MessageBox]::Show("Servis Windows Update dan folder Cache berhasil direset!`nJika sebelumnya ada update yang nyangkut/error, silakan coba cek update lagi.", "Sukses", "OK", "Information")
+    } catch {
+        [System.Windows.Forms.Cursor]::Current = [System.Windows.Forms.Cursors]::Default
+        [System.Windows.Forms.MessageBox]::Show("Terjadi kesalahan saat mereset komponen.`nDetail: $($_.Exception.Message)", "Error", "OK", "Error")
+    }
+}
+
+function Action-UpdatePauseCustom {
+    # --- Membuat Jendela Kalender (Date Picker) ---
+    $formDate = New-Object System.Windows.Forms.Form
+    $formDate.Text = "Pilih Tanggal Pause"
+    $formDate.Size = New-Object System.Drawing.Size(350, 200)
+    $formDate.StartPosition = "CenterScreen"
+    $formDate.FormBorderStyle = "FixedToolWindow"
+    $formDate.TopMost = $true
+    $formDate.BackColor = [System.Drawing.Color]::White
+
+    $lblInfo = New-Object System.Windows.Forms.Label
+    $lblInfo.Text = "Tentukan tanggal kapan Update akan dilanjutkan:"
+    $lblInfo.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+    $lblInfo.AutoSize = $true
+    $lblInfo.Location = New-Object System.Drawing.Point(20, 20)
+    $formDate.Controls.Add($lblInfo)
+
+    # Alat Pemilih Tanggal
+    $dtPicker = New-Object System.Windows.Forms.DateTimePicker
+    $dtPicker.Location = New-Object System.Drawing.Point(20, 55)
+    $dtPicker.Size = New-Object System.Drawing.Size(290, 30)
+    $dtPicker.Font = New-Object System.Drawing.Font("Segoe UI", 10)
+    $dtPicker.Format = [System.Windows.Forms.DateTimePickerFormat]::Long
+    $dtPicker.MinDate = [DateTime]::Now # Tidak bisa pilih tanggal mundur
+    $formDate.Controls.Add($dtPicker)
+
+    # Tombol Simpan
+    $btnSave = New-Object System.Windows.Forms.Button
+    $btnSave.Text = "Simpan"
+    $btnSave.Location = New-Object System.Drawing.Point(235, 110)
+    $btnSave.Size = New-Object System.Drawing.Size(75, 30)
+    $btnSave.BackColor = [System.Drawing.Color]::MediumPurple
+    $btnSave.ForeColor = [System.Drawing.Color]::White
+    $btnSave.FlatStyle = "Flat"
+    $btnSave.Cursor = "Hand"
+    $btnSave.DialogResult = "OK"
+    $formDate.Controls.Add($btnSave)
+
+    $formDate.AcceptButton = $btnSave
+
+    # --- Logika Registry Jika Tombol Simpan Ditekan ---
+    if ($formDate.ShowDialog() -eq "OK") {
+        # Format waktu wajib menggunakan ISO 8601 (UTC) untuk Registry Windows Update
+        $selectedDate = $dtPicker.Value.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+        $now = [DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
+        
+        $regPath = "HKLM:\SOFTWARE\Microsoft\WindowsUpdate\UX\Settings"
+        if (-not (Test-Path $regPath)) { New-Item -Path $regPath -Force | Out-Null }
+
+        # Memasukkan data pause ke Registry
+        Set-ItemProperty -Path $regPath -Name "PauseUpdatesStartTime" -Value $now -Force
+        Set-ItemProperty -Path $regPath -Name "PauseFeatureUpdatesStartTime" -Value $now -Force
+        Set-ItemProperty -Path $regPath -Name "PauseQualityUpdatesStartTime" -Value $now -Force
+        
+        Set-ItemProperty -Path $regPath -Name "PauseUpdatesExpiryTime" -Value $selectedDate -Force
+        Set-ItemProperty -Path $regPath -Name "PauseFeatureUpdatesEndTime" -Value $selectedDate -Force
+        Set-ItemProperty -Path $regPath -Name "PauseQualityUpdatesEndTime" -Value $selectedDate -Force
+
+        # Restart Service Windows Update agar langsung berefek
+        Restart-Service -Name wuauserv -Force -ErrorAction SilentlyContinue
+
+        $tglIndo = $dtPicker.Value.ToString("dd MMMM yyyy")
+        [System.Windows.Forms.MessageBox]::Show("Windows Update berhasil ditunda hingga $tglIndo.", "Sukses", "OK", "Information")
+    }
+}
+
+function Action-UpdateHide {
+    # URL resmi Microsoft untuk tool wushowhide.diagcab
+    $url = "http://download.microsoft.com/download/f/2/2/f22d5fdb-59cd-4275-8c95-1be17bf70b21/wushowhide.diagcab"
+    $dest = "$env:TEMP\wushowhide.diagcab"
+
+    try {
+        # Mengubah kursor menjadi loading
+        [System.Windows.Forms.Cursor]::Current = [System.Windows.Forms.Cursors]::WaitCursor
+
+        # Mengunduh file ke folder Temp
+        Invoke-WebRequest -Uri $url -OutFile $dest -UseBasicParsing -ErrorAction Stop
+        
+        # Kembalikan kursor ke normal
+        [System.Windows.Forms.Cursor]::Current = [System.Windows.Forms.Cursors]::Default
+
+        if (Test-Path $dest) {
+            # Membuka tool troubleshooter Microsoft
+            Start-Process -FilePath $dest
+        } else {
+            [System.Windows.Forms.MessageBox]::Show("File gagal ditemukan setelah diunduh.", "Error", "OK", "Error")
+        }
+    } catch {
+        [System.Windows.Forms.Cursor]::Current = [System.Windows.Forms.Cursors]::Default
+        [System.Windows.Forms.MessageBox]::Show("Gagal mengunduh tool dari Microsoft.`nPastikan internet Anda aktif.`n`nDetail: $($_.Exception.Message)", "Download Error", "OK", "Error")
+    }
+}
+
 function Render-WindowsUpdates {
     $contentPanel.Controls.Clear()
     $cP = if ($global:IsDarkMode) { $ThemePalettes.Dark } else { $ThemePalettes.Light }
 
+    # --- HELPER: PELENGKUNG SUDUT CARD ---
+    $SetRounded = {
+        param($ctrl, $r)
+        if ($ctrl.Width -le 0 -or $ctrl.Height -le 0) { return }
+        $D = $r * 2
+        $p = New-Object System.Drawing.Drawing2D.GraphicsPath
+        $p.AddArc(0, 0, $D, $D, 180, 90)
+        $p.AddArc($ctrl.Width - $D, 0, $D, $D, 270, 90)
+        $p.AddArc($ctrl.Width - $D, $ctrl.Height - $D, $D, $D, 0, 90)
+        $p.AddArc(0, $ctrl.Height - $D, $D, $D, 90, 90)
+        $p.CloseAllFigures()
+        $ctrl.Region = New-Object System.Drawing.Region($p)
+    }
+
+    # PANEL UTAMA (Wadah Scroll Utama)
     $pnlMain = New-Object System.Windows.Forms.Panel
     $pnlMain.Dock = "Fill"
     $pnlMain.BackColor = $cP.Bg
@@ -437,15 +659,6 @@ function Render-WindowsUpdates {
     $bannerCard.Location = New-Object System.Drawing.Point(30, 30)
     $bannerCard.BackColor = $cP.Header 
     
-    $banRadius = 20
-    $banPath = New-Object System.Drawing.Drawing2D.GraphicsPath
-    $banPath.AddArc(0, 0, $banRadius, $banRadius, 180, 90)
-    $banPath.AddArc($bannerCard.Width - $banRadius, 0, $banRadius, $banRadius, 270, 90)
-    $banPath.AddArc($bannerCard.Width - $banRadius, $bannerCard.Height - $banRadius, $banRadius, $banRadius, 0, 90)
-    $banPath.AddArc(0, $bannerCard.Height - $banRadius, $banRadius, $banRadius, 90, 90)
-    $banPath.CloseAllFigures()
-    $bannerCard.Region = New-Object System.Drawing.Region($banPath)
-
     $lblTitle = New-Object System.Windows.Forms.Label
     $lblTitle.Text = "Windows Update Manager"
     $lblTitle.Font = New-Object System.Drawing.Font("Segoe UI", 18, [System.Drawing.FontStyle]::Bold)
@@ -463,116 +676,88 @@ function Render-WindowsUpdates {
     $bannerCard.Controls.Add($lblSubTitle)
 
     $pnlMain.Controls.Add($bannerCard)
+    $null = $bannerCard.Handle; &$SetRounded $bannerCard 20
 
-    # --- 2. GRID UNTUK ACTION CARDS ---
-    $flpCards = New-Object System.Windows.Forms.FlowLayoutPanel
-    $flpCards.Location = New-Object System.Drawing.Point(25, 160)
-    $flpCards.Size = New-Object System.Drawing.Size(770, 0)
-    $flpCards.AutoSize = $true
-    $flpCards.AutoSizeMode = "GrowAndShrink"
-    $flpCards.AutoScroll = $false 
-    $flpCards.FlowDirection = "TopDown"
-    $flpCards.WrapContents = $false
+    # --- 2. CONTAINER FLOW (DIUBAH: KUNCI LEBAR MAKSIMAL) ---
+    $flowGrid = New-Object System.Windows.Forms.FlowLayoutPanel
+    $flowGrid.Location = New-Object System.Drawing.Point(30, 150)
+    $flowGrid.Width = 735 # Set lebar fix sama dengan banner
+    $flowGrid.AutoSize = $true
+    $flowGrid.AutoSizeMode = "GrowAndShrink"
+    # Ini kuncinya: Paksa tinggi bertambah, tapi lebar mentok di 735 agar turun ke baris baru!
+    $flowGrid.MaximumSize = New-Object System.Drawing.Size(735, 0) 
+    $flowGrid.WrapContents = $true
+    $flowGrid.AutoScroll = $false 
+    $flowGrid.Padding = New-Object System.Windows.Forms.Padding(0, 0, 0, 40)
+    $pnlMain.Controls.Add($flowGrid)
 
-    # --- HELPER FUNCTION UNTUK KARTU TOMBOL (FIXED) ---
-    function Create-ActionCard ($Title, $Desc, $IconCode, $ColorName, $ActionScript) {
+    # --- HELPER FUNCTION UNTUK KARTU TOMBOL (2 KOLOM) ---
+    function Add-UpdateCard ($Title, $Desc, $IconCode, $IconColor, $ActionScript) {
         $card = New-Object System.Windows.Forms.Panel
-        $card.Size = New-Object System.Drawing.Size(735, 90)
-        $card.Margin = New-Object System.Windows.Forms.Padding(5, 5, 15, 10)
-        $card.BackColor = $cP.Card
-        $card.Cursor = [System.Windows.Forms.Cursors]::Hand
-
-        $rad = 15
-        $path = New-Object System.Drawing.Drawing2D.GraphicsPath
-        $path.AddArc(0, 0, $rad, $rad, 180, 90)
-        $path.AddArc($card.Width - $rad, 0, $rad, $rad, 270, 90)
-        $path.AddArc($card.Width - $rad, $card.Height - $rad, $rad, $rad, 0, 90)
-        $path.AddArc(0, $card.Height - $rad, $rad, $rad, 90, 90)
-        $path.CloseAllFigures()
-        $card.Region = New-Object System.Drawing.Region($path)
+        # Hitungan presisi: (735 - 15 margin kanan) / 2 = 360. Kita paskan di 352 agar aman.
+        $card.Size = New-Object System.Drawing.Size(352, 105)
+        $card.Margin = New-Object System.Windows.Forms.Padding(0, 10, 15, 10)
+        $card.BackColor = if ($global:IsDarkMode) {[System.Drawing.Color]::FromArgb(45, 45, 50)} else {[System.Drawing.Color]::White}
+        $card.Cursor = "Hand"
 
         $ico = New-Object System.Windows.Forms.Label
         $ico.Text = [char]$IconCode
         $ico.Font = New-Object System.Drawing.Font("Segoe MDL2 Assets", 24)
         $ico.AutoSize = $true
-        $ico.Location = New-Object System.Drawing.Point(20, 25)
-        try { $ico.ForeColor = [System.Drawing.Color]::FromName($ColorName) } catch { $ico.ForeColor = $cP.Accent }
+        $ico.Location = New-Object System.Drawing.Point(15, 30)
+        try { $ico.ForeColor = [System.Drawing.Color]::FromName($IconColor) } catch { $ico.ForeColor = [System.Drawing.Color]::FromArgb(0, 102, 204) }
         $card.Controls.Add($ico)
 
         $lTitle = New-Object System.Windows.Forms.Label
         $lTitle.Text = $Title
         $lTitle.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
-        $lTitle.ForeColor = $cP.Text
-        $lTitle.Location = New-Object System.Drawing.Point(80, 20)
-        $lTitle.AutoSize = $true
+        $lTitle.ForeColor = if ($global:IsDarkMode) {[System.Drawing.Color]::White} else {[System.Drawing.Color]::FromArgb(40, 40, 40)}
+        $lTitle.Location = New-Object System.Drawing.Point(65, 18)
+        $lTitle.Width = $card.Width - 80
         $card.Controls.Add($lTitle)
 
         $lSub = New-Object System.Windows.Forms.Label
         $lSub.Text = $Desc
-        $lSub.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Regular)
+        $lSub.Font = New-Object System.Drawing.Font("Segoe UI", 9)
         $lSub.ForeColor = [System.Drawing.Color]::Gray
-        $lSub.Location = New-Object System.Drawing.Point(80, 48)
-        $lSub.Size = New-Object System.Drawing.Size(630, 20)
-        $lSub.AutoSize = $false
-        $lSub.AutoEllipsis = $true
+        $lSub.Location = New-Object System.Drawing.Point(67, 48)
+        $lSub.Size = New-Object System.Drawing.Size(($card.Width - 85), 45)
         $card.Controls.Add($lSub)
 
-        # --- PERBAIKAN FINAL: Evaluasi warna langsung di dalam kurung kurawal ---
-        $card.Add_MouseEnter({ $this.BackColor = if ($global:IsDarkMode) { [System.Drawing.Color]::FromArgb(45, 45, 55) } else { [System.Drawing.Color]::FromArgb(235, 235, 235) } })
-        $card.Add_MouseLeave({ $this.BackColor = if ($global:IsDarkMode) { [System.Drawing.Color]::FromArgb(30, 30, 35) } else { [System.Drawing.Color]::White } })
+        $card.Add_Click($ActionScript); $ico.Add_Click($ActionScript); $lTitle.Add_Click($ActionScript); $lSub.Add_Click($ActionScript)
+        $card.Add_MouseEnter({ $this.BackColor = if ($global:IsDarkMode) {[System.Drawing.Color]::FromArgb(60, 60, 65)} else {[System.Drawing.Color]::FromArgb(235, 245, 255)} })
+        $card.Add_MouseLeave({ $this.BackColor = if ($global:IsDarkMode) {[System.Drawing.Color]::FromArgb(45, 45, 50)} else {[System.Drawing.Color]::White} })
 
-        $ico.Add_MouseEnter({ $this.Parent.BackColor = if ($global:IsDarkMode) { [System.Drawing.Color]::FromArgb(45, 45, 55) } else { [System.Drawing.Color]::FromArgb(235, 235, 235) } })
-        $ico.Add_MouseLeave({ $this.Parent.BackColor = if ($global:IsDarkMode) { [System.Drawing.Color]::FromArgb(30, 30, 35) } else { [System.Drawing.Color]::White } })
-
-        $lTitle.Add_MouseEnter({ $this.Parent.BackColor = if ($global:IsDarkMode) { [System.Drawing.Color]::FromArgb(45, 45, 55) } else { [System.Drawing.Color]::FromArgb(235, 235, 235) } })
-        $lTitle.Add_MouseLeave({ $this.Parent.BackColor = if ($global:IsDarkMode) { [System.Drawing.Color]::FromArgb(30, 30, 35) } else { [System.Drawing.Color]::White } })
-
-        $lSub.Add_MouseEnter({ $this.Parent.BackColor = if ($global:IsDarkMode) { [System.Drawing.Color]::FromArgb(45, 45, 55) } else { [System.Drawing.Color]::FromArgb(235, 235, 235) } })
-        $lSub.Add_MouseLeave({ $this.Parent.BackColor = if ($global:IsDarkMode) { [System.Drawing.Color]::FromArgb(30, 30, 35) } else { [System.Drawing.Color]::White } })
-
-        $card.Add_Click($ActionScript)
-        $ico.Add_Click($ActionScript)
-        $lTitle.Add_Click($ActionScript)
-        $lSub.Add_Click($ActionScript)
-
-        return $card
+        $flowGrid.Controls.Add($card)
+        $null = $card.Handle; &$SetRounded $card 12
     }
 
-    # Action Cards
-    $flpCards.Controls.Add((Create-ActionCard "Disable Windows Update (Pause 2075)" "Hentikan paksa pembaruan otomatis hingga tahun 2075." 0xE71A "Red" { Action-UpdateDisable }))
-    $flpCards.Controls.Add((Create-ActionCard "Custom Pause Date" "Pilih sendiri tanggal kapan Windows Update akan dilanjutkan kembali." 0xE787 "MediumPurple" { Action-UpdatePauseCustom }))
-    $flpCards.Controls.Add((Create-ActionCard "Enable Windows Update (Default)" "Kembalikan pengaturan pembaruan otomatis ke standar pabrik." 0xE898 "LimeGreen" { Action-UpdateEnable }))
-    $flpCards.Controls.Add((Create-ActionCard "Reset Update Components" "Perbaiki error gagal download dengan mereset servis dan folder cache update." 0xE823 "Orange" { Action-UpdateReset }))
-    $flpCards.Controls.Add((Create-ActionCard "Hide/Show Updates Tool" "Buka alat resmi Microsoft untuk menyembunyikan driver atau update bermasalah." 0xE890 "DeepSkyBlue" { Action-UpdateHide }))
+    # --- MENAMBAHKAN ACTION CARDS ---
+    Add-UpdateCard "Disable Windows Update" "Hentikan paksa pembaruan otomatis hingga tahun 2075." 0xE71A "Red" { Action-UpdateDisable }
+    Add-UpdateCard "Custom Pause Date" "Pilih sendiri tanggal kapan Windows Update akan dilanjutkan." 0xE787 "MediumPurple" { Action-UpdatePauseCustom }
+    Add-UpdateCard "Enable Windows Update" "Kembalikan pengaturan pembaruan otomatis ke standar pabrik." 0xE898 "LimeGreen" { Action-UpdateEnable }
+    Add-UpdateCard "Reset Update Components" "Perbaiki error download dengan mereset servis & folder cache." 0xE823 "Orange" { Action-UpdateReset }
+    Add-UpdateCard "Hide/Show Updates" "Alat resmi Microsoft untuk sembunyikan update bermasalah." 0xE890 "DeepSkyBlue" { Action-UpdateHide }
 
-    # --- 6. SPECIAL CARD: LOCK TARGET VERSION ---
+    # --- SPECIAL CARD: LOCK TARGET VERSION (FULL WIDTH) ---
     $lockCard = New-Object System.Windows.Forms.Panel
-    $lockCard.Size = New-Object System.Drawing.Size(735, 100)
-    $lockCard.Margin = New-Object System.Windows.Forms.Padding(5, 5, 15, 20)
-    $lockCard.BackColor = $cP.Card
+    $lockCard.Size = New-Object System.Drawing.Size(719, 105) # Lebar penuh menyesuaikan batas FlowGrid
+    $lockCard.Margin = New-Object System.Windows.Forms.Padding(0, 10, 15, 10)
+    $lockCard.BackColor = if ($global:IsDarkMode) {[System.Drawing.Color]::FromArgb(45, 45, 50)} else {[System.Drawing.Color]::White}
     
-    $rad = 15
-    $path = New-Object System.Drawing.Drawing2D.GraphicsPath
-    $path.AddArc(0, 0, $rad, $rad, 180, 90)
-    $path.AddArc($lockCard.Width - $rad, 0, $rad, $rad, 270, 90)
-    $path.AddArc($lockCard.Width - $rad, $lockCard.Height - $rad, $rad, $rad, 0, 90)
-    $path.AddArc(0, $lockCard.Height - $rad, $rad, $rad, 90, 90)
-    $path.CloseAllFigures()
-    $lockCard.Region = New-Object System.Drawing.Region($path)
-
     $icoLock = New-Object System.Windows.Forms.Label
     $icoLock.Text = [char]0xE72E 
     $icoLock.Font = New-Object System.Drawing.Font("Segoe MDL2 Assets", 24)
     $icoLock.AutoSize = $true
-    $icoLock.Location = New-Object System.Drawing.Point(20, 30)
+    $icoLock.Location = New-Object System.Drawing.Point(15, 30)
     $icoLock.ForeColor = [System.Drawing.Color]::Gold
     $lockCard.Controls.Add($icoLock)
 
     $lTitleLock = New-Object System.Windows.Forms.Label
     $lTitleLock.Text = "Lock Target Version"
     $lTitleLock.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
-    $lTitleLock.ForeColor = $cP.Text
-    $lTitleLock.Location = New-Object System.Drawing.Point(80, 20)
+    $lTitleLock.ForeColor = if ($global:IsDarkMode) {[System.Drawing.Color]::White} else {[System.Drawing.Color]::FromArgb(40, 40, 40)}
+    $lTitleLock.Location = New-Object System.Drawing.Point(65, 18)
     $lTitleLock.AutoSize = $true
     $lockCard.Controls.Add($lTitleLock)
 
@@ -580,35 +765,29 @@ function Render-WindowsUpdates {
     $lSubLock.Text = "Kunci OS untuk mencegah update paksa ke versi lain."
     $lSubLock.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Regular)
     $lSubLock.ForeColor = [System.Drawing.Color]::Gray
-    $lSubLock.Location = New-Object System.Drawing.Point(80, 48)
-    $lSubLock.Size = New-Object System.Drawing.Size(310, 40)
-    $lSubLock.AutoSize = $false
-    $lSubLock.AutoEllipsis = $true
+    $lSubLock.Location = New-Object System.Drawing.Point(67, 48)
+    $lSubLock.Size = New-Object System.Drawing.Size(300, 40)
     $lockCard.Controls.Add($lSubLock)
 
-    # Combo Box OS (Windows 10 / 11)
     $cbOS = New-Object System.Windows.Forms.ComboBox
-    $cbOS.Name = "ComboOS" # DIBERIKAN NAMA AGAR TIDAK LUPA
+    $cbOS.Name = "ComboOS"
     $cbOS.Items.AddRange(@("Windows 10", "Windows 11"))
     $cbOS.SelectedIndex = 1 
     $cbOS.Size = New-Object System.Drawing.Size(105, 30)
-    $cbOS.Location = New-Object System.Drawing.Point(400, 38)
+    $cbOS.Location = New-Object System.Drawing.Point(375, 38)
     $cbOS.DropDownStyle = "DropDownList"
     $lockCard.Controls.Add($cbOS)
 
-    # Combo Box Version
     $cbVer = New-Object System.Windows.Forms.ComboBox
-    $cbVer.Name = "ComboVer" # DIBERIKAN NAMA AGAR TIDAK LUPA
+    $cbVer.Name = "ComboVer"
     $cbVer.Size = New-Object System.Drawing.Size(65, 30)
-    $cbVer.Location = New-Object System.Drawing.Point(510, 38)
+    $cbVer.Location = New-Object System.Drawing.Point(490, 38)
     $cbVer.DropDownStyle = "DropDownList"
     $cbVer.Items.AddRange(@("21H2", "22H2", "23H2", "24H2", "25H2"))
     $cbVer.SelectedIndex = 2 
     $lockCard.Controls.Add($cbVer)
 
-    # Event saat OS diganti (Update list versi secara otomatis)
     $cbOS.Add_SelectedIndexChanged({
-        # Mencari kotak versi secara real-time
         $cVer = $this.Parent.Controls["ComboVer"]
         if ($cVer) {
             $cVer.Items.Clear()
@@ -622,42 +801,35 @@ function Render-WindowsUpdates {
         }
     })
     
-    # Tombol LOCK
     $btnLock = New-Object System.Windows.Forms.Button
     $btnLock.Text = "Lock"
     $btnLock.BackColor = $cP.Header
     $btnLock.ForeColor = [System.Drawing.Color]::White
     $btnLock.FlatStyle = "Flat"
-    $btnLock.Size = New-Object System.Drawing.Size(65, 28)
-    $btnLock.Location = New-Object System.Drawing.Point(585, 37)
+    $btnLock.Size = New-Object System.Drawing.Size(60, 28)
+    $btnLock.Location = New-Object System.Drawing.Point(565, 37)
     $btnLock.Cursor = "Hand"
     $btnLock.Add_Click({
-        # Mencari kedua kotak Combo secara real-time
         $cOS = $this.Parent.Controls["ComboOS"]
         $cVer = $this.Parent.Controls["ComboVer"]
-        
         $prod = $cOS.SelectedItem.ToString().Replace(" ", "")
         $ver = $cVer.SelectedItem.ToString()
-        
         $Path = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate"
         if (-not (Test-Path $Path)) { New-Item -Path $Path -Force | Out-Null }
-        
         Set-ItemProperty -Path $Path -Name "ProductVersion" -Value $prod -Force
         Set-ItemProperty -Path $Path -Name "TargetReleaseVersion" -Value 1 -Type DWord -Force
         Set-ItemProperty -Path $Path -Name "TargetReleaseVersionInfo" -Value $ver -Force
-        
         [System.Windows.Forms.MessageBox]::Show("Berhasil dikunci ke $prod versi $ver", "Success", "OK", "Information")
     })
     $lockCard.Controls.Add($btnLock)
 
-    # Tombol CLEAR
     $btnClear = New-Object System.Windows.Forms.Button
     $btnClear.Text = "Clear"
     $btnClear.BackColor = [System.Drawing.Color]::Crimson
     $btnClear.ForeColor = [System.Drawing.Color]::White
     $btnClear.FlatStyle = "Flat"
     $btnClear.Size = New-Object System.Drawing.Size(60, 28)
-    $btnClear.Location = New-Object System.Drawing.Point(655, 37)
+    $btnClear.Location = New-Object System.Drawing.Point(635, 37)
     $btnClear.Cursor = "Hand"
     $btnClear.Add_Click({
         $Path = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate"
@@ -668,8 +840,9 @@ function Render-WindowsUpdates {
     })
     $lockCard.Controls.Add($btnClear)
 
-    $flpCards.Controls.Add($lockCard)
-    $pnlMain.Controls.Add($flpCards)
+    $flowGrid.Controls.Add($lockCard)
+    $null = $lockCard.Handle; &$SetRounded $lockCard 12
+
     $contentPanel.Controls.Add($pnlMain)
 }
 
@@ -1568,102 +1741,149 @@ function Render-UpgradeLicense {
     $contentPanel.Controls.Clear()
     $cP = if ($global:IsDarkMode) { $ThemePalettes.Dark } else { $ThemePalettes.Light }
 
-    $pnlMain = New-Object System.Windows.Forms.FlowLayoutPanel
+    # --- HELPER: PELENGKUNG SUDUT CARD ---
+    $SetRounded = {
+        param($ctrl, $r)
+        if ($ctrl.Width -le 0 -or $ctrl.Height -le 0) { return }
+        $D = $r * 2
+        $p = New-Object System.Drawing.Drawing2D.GraphicsPath
+        $p.AddArc(0, 0, $D, $D, 180, 90)
+        $p.AddArc($ctrl.Width - $D, 0, $D, $D, 270, 90)
+        $p.AddArc($ctrl.Width - $D, $ctrl.Height - $D, $D, $D, 0, 90)
+        $p.AddArc(0, $ctrl.Height - $D, $D, $D, 90, 90)
+        $p.CloseAllFigures()
+        $ctrl.Region = New-Object System.Drawing.Region($p)
+    }
+
+    # PANEL UTAMA (Sebagai wadah scroll)
+    $pnlMain = New-Object System.Windows.Forms.Panel
     $pnlMain.Dock = "Fill"
     $pnlMain.BackColor = $cP.Bg
     $pnlMain.AutoScroll = $true
-    $pnlMain.FlowDirection = "TopDown"
-    $pnlMain.WrapContents = $false
 
-    # --- HELPER FUNCTION UNTUK KARTU TOMBOL ---
-    function Create-ActionCard ($Title, $Desc, $IconCode, $ColorName, $ActionScript) {
-        $card = New-Object System.Windows.Forms.Panel
-        $card.Size = New-Object System.Drawing.Size(735, 90)
-        $card.Margin = New-Object System.Windows.Forms.Padding(25, 5, 15, 10)
-        $card.BackColor = $cP.Card
-        $card.Cursor = [System.Windows.Forms.Cursors]::Hand
-
-        $rad = 15; $path = New-Object System.Drawing.Drawing2D.GraphicsPath
-        $path.AddArc(0, 0, $rad, $rad, 180, 90); $path.AddArc($card.Width - $rad, 0, $rad, $rad, 270, 90)
-        $path.AddArc($card.Width - $rad, $card.Height - $rad, $rad, $rad, 0, 90); $path.AddArc(0, $card.Height - $rad, $rad, $rad, 90, 90)
-        $path.CloseAllFigures(); $card.Region = New-Object System.Drawing.Region($path)
-
-        $ico = New-Object System.Windows.Forms.Label
-        $ico.Text = [char]$IconCode; $ico.Font = New-Object System.Drawing.Font("Segoe MDL2 Assets", 24)
-        $ico.AutoSize = $true; $ico.Location = New-Object System.Drawing.Point(20, 25)
-        try { $ico.ForeColor = [System.Drawing.Color]::FromName($ColorName) } catch { $ico.ForeColor = $cP.Accent }
-        
-        $lTitle = New-Object System.Windows.Forms.Label
-        $lTitle.Text = $Title; $lTitle.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
-        $lTitle.ForeColor = $cP.Text; $lTitle.Location = New-Object System.Drawing.Point(80, 20); $lTitle.AutoSize = $true
-        
-        $lSub = New-Object System.Windows.Forms.Label
-        $lSub.Text = $Desc; $lSub.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Regular)
-        $lSub.ForeColor = [System.Drawing.Color]::Gray; $lSub.Location = New-Object System.Drawing.Point(80, 48)
-        $lSub.Size = New-Object System.Drawing.Size(630, 20); $lSub.AutoSize = $false; $lSub.AutoEllipsis = $true
-
-        $hover = if ($global:IsDarkMode) { [System.Drawing.Color]::FromArgb(45, 45, 55) } else { [System.Drawing.Color]::FromArgb(235, 235, 235) }
-        $normal = if ($global:IsDarkMode) { [System.Drawing.Color]::FromArgb(30, 30, 35) } else { [System.Drawing.Color]::White }
-
-        $card.Add_MouseEnter({ $this.BackColor = $hover }.GetNewClosure()); $card.Add_MouseLeave({ $this.BackColor = $normal }.GetNewClosure())
-        $ico.Add_MouseEnter({ $this.Parent.BackColor = $hover }.GetNewClosure()); $ico.Add_MouseLeave({ $this.Parent.BackColor = $normal }.GetNewClosure())
-        $lTitle.Add_MouseEnter({ $this.Parent.BackColor = $hover }.GetNewClosure()); $lTitle.Add_MouseLeave({ $this.Parent.BackColor = $normal }.GetNewClosure())
-        $lSub.Add_MouseEnter({ $this.Parent.BackColor = $hover }.GetNewClosure()); $lSub.Add_MouseLeave({ $this.Parent.BackColor = $normal }.GetNewClosure())
-
-        $card.Controls.Add($ico); $card.Controls.Add($lTitle); $card.Controls.Add($lSub)
-        $card.Add_Click($ActionScript); $ico.Add_Click($ActionScript); $lTitle.Add_Click($ActionScript); $lSub.Add_Click($ActionScript)
-        return $card
-    }
-
-    # --- BANNER 1: UPGRADE EDITION ---
+    # --- 1. BANNER 1: UPGRADE EDITION ---
     $banner1 = New-Object System.Windows.Forms.Panel
     $banner1.Size = New-Object System.Drawing.Size(735, 90)
-    $banner1.Margin = New-Object System.Windows.Forms.Padding(30, 30, 0, 20)
+    $banner1.Location = New-Object System.Drawing.Point(30, 30)
     $banner1.BackColor = $cP.Header 
-    $rad = 20; $path = New-Object System.Drawing.Drawing2D.GraphicsPath
-    $path.AddArc(0,0,$rad,$rad,180,90); $path.AddArc($banner1.Width-$rad,0,$rad,$rad,270,90)
-    $path.AddArc($banner1.Width-$rad,$banner1.Height-$rad,$rad,$rad,0,90); $path.AddArc(0,$banner1.Height-$rad,$rad,$rad,90,90)
-    $path.CloseAllFigures(); $banner1.Region = New-Object System.Drawing.Region($path)
 
-    $lblT1 = New-Object System.Windows.Forms.Label; $lblT1.Text = "Upgrade Windows Edition"; $lblT1.Font = New-Object System.Drawing.Font("Segoe UI", 16, [System.Drawing.FontStyle]::Bold)
-    $lblT1.ForeColor = [System.Drawing.Color]::White; $lblT1.AutoSize = $true; $lblT1.Location = New-Object System.Drawing.Point(25, 20)
-    $lblS1 = New-Object System.Windows.Forms.Label; $lblS1.Text = "Ganti edisi Windows Anda dengan Generic Key resmi."; $lblS1.Font = New-Object System.Drawing.Font("Segoe UI", 10)
-    $lblS1.ForeColor = [System.Drawing.Color]::LightGray; $lblS1.AutoSize = $true; $lblS1.Location = New-Object System.Drawing.Point(28, 52)
-    $banner1.Controls.Add($lblT1); $banner1.Controls.Add($lblS1)
+    $lblT1 = New-Object System.Windows.Forms.Label
+    $lblT1.Text = "Upgrade Windows Edition"
+    $lblT1.Font = New-Object System.Drawing.Font("Segoe UI", 16, [System.Drawing.FontStyle]::Bold)
+    $lblT1.ForeColor = [System.Drawing.Color]::White
+    $lblT1.AutoSize = $true
+    $lblT1.Location = New-Object System.Drawing.Point(25, 20)
     
+    $lblS1 = New-Object System.Windows.Forms.Label
+    $lblS1.Text = "Ganti edisi Windows Anda dengan Generic Key resmi."
+    $lblS1.Font = New-Object System.Drawing.Font("Segoe UI", 10)
+    $lblS1.ForeColor = [System.Drawing.Color]::LightGray
+    $lblS1.AutoSize = $true
+    $lblS1.Location = New-Object System.Drawing.Point(28, 52)
+    
+    $banner1.Controls.Add($lblT1); $banner1.Controls.Add($lblS1)
+    $null = $banner1.Handle; &$SetRounded $banner1 20
     $pnlMain.Controls.Add($banner1)
 
-    # --- ACTION CARDS 1 ---
-    $pnlMain.Controls.Add((Create-ActionCard "Switch to Windows Home" "Downgrade atau pindah edisi ke Windows Home." 0xE80F "DeepSkyBlue" { Action-LicHome }))
-    $pnlMain.Controls.Add((Create-ActionCard "Switch to Windows Pro" "Upgrade edisi Windows ke versi Professional." 0xE7F4 "MediumOrchid" { Action-LicPro }))
-    $pnlMain.Controls.Add((Create-ActionCard "Switch to Enterprise" "Upgrade edisi Windows ke versi Enterprise." 0xE719 "Gold" { Action-LicEnt }))
-    $pnlMain.Controls.Add((Create-ActionCard "Remove License" "Hapus Product Key dari sistem." 0xE74D "Red" { Action-LicRemove }))
+    # --- 2. GRID 1: UNTUK ACTION CARDS UPGRADE ---
+    $flowGrid1 = New-Object System.Windows.Forms.FlowLayoutPanel
+    $flowGrid1.Location = New-Object System.Drawing.Point(30, 140)
+    $flowGrid1.Size = New-Object System.Drawing.Size(735, 230) # Tinggi untuk 2 baris card
+    $flowGrid1.Padding = New-Object System.Windows.Forms.Padding(0)
+    $pnlMain.Controls.Add($flowGrid1)
 
-    # --- BANNER 2: ACTIVATION TOOLS ---
+    # --- 3. BANNER 2: ACTIVATION TOOLS ---
     $banner2 = New-Object System.Windows.Forms.Panel
     $banner2.Size = New-Object System.Drawing.Size(735, 90)
-    $banner2.Margin = New-Object System.Windows.Forms.Padding(30, 20, 0, 20)
+    $banner2.Location = New-Object System.Drawing.Point(30, 380)
     $banner2.BackColor = [System.Drawing.Color]::MediumSeaGreen
-    $path2 = New-Object System.Drawing.Drawing2D.GraphicsPath
-    $path2.AddArc(0,0,$rad,$rad,180,90); $path2.AddArc($banner2.Width-$rad,0,$rad,$rad,270,90)
-    $path2.AddArc($banner2.Width-$rad,$banner2.Height-$rad,$rad,$rad,0,90); $path2.AddArc(0,$banner2.Height-$rad,$rad,$rad,90,90)
-    $path2.CloseAllFigures(); $banner2.Region = New-Object System.Drawing.Region($path2)
 
-    $lblT2 = New-Object System.Windows.Forms.Label; $lblT2.Text = "Windows & Office Activation"; $lblT2.Font = New-Object System.Drawing.Font("Segoe UI", 16, [System.Drawing.FontStyle]::Bold)
-    $lblT2.ForeColor = [System.Drawing.Color]::White; $lblT2.AutoSize = $true; $lblT2.Location = New-Object System.Drawing.Point(25, 20)
-    $lblS2 = New-Object System.Windows.Forms.Label; $lblS2.Text = "Aktivasi permanen untuk sistem Windows dan Microsoft Office Anda."; $lblS2.Font = New-Object System.Drawing.Font("Segoe UI", 10)
-    $lblS2.ForeColor = [System.Drawing.Color]::LightGreen; $lblS2.AutoSize = $true; $lblS2.Location = New-Object System.Drawing.Point(28, 52)
+    $lblT2 = New-Object System.Windows.Forms.Label
+    $lblT2.Text = "Windows & Office Activation"
+    $lblT2.Font = New-Object System.Drawing.Font("Segoe UI", 16, [System.Drawing.FontStyle]::Bold)
+    $lblT2.ForeColor = [System.Drawing.Color]::White
+    $lblT2.AutoSize = $true
+    $lblT2.Location = New-Object System.Drawing.Point(25, 20)
+    
+    $lblS2 = New-Object System.Windows.Forms.Label
+    $lblS2.Text = "Aktivasi permanen untuk sistem Windows dan Microsoft Office Anda."
+    $lblS2.Font = New-Object System.Drawing.Font("Segoe UI", 10)
+    $lblS2.ForeColor = [System.Drawing.Color]::LightGreen
+    $lblS2.AutoSize = $true
+    $lblS2.Location = New-Object System.Drawing.Point(28, 52)
+    
     $banner2.Controls.Add($lblT2); $banner2.Controls.Add($lblS2)
-
+    $null = $banner2.Handle; &$SetRounded $banner2 20
     $pnlMain.Controls.Add($banner2)
 
-    # --- ACTION CARDS 2 ---
-    $pnlMain.Controls.Add((Create-ActionCard "Run Massgrave Activation (MAS)" "Buka tool aktivasi All-in-One (HWID, Ohook, KMS) dari internet." 0xE73E "LimeGreen" { Action-RunMAS }))
-    $pnlMain.Controls.Add((Create-ActionCard "Check Activation Status" "Periksa status aktivasi Windows saat ini (slmgr)." 0xE9F5 "DodgerBlue" { Action-CheckStatus }))
+    # --- 4. GRID 2: UNTUK ACTION CARDS ACTIVATION ---
+    $flowGrid2 = New-Object System.Windows.Forms.FlowLayoutPanel
+    $flowGrid2.Location = New-Object System.Drawing.Point(30, 490)
+    $flowGrid2.Size = New-Object System.Drawing.Size(735, 130) # Tinggi untuk 1 baris card
+    $flowGrid2.Padding = New-Object System.Windows.Forms.Padding(0)
+    $pnlMain.Controls.Add($flowGrid2)
 
-    # Menambahkan sedikit ruang kosong di bagian paling bawah
+    # --- HELPER FUNCTION: CREATE CARD KE DALAM GRID ---
+    function Add-LicenseCard ($GridTarget, $Title, $Desc, $IconCode, $IconColor, $ActionScript) {
+        $card = New-Object System.Windows.Forms.Panel
+        # Dikurangi 35 agar aman menjadi 2 kolom
+        $cardWidth = [math]::Floor($GridTarget.Width / 2) - 35
+        $card.Size = New-Object System.Drawing.Size($cardWidth, 95)
+        $card.Margin = New-Object System.Windows.Forms.Padding(10)
+        $card.BackColor = if ($global:IsDarkMode) {[System.Drawing.Color]::FromArgb(45, 45, 50)} else {[System.Drawing.Color]::White}
+        $card.Cursor = "Hand"
+
+        # Icon Label
+        $ico = New-Object System.Windows.Forms.Label
+        $ico.Text = [char]$IconCode
+        $ico.Font = New-Object System.Drawing.Font("Segoe MDL2 Assets", 24)
+        $ico.AutoSize = $true
+        $ico.Location = New-Object System.Drawing.Point(15, 25)
+        try { $ico.ForeColor = [System.Drawing.Color]::FromName($IconColor) } catch { $ico.ForeColor = [System.Drawing.Color]::DodgerBlue }
+        $card.Controls.Add($ico)
+
+        # Title Label
+        $lTitle = New-Object System.Windows.Forms.Label
+        $lTitle.Text = $Title
+        $lTitle.Font = New-Object System.Drawing.Font("Segoe UI", 11, [System.Drawing.FontStyle]::Bold)
+        $lTitle.ForeColor = if ($global:IsDarkMode) {[System.Drawing.Color]::White} else {[System.Drawing.Color]::FromArgb(40, 40, 40)}
+        $lTitle.Location = New-Object System.Drawing.Point(65, 15)
+        $lTitle.Width = $card.Width - 80
+        $lTitle.AutoEllipsis = $true
+        $card.Controls.Add($lTitle)
+
+        # Description Label
+        $lSub = New-Object System.Windows.Forms.Label
+        $lSub.Text = $Desc
+        $lSub.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+        $lSub.ForeColor = [System.Drawing.Color]::Gray
+        $lSub.Location = New-Object System.Drawing.Point(67, 42)
+        $lSub.Size = New-Object System.Drawing.Size(($card.Width - 85), 45)
+        $card.Controls.Add($lSub)
+
+        # Click Event & Hover Effect
+        $card.Add_Click($ActionScript); $ico.Add_Click($ActionScript); $lTitle.Add_Click($ActionScript); $lSub.Add_Click($ActionScript)
+        $card.Add_MouseEnter({ $this.BackColor = if ($global:IsDarkMode) {[System.Drawing.Color]::FromArgb(60, 60, 65)} else {[System.Drawing.Color]::FromArgb(235, 245, 255)} })
+        $card.Add_MouseLeave({ $this.BackColor = if ($global:IsDarkMode) {[System.Drawing.Color]::FromArgb(45, 45, 50)} else {[System.Drawing.Color]::White} })
+
+        $GridTarget.Controls.Add($card)
+        $null = $card.Handle; &$SetRounded $card 12
+    }
+
+    # --- MENAMBAHKAN CARDS KE GRID 1 (UPGRADE) ---
+    Add-LicenseCard $flowGrid1 "Switch to Windows Home" "Downgrade atau pindah edisi ke Windows Home." 0xE80F "DeepSkyBlue" { Action-LicHome }
+    Add-LicenseCard $flowGrid1 "Switch to Windows Pro" "Upgrade edisi Windows ke versi Professional." 0xE7F4 "MediumOrchid" { Action-LicPro }
+    Add-LicenseCard $flowGrid1 "Switch to Enterprise" "Upgrade edisi Windows ke versi Enterprise." 0xE719 "Gold" { Action-LicEnt }
+    Add-LicenseCard $flowGrid1 "Remove License" "Hapus Product Key dari sistem (Un-activate)." 0xE74D "Crimson" { Action-LicRemove }
+
+    # --- MENAMBAHKAN CARDS KE GRID 2 (ACTIVATION) ---
+    Add-LicenseCard $flowGrid2 "Run MAS Activation" "Buka tool aktivasi AIO (HWID, KMS) dari internet." 0xE73E "LimeGreen" { Action-RunMAS }
+    Add-LicenseCard $flowGrid2 "Check Status" "Periksa status lisensi & aktivasi saat ini (slmgr)." 0xE9F5 "DodgerBlue" { Action-CheckStatus }
+
+    # Tambahkan ruang kosong di paling bawah agar enak di-scroll
     $spacer = New-Object System.Windows.Forms.Panel
     $spacer.Size = New-Object System.Drawing.Size(10, 40)
+    $spacer.Location = New-Object System.Drawing.Point(30, 630)
     $pnlMain.Controls.Add($spacer)
 
     $contentPanel.Controls.Add($pnlMain)
@@ -11132,7 +11352,7 @@ function Render-BackupRestore {
     $bannerCard.Region = New-Object System.Drawing.Region($banPath)
 
     $lblTitle = New-Object System.Windows.Forms.Label
-    $lblTitle.Text = "Backup & Restore Center"
+    $lblTitle.Text = "Backup / Restore Center"
     $lblTitle.Font = New-Object System.Drawing.Font("Segoe UI", 18, [System.Drawing.FontStyle]::Bold)
     $lblTitle.ForeColor = [System.Drawing.Color]::White
     $lblTitle.AutoSize = $true
@@ -11468,12 +11688,9 @@ Gunakan perintah ini saat instalasi Windows 11 memaksa koneksi internet/akun Mic
 
 function Render-AddSettings {
     $contentPanel.Controls.Clear()
-    $contentPanel.BackColor = if ($global:IsDarkMode) {[System.Drawing.Color]::FromArgb(30, 30, 35)} else {[System.Drawing.Color]::FromArgb(240, 242, 245)}
-    
-    $cpWidth = $contentPanel.Width
-    $cpHeight = $contentPanel.Height
+    $cP = if ($global:IsDarkMode) { $ThemePalettes.Dark } else { $ThemePalettes.Light }
 
-    # --- Helper Rounded ---
+    # --- HELPER: PELENGKUNG SUDUT CARD ---
     $SetRounded = {
         param($ctrl, $r)
         if ($ctrl.Width -le 0 -or $ctrl.Height -le 0) { return }
@@ -11487,30 +11704,53 @@ function Render-AddSettings {
         $ctrl.Region = New-Object System.Drawing.Region($p)
     }
 
-    $themeBlue = [System.Drawing.Color]::FromArgb(0, 102, 204)
+    # PANEL UTAMA
+    $pnlMain = New-Object System.Windows.Forms.Panel
+    $pnlMain.Dock = "Fill"
+    $pnlMain.BackColor = $cP.Bg
+    $pnlMain.AutoScroll = $true # SCROLL UTAMA HALAMAN
 
-    # 1. HEADER
-    $pnlHeader = New-Object System.Windows.Forms.Panel
-    $pnlHeader.Bounds = New-Object System.Drawing.Rectangle(15, 10, ($cpWidth - 30), 60)
-    $pnlHeader.Anchor = "Top, Left, Right"
-    $pnlHeader.BackColor = $themeBlue
-    $contentPanel.Controls.Add($pnlHeader)
-    &$SetRounded $pnlHeader 15
+    # --- 1. HEADER BANNER ---
+    $bannerCard = New-Object System.Windows.Forms.Panel
+    $bannerCard.Size = New-Object System.Drawing.Size(735, 110)
+    $bannerCard.Location = New-Object System.Drawing.Point(30, 30)
+    $bannerCard.BackColor = $cP.Header 
+    
+    $banRadius = 20
+    $banPath = New-Object System.Drawing.Drawing2D.GraphicsPath
+    $banPath.AddArc(0, 0, $banRadius, $banRadius, 180, 90)
+    $banPath.AddArc($bannerCard.Width - $banRadius, 0, $banRadius, $banRadius, 270, 90)
+    $banPath.AddArc($bannerCard.Width - $banRadius, $bannerCard.Height - $banRadius, $banRadius, $banRadius, 0, 90)
+    $banPath.AddArc(0, $bannerCard.Height - $banRadius, $banRadius, $banRadius, 90, 90)
+    $banPath.CloseAllFigures()
+    $bannerCard.Region = New-Object System.Drawing.Region($banPath)
 
     $lblTitle = New-Object System.Windows.Forms.Label
-    $lblTitle.Text = "TECHNICAL GUIDES (MANUAL FIX)"
-    $lblTitle.Font = New-Object System.Drawing.Font("Segoe UI", 14, [System.Drawing.FontStyle]::Bold)
+    $lblTitle.Text = "Technical Guides (Manual Fix)"
+    $lblTitle.Font = New-Object System.Drawing.Font("Segoe UI", 18, [System.Drawing.FontStyle]::Bold)
     $lblTitle.ForeColor = [System.Drawing.Color]::White
-    $lblTitle.AutoSize = $true; $lblTitle.Location = New-Object System.Drawing.Point(20, 18)
-    $pnlHeader.Controls.Add($lblTitle)
+    $lblTitle.AutoSize = $true
+    $lblTitle.Location = New-Object System.Drawing.Point(25, 20)
+    $bannerCard.Controls.Add($lblTitle)
 
-    # 2. CONTAINER FLOW
+    $lblSubTitle = New-Object System.Windows.Forms.Label
+    $lblSubTitle.Text = "Kumpulan panduan teknis dan perbaikan sistem Windows secara manual."
+    $lblSubTitle.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Regular)
+    $lblSubTitle.ForeColor = [System.Drawing.Color]::LightGray
+    $lblSubTitle.AutoSize = $true
+    $lblSubTitle.Location = New-Object System.Drawing.Point(28, 60)
+    $bannerCard.Controls.Add($lblSubTitle)
+
+    $pnlMain.Controls.Add($bannerCard)
+
+    # --- 2. CONTAINER FLOW (Untuk isi menunya nanti) ---
     $flowGrid = New-Object System.Windows.Forms.FlowLayoutPanel
-    $flowGrid.Bounds = New-Object System.Drawing.Rectangle(15, 85, ($cpWidth - 30), ($cpHeight - 110))
+    $flowGrid.Location = New-Object System.Drawing.Point(30, 160)
+    $flowGrid.Size = New-Object System.Drawing.Size(735, 400) # Bisa disesuaikan
     $flowGrid.Anchor = "Top, Bottom, Left, Right"
     $flowGrid.AutoScroll = $true
-    $flowGrid.Padding = New-Object System.Windows.Forms.Padding(5)
-    $contentPanel.Controls.Add($flowGrid)
+    $flowGrid.Padding = New-Object System.Windows.Forms.Padding(0)
+    $pnlMain.Controls.Add($flowGrid)
 
     # --- FUNCTION HELPER: CREATE GUIDE CARD ---
     function Add-GuideCard ($Title, $Desc, $IconCode, $IconColor, $Action) {
@@ -11523,8 +11763,8 @@ function Render-AddSettings {
         # Icon Label dengan Warna Kustom
         $ico = New-Object System.Windows.Forms.Label
         $ico.Text = [char]$IconCode
-        $ico.Font = New-Object System.Drawing.Font("Segoe MDL2 Assets", 22)
-        try { $ico.ForeColor = [System.Drawing.Color]::FromName($IconColor) } catch { $ico.ForeColor = $themeBlue }
+        $ico.Font = New-Object System.Drawing.Font("Segoe MDL2 Assets", 24)
+        try { $ico.ForeColor = [System.Drawing.Color]::FromName($IconColor) } catch { $ico.ForeColor = [System.Drawing.Color]::FromArgb(0, 102, 204) }
         $ico.Location = New-Object System.Drawing.Point(15, 30)
         $ico.AutoSize = $true
         $card.Controls.Add($ico)
@@ -11532,7 +11772,7 @@ function Render-AddSettings {
         # Title
         $head = New-Object System.Windows.Forms.Label
         $head.Text = $Title
-        $head.Font = New-Object System.Drawing.Font("Segoe UI", 10.5, [System.Drawing.FontStyle]::Bold)
+        $head.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
         $head.ForeColor = if ($global:IsDarkMode) {[System.Drawing.Color]::White} else {[System.Drawing.Color]::FromArgb(40, 40, 40)}
         $head.Location = New-Object System.Drawing.Point(65, 18)
         $head.Width = $card.Width - 80
@@ -11541,7 +11781,7 @@ function Render-AddSettings {
         # Description
         $sub = New-Object System.Windows.Forms.Label
         $sub.Text = $Desc
-        $sub.Font = New-Object System.Drawing.Font("Segoe UI", 8.5)
+        $sub.Font = New-Object System.Drawing.Font("Segoe UI", 9)
         $sub.ForeColor = [System.Drawing.Color]::Gray
         $sub.Location = New-Object System.Drawing.Point(67, 48)
         $sub.Size = New-Object System.Drawing.Size(($card.Width - 85), 45)
@@ -11559,12 +11799,14 @@ function Render-AddSettings {
     }
 
     # --- MENAMBAHKAN GUIDES DENGAN WARNA IKON ---
-    Add-GuideCard "Fix Printer Error 709" "Panduan manual Group Policy untuk memperbaiki koneksi RPC Printer." 0xE749 "Teal" { Show-NoteWindow "Error 709 Guide" (Get-Note-Error709) } # Hijau Kebiruan (Printer)
-    Add-GuideCard "Fix Printer Error 3e3" "Langkah registrasi driver untuk masalah environment version printer." 0xE95F "SteelBlue" { Show-NoteWindow "Error 3e3 Guide" (Get-Note-Error3e3) } # Biru Pudar (Sistem/Registri)
-    Add-GuideCard "Intel RST / SSD Missing" "Cara load driver Intel Rapid Storage saat instalasi Windows." 0xE88E "DarkOrange" { Show-NoteWindow "Intel RST Guide" (Get-Note-RST) } # Oranye Gelap (Storage/Hardware)
-    Add-GuideCard "Lenovo LOQ Undervolt" "Panduan ThrottleStop & Afterburner untuk suhu laptop lebih dingin." 0xE945 "Tomato" { Show-NoteWindow "Undervolt Guide" (Get-Note-LOQ) } # Merah Oranye (Suhu/Power)
-    Add-GuideCard "Printer Credentials" "Username & Password yang benar untuk akses printer sharing." 0xE8D7 "Goldenrod" { Show-NoteWindow "Credential Guide" (Get-Note-Credential) } # Kuning Emas (Kunci/Akses)
-    Add-GuideCard "Bypass Windows Setup" "Cara melewati kewajiban akun Microsoft saat instalasi Windows 11." 0xE775 "RoyalBlue" { Show-NoteWindow "Bypass Guide" (Get-Note-Bypass) } # Biru Royal (Setup/Sistem)
+    Add-GuideCard "Fix Printer Error 709" "Panduan manual Group Policy untuk memperbaiki koneksi RPC Printer." 0xE749 "Teal" { Show-NoteWindow "Error 709 Guide" (Get-Note-Error709) }
+    Add-GuideCard "Fix Printer Error 3e3" "Langkah registrasi driver untuk masalah environment version printer." 0xE95F "SteelBlue" { Show-NoteWindow "Error 3e3 Guide" (Get-Note-Error3e3) }
+    Add-GuideCard "Intel RST / SSD Missing" "Cara load driver Intel Rapid Storage saat instalasi Windows." 0xE88E "DarkOrange" { Show-NoteWindow "Intel RST Guide" (Get-Note-RST) }
+    Add-GuideCard "Lenovo LOQ Undervolt" "Panduan ThrottleStop & Afterburner untuk suhu laptop lebih dingin." 0xE945 "Tomato" { Show-NoteWindow "Undervolt Guide" (Get-Note-LOQ) }
+    Add-GuideCard "Printer Credentials" "Username & Password yang benar untuk akses printer sharing." 0xE8D7 "Goldenrod" { Show-NoteWindow "Credential Guide" (Get-Note-Credential) }
+    Add-GuideCard "Bypass Windows Setup" "Cara melewati kewajiban akun Microsoft saat instalasi Windows 11." 0xE775 "RoyalBlue" { Show-NoteWindow "Bypass Guide" (Get-Note-Bypass) }
+    
+    $contentPanel.Controls.Add($pnlMain)
 }
 
 # ========================================================
@@ -11697,12 +11939,9 @@ function Action-ToolDiagnostic {
 
 function Render-OtherTools {
     $contentPanel.Controls.Clear()
-    $contentPanel.BackColor = if ($global:IsDarkMode) {[System.Drawing.Color]::FromArgb(30, 30, 35)} else {[System.Drawing.Color]::FromArgb(240, 242, 245)}
-    
-    $cpWidth = $contentPanel.Width
-    $cpHeight = $contentPanel.Height
+    $cP = if ($global:IsDarkMode) { $ThemePalettes.Dark } else { $ThemePalettes.Light }
 
-    # --- Helper Rounded ---
+    # --- HELPER: PELENGKUNG SUDUT CARD ---
     $SetRounded = {
         param($ctrl, $r)
         if ($ctrl.Width -le 0 -or $ctrl.Height -le 0) { return }
@@ -11716,33 +11955,55 @@ function Render-OtherTools {
         $ctrl.Region = New-Object System.Drawing.Region($p)
     }
 
-    $themeBlue = [System.Drawing.Color]::FromArgb(0, 102, 204)
+    # PANEL UTAMA
+    $pnlMain = New-Object System.Windows.Forms.Panel
+    $pnlMain.Dock = "Fill"
+    $pnlMain.BackColor = $cP.Bg
+    $pnlMain.AutoScroll = $true # SCROLL UTAMA HALAMAN
 
-    # 1. HEADER 
-    $pnlHeader = New-Object System.Windows.Forms.Panel
-    $pnlHeader.Bounds = New-Object System.Drawing.Rectangle(15, 10, ($cpWidth - 30), 60)
-    $pnlHeader.Anchor = "Top, Left, Right"
-    $pnlHeader.BackColor = $themeBlue
-    $contentPanel.Controls.Add($pnlHeader)
-    &$SetRounded $pnlHeader 15
+    # --- 1. HEADER BANNER ---
+    $bannerCard = New-Object System.Windows.Forms.Panel
+    $bannerCard.Size = New-Object System.Drawing.Size(735, 110)
+    $bannerCard.Location = New-Object System.Drawing.Point(30, 30)
+    $bannerCard.BackColor = $cP.Header 
+    
+    $banRadius = 20
+    $banPath = New-Object System.Drawing.Drawing2D.GraphicsPath
+    $banPath.AddArc(0, 0, $banRadius, $banRadius, 180, 90)
+    $banPath.AddArc($bannerCard.Width - $banRadius, 0, $banRadius, $banRadius, 270, 90)
+    $banPath.AddArc($bannerCard.Width - $banRadius, $bannerCard.Height - $banRadius, $banRadius, $banRadius, 0, 90)
+    $banPath.AddArc(0, $bannerCard.Height - $banRadius, $banRadius, $banRadius, 90, 90)
+    $banPath.CloseAllFigures()
+    $bannerCard.Region = New-Object System.Drawing.Region($banPath)
 
     $lblTitle = New-Object System.Windows.Forms.Label
-    $lblTitle.Text = "OTHER UTILITY TOOLS"
-    $lblTitle.Font = New-Object System.Drawing.Font("Segoe UI", 14, [System.Drawing.FontStyle]::Bold)
+    $lblTitle.Text = "Other Utility Tools"
+    $lblTitle.Font = New-Object System.Drawing.Font("Segoe UI", 18, [System.Drawing.FontStyle]::Bold)
     $lblTitle.ForeColor = [System.Drawing.Color]::White
-    $lblTitle.AutoSize = $true; $lblTitle.Location = New-Object System.Drawing.Point(20, 18)
-    $pnlHeader.Controls.Add($lblTitle)
+    $lblTitle.AutoSize = $true
+    $lblTitle.Location = New-Object System.Drawing.Point(25, 20)
+    $bannerCard.Controls.Add($lblTitle)
 
-    # 2. CONTAINER FLOW 
+    $lblSubTitle = New-Object System.Windows.Forms.Label
+    $lblSubTitle.Text = "Kumpulan alat utilitas tambahan untuk manajemen dan optimasi OS."
+    $lblSubTitle.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Regular)
+    $lblSubTitle.ForeColor = [System.Drawing.Color]::LightGray
+    $lblSubTitle.AutoSize = $true
+    $lblSubTitle.Location = New-Object System.Drawing.Point(28, 60)
+    $bannerCard.Controls.Add($lblSubTitle)
+
+    $pnlMain.Controls.Add($bannerCard)
+
+    # --- 2. CONTAINER FLOW (Untuk isi menunya nanti) ---
     $flowGrid = New-Object System.Windows.Forms.FlowLayoutPanel
-    $flowGrid.Bounds = New-Object System.Drawing.Rectangle(15, 85, ($cpWidth - 30), ($cpHeight - 110))
+    $flowGrid.Location = New-Object System.Drawing.Point(30, 160)
+    $flowGrid.Size = New-Object System.Drawing.Size(735, 400) # Bisa disesuaikan
     $flowGrid.Anchor = "Top, Bottom, Left, Right"
     $flowGrid.AutoScroll = $true
-    $flowGrid.Padding = New-Object System.Windows.Forms.Padding(5)
-    $contentPanel.Controls.Add($flowGrid)
+    $flowGrid.Padding = New-Object System.Windows.Forms.Padding(0)
+    $pnlMain.Controls.Add($flowGrid)
 
     # --- FUNCTION HELPER: CREATE CARD ---
-    # Diubah agar menerima parameter $IconColor
     function Add-ToolCard ($Title, $Desc, $IconCode, $IconColor, $Action) {
         $card = New-Object System.Windows.Forms.Panel
         $card.Size = New-Object System.Drawing.Size(($flowGrid.Width / 2 - 25), 100)
@@ -11753,8 +12014,8 @@ function Render-OtherTools {
         # Icon Label dengan Warna Kustom
         $ico = New-Object System.Windows.Forms.Label
         $ico.Text = [char]$IconCode
-        $ico.Font = New-Object System.Drawing.Font("Segoe MDL2 Assets", 22)
-        try { $ico.ForeColor = [System.Drawing.Color]::FromName($IconColor) } catch { $ico.ForeColor = $themeBlue }
+        $ico.Font = New-Object System.Drawing.Font("Segoe MDL2 Assets", 24)
+        try { $ico.ForeColor = [System.Drawing.Color]::FromName($IconColor) } catch { $ico.ForeColor = [System.Drawing.Color]::FromArgb(0, 102, 204) }
         $ico.Location = New-Object System.Drawing.Point(15, 25)
         $ico.AutoSize = $true
         $card.Controls.Add($ico)
@@ -11762,7 +12023,7 @@ function Render-OtherTools {
         # Title Label
         $head = New-Object System.Windows.Forms.Label
         $head.Text = $Title
-        $head.Font = New-Object System.Drawing.Font("Segoe UI", 11, [System.Drawing.FontStyle]::Bold)
+        $head.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
         $head.ForeColor = if ($global:IsDarkMode) {[System.Drawing.Color]::White} else {[System.Drawing.Color]::FromArgb(40, 40, 40)}
         $head.Location = New-Object System.Drawing.Point(65, 18)
         $head.Width = $card.Width - 80
@@ -11772,7 +12033,7 @@ function Render-OtherTools {
         # Description Label
         $sub = New-Object System.Windows.Forms.Label
         $sub.Text = $Desc
-        $sub.Font = New-Object System.Drawing.Font("Segoe UI", 8.5)
+        $sub.Font = New-Object System.Drawing.Font("Segoe UI", 9)
         $sub.ForeColor = [System.Drawing.Color]::Gray
         $sub.Location = New-Object System.Drawing.Point(67, 45)
         $sub.Size = New-Object System.Drawing.Size(($card.Width - 85), 45)
@@ -11790,19 +12051,19 @@ function Render-OtherTools {
     }
 
     # --- MENAMBAHKAN TOOLS DENGAN WARNA IKON ---
-    Add-ToolCard "Delete Temp Files" "Bersihkan file sampah di C:\Windows\Temp dan %TEMP% user." 0xE74D "Crimson" { Action-ToolTemp } # Merah (Hapus)
-    Add-ToolCard "Reset Network Stack" "Flush DNS, Reset Winsock, & Restart Adapter (Fix Internet)." 0xE909 "DodgerBlue" { Action-ToolNetReset } # Biru Terang (Internet)
-    Add-ToolCard "Printer Sharing Fix" "Aktifkan SMB1.0, Fix RPC 11b, & Restart Print Spooler." 0xE749 "Teal" { Action-ToolPrinter } # Hijau Kebiruan (Hardware)
-    Add-ToolCard "Chrome Ext. Fix" "Paksa aktifkan Manifest V2 extensions via Registry Policy." 0xE774 "Goldenrod" { Action-ToolChrome } # Kuning Emas (Browser)
-    Add-ToolCard "Enable GPEdit" "Install Group Policy Editor khusus untuk Windows Home Edition." 0xE7EF "MediumPurple" { Action-ToolGpEdit } # Ungu (Sistem)
-    Add-ToolCard "Hardware Diagnostic" "Jalankan Windows MSDT untuk cek masalah perangkat keras." 0xE9D9 "MediumSeaGreen" { Action-ToolDiagnostic } # Hijau (Kesehatan/Diagnostik)
+    Add-ToolCard "Delete Temp Files" "Bersihkan file sampah di C:\Windows\Temp dan %TEMP% user." 0xE74D "Crimson" { Action-ToolTemp } 
+    Add-ToolCard "Reset Network Stack" "Flush DNS, Reset Winsock, & Restart Adapter (Fix Internet)." 0xE909 "DodgerBlue" { Action-ToolNetReset } 
+    Add-ToolCard "Printer Sharing Fix" "Aktifkan SMB1.0, Fix RPC 11b, & Restart Print Spooler." 0xE749 "Teal" { Action-ToolPrinter } 
+    Add-ToolCard "Chrome Ext. Fix" "Paksa aktifkan Manifest V2 extensions via Registry Policy." 0xE774 "Goldenrod" { Action-ToolChrome } 
+    Add-ToolCard "Enable GPEdit" "Install Group Policy Editor khusus untuk Windows Home Edition." 0xE7EF "MediumPurple" { Action-ToolGpEdit } 
+    Add-ToolCard "Hardware Diagnostic" "Jalankan Windows MSDT untuk cek masalah perangkat keras." 0xE9D9 "MediumSeaGreen" { Action-ToolDiagnostic } 
+
+    $contentPanel.Controls.Add($pnlMain)
 }
 
 # ========================================================
 # MULAI BAGIAN: LOGIKA WINDOWS DEFENDER
-# (Taruh kode ini DI ATAS function Navigate-To)
 # ========================================================
-
 function Action-DefEnableIT {
     Write-Log "Starting IT Limit Fix (Reset Policies)..."
     $keys = @(
@@ -11819,34 +12080,75 @@ function Action-DefEnableIT {
 }
 
 function Action-DefDisable {
-    Write-Log "Disabling Windows Defender..."
-    $basePath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender"
-    if (-not (Test-Path $basePath)) { New-Item -Path $basePath -Force | Out-Null }
+    $msg = "PENTING: Fitur ini HANYA BEKERJA jika 'Tamper Protection' di Windows Security sudah dimatikan secara manual.`n`nApakah Anda sudah mematikannya?"
+    $ask = [System.Windows.Forms.MessageBox]::Show($msg, "Cek Tamper Protection", "YesNo", "Warning")
     
-    # Helper simple untuk reg add
-    function Set-Reg ($P, $N, $V) { if (-not (Test-Path $P)) { New-Item -Path $P -Force | Out-Null }; Set-ItemProperty -Path $P -Name $N -Value $V -Type DWord -Force }
+    if ($ask -eq "Yes") {
+        Write-Log "Disabling Windows Defender..."
+        
+        try {
+            # --- 1. Disabling Windows Defender entirely ---
+            $basePath = "HKLM\SOFTWARE\Policies\Microsoft\Windows Defender"
+            cmd.exe /c "reg add `"$basePath`" /v `"DisableAntiSpyware`" /t REG_DWORD /d 1 /f" | Out-Null
+            cmd.exe /c "reg add `"$basePath`" /v `"DisableRealtimeMonitoring`" /t REG_DWORD /d 1 /f" | Out-Null
+            cmd.exe /c "reg add `"$basePath`" /v `"DisableAntiVirus`" /t REG_DWORD /d 1 /f" | Out-Null
+            cmd.exe /c "reg add `"$basePath`" /v `"DisableSpecialRunningModes`" /t REG_DWORD /d 1 /f" | Out-Null
+            cmd.exe /c "reg add `"$basePath`" /v `"DisableRoutinelyTakingAction`" /t REG_DWORD /d 1 /f" | Out-Null
+            cmd.exe /c "reg add `"$basePath`" /v `"ServiceKeepAlive`" /t REG_DWORD /d 0 /f" | Out-Null
 
-    Set-Reg $basePath "DisableAntiSpyware" 1
-    Set-Reg $basePath "DisableRealtimeMonitoring" 1
-    Set-Reg $basePath "DisableAntiVirus" 1
-    Set-Reg "$basePath\Real-Time Protection" "DisableBehaviorMonitoring" 1
-    Set-Reg "$basePath\Real-Time Protection" "DisableOnAccessProtection" 1
-    Set-Reg "$basePath\Real-Time Protection" "DisableRealtimeMonitoring" 1
-    
-    Stop-Service -Name "WinDefend" -Force -ErrorAction SilentlyContinue
-    Set-Service -Name "WinDefend" -StartupType Disabled -ErrorAction SilentlyContinue
+            # --- 2. Disable real-time protection ---
+            $rtPath = "HKLM\SOFTWARE\Policies\Microsoft\Windows Defender\Real-Time Protection"
+            cmd.exe /c "reg add `"$rtPath`" /v `"DisableBehaviorMonitoring`" /t REG_DWORD /d 1 /f" | Out-Null
+            cmd.exe /c "reg add `"$rtPath`" /v `"DisableOnAccessProtection`" /t REG_DWORD /d 1 /f" | Out-Null
+            cmd.exe /c "reg add `"$rtPath`" /v `"DisableScanOnRealtimeEnable`" /t REG_DWORD /d 1 /f" | Out-Null
+            cmd.exe /c "reg add `"$rtPath`" /v `"DisableRealtimeMonitoring`" /t REG_DWORD /d 1 /f" | Out-Null
 
-    [System.Windows.Forms.MessageBox]::Show("Windows Defender Disabled via Registry.", "Done", "OK", "Warning")
+            # --- 3. Disable automatic signature updates ---
+            $sigPath = "HKLM\SOFTWARE\Policies\Microsoft\Windows Defender\Signature Updates"
+            cmd.exe /c "reg add `"$sigPath`" /v `"ForceUpdateFromMU`" /t REG_DWORD /d 0 /f" | Out-Null
+
+            # --- 4. Disable block feature & Other Policies ---
+            $spyPath = "HKLM\SOFTWARE\Policies\Microsoft\Windows Defender\Spynet"
+            cmd.exe /c "reg add `"$spyPath`" /v `"DisableBlockAtFirstSeen`" /t REG_DWORD /d 1 /f" | Out-Null
+            cmd.exe /c "reg add `"$spyPath`" /v `"SubmitSamplesConsent`" /t REG_DWORD /d 2 /f" | Out-Null
+            
+            $mpPath = "HKLM\SOFTWARE\Policies\Microsoft\Windows Defender\MpEngine"
+            cmd.exe /c "reg add `"$mpPath`" /v `"MpEnablePus`" /t REG_DWORD /d 0 /f" | Out-Null
+            cmd.exe /c "reg add `"$mpPath`" /v `"MpEngineRunTime`" /t REG_DWORD /d 0 /f" | Out-Null
+
+            $repPath = "HKLM\SOFTWARE\Policies\Microsoft\Windows Defender\Reporting"
+            cmd.exe /c "reg add `"$repPath`" /v `"DisableEnhancedNotifications`" /t REG_DWORD /d 1 /f" | Out-Null
+
+            # --- 5. Stop and Disable Services ---
+            cmd.exe /c "sc stop WinDefend" | Out-Null
+            cmd.exe /c "sc stop Sense" | Out-Null
+            cmd.exe /c "sc config WinDefend start= disabled" | Out-Null
+            cmd.exe /c "sc config Sense start= disabled" | Out-Null
+
+            [System.Windows.Forms.MessageBox]::Show("Windows Defender telah dinonaktifkan secara mendalam via Registry.`nSilakan RESTART PC Anda agar efeknya bekerja penuh.", "Done", "OK", "Information")
+        } catch {
+            [System.Windows.Forms.MessageBox]::Show("Gagal mengeksekusi perintah. Pastikan Anda menjalankan aplikasi ini sebagai Administrator (Run as Admin).", "Error", "OK", "Error")
+        }
+    }
 }
 
 function Action-DefEnable {
     Write-Log "Enabling Windows Defender..."
-    $paths = @("HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender")
-    foreach ($p in $paths) { if (Test-Path $p) { Remove-Item -Path $p -Recurse -Force -ErrorAction SilentlyContinue } }
+    try {
+        # Menghapus seluruh folder Windows Defender di Policies Registry (Kembali ke Default)
+        $basePath = "HKLM\SOFTWARE\Policies\Microsoft\Windows Defender"
+        cmd.exe /c "reg delete `"$basePath`" /f" | Out-Null
+        
+        # Mengembalikan service ke Automatic dan mencoba menyalakannya
+        cmd.exe /c "sc config WinDefend start= auto" | Out-Null
+        cmd.exe /c "sc config Sense start= auto" | Out-Null
+        cmd.exe /c "sc start WinDefend" | Out-Null
+        cmd.exe /c "sc start Sense" | Out-Null
 
-    Set-Service -Name "WinDefend" -StartupType Automatic -ErrorAction SilentlyContinue
-    Start-Service -Name "WinDefend" -ErrorAction SilentlyContinue
-    [System.Windows.Forms.MessageBox]::Show("Windows Defender Enabled!", "Success", "OK", "Information")
+        [System.Windows.Forms.MessageBox]::Show("Pengaturan Windows Defender telah dikembalikan ke standar pabrik.`nSilakan RESTART PC Anda agar fitur perlindungan aktif kembali.", "Success", "OK", "Information")
+    } catch {
+        [System.Windows.Forms.MessageBox]::Show("Terjadi kesalahan. Pastikan aplikasi berjalan sebagai Administrator.", "Error", "OK", "Error")
+    }
 }
 
 function Render-WindowsDefender {
