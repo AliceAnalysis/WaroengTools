@@ -1359,60 +1359,77 @@ $global:SoftwareDatabase = @(
 
 # --- FUNGSI INISIALISASI PACKAGE MANAGER ---
 function Action-InitPackageManagers {
-    # Menyimpan teks command persis seperti panduan resmi, DITAMBAH fungsi REFRESH PATH dan UPDATE
+    # --- 1. POP-UP KONFIRMASI AWAL ---
+    $confirm = [System.Windows.Forms.MessageBox]::Show(
+        "Apakah kamu ingin memeriksa, menginstal, atau memperbarui Package Manager (Chocolatey & Winget)?", 
+        "Konfirmasi Init", 
+        "YesNo", 
+        "Question"
+    )
+
+    if ($confirm -eq "No") { return }
+
+    # --- 2. SCRIPT TERMINAL (DENGAN PESAN RESTART DI AKHIR) ---
     $scriptContent = @'
+# Load Assembly agar terminal bisa memunculkan Pop-up sendiri
+Add-Type -AssemblyName System.Windows.Forms
+
 Write-Host "=== PACKAGE MANAGERS INITIALIZATION & UPDATE ===" -ForegroundColor Cyan
 
-# ---------------------------------------------------------
-# FUNGSI UNTUK REFRESH ENVIRONMENT VARIABLES (PATH)
-# ---------------------------------------------------------
 function Refresh-Path {
     $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
 }
 
+# --- PROSES CHOCO ---
 Write-Host "`n[1] Memeriksa Chocolatey..." -ForegroundColor Yellow
 if (!(Get-Command choco -ErrorAction SilentlyContinue)) {
     Write-Host "Menginstal Chocolatey, mohon tunggu..." -ForegroundColor White
-    
-    # --- COMMAND RESMI CHOCOLATEY ---
     Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
-    
-    # Refresh PATH agar Choco langsung bisa dipakai tanpa restart aplikasi
     Refresh-Path
-    
-    if (Get-Command choco -ErrorAction SilentlyContinue) {
-        Write-Host "`nChocolatey berhasil diinstal dan siap digunakan!" -ForegroundColor Green
-    } else {
-        Write-Host "`nInstalasi selesai, tapi Choco belum terdeteksi. Mungkin butuh restart aplikasi." -ForegroundColor Red
-    }
+    $status = "Instalasi Chocolatey SELESAI."
 } else {
-    Write-Host "Chocolatey sudah terinstal." -ForegroundColor Green
-    Write-Host "Memeriksa pembaruan (Update) untuk Chocolatey..." -ForegroundColor Cyan
-    # Command untuk update choco itu sendiri
+    Write-Host "Chocolatey sudah terinstal. Memperbarui..." -ForegroundColor Cyan
     choco upgrade chocolatey -y
+    $status = "Update Chocolatey SELESAI."
 }
 
+# --- PROSES WINGET ---
 Write-Host "`n[2] Memeriksa Winget..." -ForegroundColor Yellow
 if (!(Get-Command winget -ErrorAction SilentlyContinue)) {
-    Write-Host "Winget tidak ditemukan! Membuka Microsoft Store untuk update App Installer..." -ForegroundColor Red
+    Write-Host "Winget tidak ditemukan! Membuka MS Store..." -ForegroundColor Red
     Start-Process "ms-windows-store://pdp/?ProductId=9nblggh4nns1"
 } else {
-    Write-Host "Winget sudah terinstal." -ForegroundColor Green
-    Write-Host "Memeriksa pembaruan (Update) untuk Winget..." -ForegroundColor Cyan
-    # Karena winget diupdate lewat MS Store, kita paksa upgrade App Installer via winget
+    Write-Host "Winget sudah terinstal. Memperbarui..." -ForegroundColor Cyan
     winget upgrade --id Microsoft.AppInstaller -e --accept-package-agreements --accept-source-agreements
 }
 
 Write-Host "`n=== PROSES SELESAI ===" -ForegroundColor Cyan
-Read-Host "Tekan ENTER untuk menutup jendela ini..."
+
+# --- 3. POP-UP PERINGATAN RESTART (MUNCUL SAAT FINISH) ---
+[System.Windows.Forms.MessageBox]::Show(
+    "$status`n`nSistem telah mendeteksi perubahan pada Environment Path.`n`nAgar fitur Software Center dapat berfungsi dengan normal menggunakan Chocolatey, Anda WAJIB MENUTUP dan MEMBUKA ULANG aplikasi Waroeng Tools sekarang.", 
+    "Penting: Restart Aplikasi Diperlukan", 
+    "OK", 
+    "Warning"
+)
+
+Write-Host "Anda dapat menutup jendela ini dan membuka ulang Waroeng Tools."
+Read-Host "Tekan ENTER untuk keluar..."
 '@
 
-    # Membuat file script sementara di folder TEMP Windows
+    # Simpan dan Jalankan
     $tempScript = "$env:TEMP\InitPackageManagers.ps1"
     $scriptContent | Out-File -FilePath $tempScript -Encoding UTF8
     
-    # Eksekusi file script tersebut WAJIB dengan hak akses Administrator (-Verb RunAs)
     Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$tempScript`"" -Verb RunAs
+
+    # Info singkat di GUI Utama
+    [System.Windows.Forms.MessageBox]::Show(
+        "Proses sedang berjalan. Silakan cek jendela PowerShell yang muncul dan ikuti instruksi terakhir di sana.", 
+        "Sedang Berjalan", 
+        "OK", 
+        "Information"
+    )
 }
 
 # --- FUNGSI EKSEKUSI SOFTWARE CENTER ---
