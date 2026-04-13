@@ -65,11 +65,11 @@ $ThemePalettes = @{
 $p = if ($global:IsDarkMode) { $ThemePalettes.Dark } else { $ThemePalettes.Light }
 
 $form = New-Object System.Windows.Forms.Form
-$form.Text = "Waroeng Tools v5.6 [Theme Edition]"
+$form.Text = "Waroeng Tools v6.0"
 $form.Size = New-Object System.Drawing.Size(1150, 800)
 $form.StartPosition = "CenterScreen"
 $form.FormBorderStyle = "FixedSingle"
-$form.MaximizeBox = $false
+$form.MaximizeBox = $true
 $form.BackColor = $p.Bg
 
 try {
@@ -122,13 +122,28 @@ $form.Controls.Add($rightPanel); $rightPanel.BringToFront()
 
 # --- SIDEBAR HEADER ---
 $lblBrand = New-Object System.Windows.Forms.Label
-$lblBrand.Text = "WAROENG TOOLS"; $lblBrand.Font = New-Object System.Drawing.Font("Segoe UI", 16, [System.Drawing.FontStyle]::Bold); $lblBrand.ForeColor = [System.Drawing.Color]::White; $lblBrand.AutoSize = $true; $lblBrand.Location = New-Object System.Drawing.Point(25, 30)
+$lblBrand.Text = "WAROENG TOOLS"
+$lblBrand.Font = New-Object System.Drawing.Font("Segoe UI", 16, [System.Drawing.FontStyle]::Bold)
+$lblBrand.ForeColor = [System.Drawing.Color]::White
+$lblBrand.AutoSize = $true
+$lblBrand.Location = New-Object System.Drawing.Point(25, 30)
 $sidebar.Controls.Add($lblBrand)
 
 $lblSub = New-Object System.Windows.Forms.Label
-$lblSub.Text = "IT SYSTEM UTILITY"; $lblSub.Font = New-Object System.Drawing.Font("Segoe UI", 8, [System.Drawing.FontStyle]::Regular); $lblSub.ForeColor = [System.Drawing.Color]::Gray; $lblSub.AutoSize = $true; $lblSub.Location = New-Object System.Drawing.Point(28, 65)
+$lblSub.Text = "IT SYSTEM UTILITY"
+$lblSub.Font = New-Object System.Drawing.Font("Segoe UI", 8, [System.Drawing.FontStyle]::Regular)
+$lblSub.ForeColor = [System.Drawing.Color]::Gray
+$lblSub.AutoSize = $true
+$lblSub.Location = New-Object System.Drawing.Point(28, 65)
 $sidebar.Controls.Add($lblSub)
 
+$lblCreator = New-Object System.Windows.Forms.Label
+$lblCreator.Text = "Creator: Bagas Alam Saputra"
+$lblCreator.Font = New-Object System.Drawing.Font("Segoe UI", 8, [System.Drawing.FontStyle]::Italic)
+$lblCreator.ForeColor = $ThemePalettes.Dark.Accent # Menggunakan warna Cyan agar terlihat keren
+$lblCreator.AutoSize = $true
+$lblCreator.Location = New-Object System.Drawing.Point(28, 85)
+$sidebar.Controls.Add($lblCreator)
 # ========================================================
 # KANAN: HEADER & LOG
 # ========================================================
@@ -290,9 +305,34 @@ function Get-DetailedSpecs {
         } catch { $storageList += "Disk Info Unavailable" }
 
         try {
-            $av = Get-CimInstance -Namespace root/SecurityCenter2 -ClassName AntiVirusProduct -ErrorAction Stop
-            $avStatus = if ($av) { "$($av.displayName) (Enabled)" } else { "None / Disabled" }
-        } catch { $avStatus = "Unknown" }
+            $avStatus = "Unknown"
+            
+            # Cek dulu apakah ada AV pihak ketiga via WMI
+            $3rdPartyAV = Get-CimInstance -Namespace root/SecurityCenter2 -ClassName AntiVirusProduct -ErrorAction SilentlyContinue | Where-Object { $_.displayName -notmatch "Windows Defender|Microsoft Defender" }
+            
+            if ($3rdPartyAV) {
+                # Jika ada AV pihak ketiga (misal: Avast, Kaspersky), tampilkan itu
+                $avStatus = "$($3rdPartyAV.displayName) (Active)"
+            } else {
+                # Jika tidak ada AV pihak ketiga, berarti pakai Windows Defender. 
+                # Kita cek status Real-Time Protection-nya!
+                $defenderStatus = Get-MpComputerStatus -ErrorAction SilentlyContinue
+                
+                if ($defenderStatus) {
+                    if ($defenderStatus.RealTimeProtectionEnabled -eq $true) {
+                        $avStatus = "Windows Defender (Real-time: ON)"
+                    } else {
+                        # Jika RealTimeProtectionEnabled adalah $false, berarti sudah sukses didisable
+                        $avStatus = "Windows Defender (Real-time: OFF / Disabled)"
+                    }
+                } else {
+                    # Jika modul Get-MpComputerStatus gagal/error (mungkin service-nya mati total)
+                    $avStatus = "Windows Defender (Services Offline)"
+                }
+            }
+        } catch { 
+            $avStatus = "Detection Failed" 
+        }
 
         return @{
             OSVer     = $osFinalString
@@ -1842,9 +1882,7 @@ Read-Host 'Tekan ENTER untuk menutup jendela ini...'
     Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Command `"$psCommand`""
 }
 
-# =========================================================================
-# FUNGSI RENDER HALAMAN LISENSI & AKTIVASI
-# =========================================================================
+
 function Render-UpgradeLicense {
     $contentPanel.Controls.Clear()
     $cP = if ($global:IsDarkMode) { $ThemePalettes.Dark } else { $ThemePalettes.Light }
@@ -11089,7 +11127,6 @@ function Render-SystemRepair {
 # ========================================================
 # BAGIAN: LOGIKA SYSTEM REPORT
 # ========================================================
-
 function Action-ReportNFO {
     Write-Log "Membuka menu NFO Export..."
     
@@ -11560,9 +11597,6 @@ function Render-BackupRestore {
     $contentPanel.Controls.Add($pnlMain)
 }
 
-
-
-
 # ========================================================
 # BAGIAN: LOGIKA ADD SETTINGS (MANUAL NOTES)
 # ========================================================
@@ -11788,6 +11822,9 @@ Gunakan perintah ini saat instalasi Windows 11 memaksa koneksi internet/akun Mic
 
     C. Metode Kill Process
        taskkill /F /IM oobenetworkconnectionflow.exe
+
+    D. Metode Akun Lokal
+        start ms-cxh:localonly
 
 [3] Jika Keyboard tidak muncul?
     Aktifkan On-Screen Keyboard: Ctrl + Windows + O
