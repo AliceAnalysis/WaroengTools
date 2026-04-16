@@ -65,7 +65,7 @@ $ThemePalettes = @{
 $p = if ($global:IsDarkMode) { $ThemePalettes.Dark } else { $ThemePalettes.Light }
 
 $form = New-Object System.Windows.Forms.Form
-$form.Text = "Waroeng Tools v6.0"
+$form.Text = "Waroeng Tools v6.1"
 $form.Size = New-Object System.Drawing.Size(1150, 800)
 $form.StartPosition = "CenterScreen"
 $form.FormBorderStyle = "FixedSingle"
@@ -2049,160 +2049,242 @@ function Action-OpenUrl ($Url) {
 # =========================================================================
 # FUNGSI RENDER HALAMAN DOWNLOAD WINDOWS & OFFICE
 # =========================================================================
-# =========================================================================
-# FUNGSI RENDER HALAMAN DOWNLOAD WINDOWS & OFFICE (VERSI 2 KOLOM & TEKS FULL)
-# =========================================================================
-function Render-DownloadOS {
-    $contentPanel.Controls.Clear()
-    $cP = if ($global:IsDarkMode) { $ThemePalettes.Dark } else { $ThemePalettes.Light }
+function Render-DownloadOS { 
+    $contentPanel.Controls.Clear() 
+    $cP = if ($global:IsDarkMode) { $ThemePalettes.Dark } else { $ThemePalettes.Light } 
 
-    $pnlMain = New-Object System.Windows.Forms.FlowLayoutPanel
-    $pnlMain.Dock = "Fill"
-    $pnlMain.BackColor = $cP.Bg
-    $pnlMain.AutoScroll = $true
-    
-    # Alur Kiri ke Kanan dan izinkan elemen turun baris (Wrap) untuk bentuk Grid
-    $pnlMain.FlowDirection = "LeftToRight"
-    $pnlMain.WrapContents = $true
+    $pnlMain = New-Object System.Windows.Forms.FlowLayoutPanel 
+    $pnlMain.Dock = "Fill" 
+    $pnlMain.BackColor = $cP.Bg 
+    $pnlMain.AutoScroll = $true 
+     
+    # Alur Kiri ke Kanan dan izinkan elemen turun baris (Wrap) untuk bentuk Grid 
+    $pnlMain.FlowDirection = "LeftToRight" 
+    $pnlMain.WrapContents = $true 
 
-    # --- HELPER FUNCTION UNTUK KARTU TOMBOL ---
-    function Create-DownloadCard ($Title, $Desc, $IconCode, $ColorName, $ActionScript) {
-        $card = New-Object System.Windows.Forms.Panel
-        # PERBAIKAN: Tinggi kartu dinaikkan menjadi 140 agar teks panjang muat
-        $card.Size = New-Object System.Drawing.Size(345, 140) 
-        $card.Margin = New-Object System.Windows.Forms.Padding(15, 5, 10, 15)
-        $card.BackColor = $cP.Card
-        $card.Cursor = [System.Windows.Forms.Cursors]::Hand
+    # --- HELPER FUNCTION UNTUK KARTU TOMBOL --- 
+    function Create-DownloadCard ($Title, $Desc, $IconCode, $ColorName, $ActionScript) { 
+        $card = New-Object System.Windows.Forms.Panel 
+        $card.Size = New-Object System.Drawing.Size(345, 140)  
+        $card.Margin = New-Object System.Windows.Forms.Padding(15, 5, 10, 15) 
+        $card.BackColor = $cP.Card 
+        $card.Cursor = [System.Windows.Forms.Cursors]::Hand 
 
-        $rad = 15; $path = New-Object System.Drawing.Drawing2D.GraphicsPath
-        $path.AddArc(0, 0, $rad, $rad, 180, 90); $path.AddArc($card.Width - $rad, 0, $rad, $rad, 270, 90)
-        $path.AddArc($card.Width - $rad, $card.Height - $rad, $rad, $rad, 0, 90); $path.AddArc(0, $card.Height - $rad, $rad, $rad, 90, 90)
-        $path.CloseAllFigures(); $card.Region = New-Object System.Drawing.Region($path)
+        $rad = 15; $path = New-Object System.Drawing.Drawing2D.GraphicsPath 
+        $path.AddArc(0, 0, $rad, $rad, 180, 90); $path.AddArc($card.Width - $rad, 0, $rad, $rad, 270, 90) 
+        $path.AddArc($card.Width - $rad, $card.Height - $rad, $rad, $rad, 0, 90); $path.AddArc(0, $card.Height - $rad, $rad, $rad, 90, 90) 
+        $path.CloseAllFigures(); $card.Region = New-Object System.Drawing.Region($path) 
 
-        $ico = New-Object System.Windows.Forms.Label
-        $ico.Text = [char]$IconCode; $ico.Font = New-Object System.Drawing.Font("Segoe MDL2 Assets", 24)
-        $ico.AutoSize = $true; $ico.Location = New-Object System.Drawing.Point(15, 45) # Icon digeser ke tengah
-        try { $ico.ForeColor = [System.Drawing.Color]::FromName($ColorName) } catch { $ico.ForeColor = $cP.Accent }
-        
-        $lTitle = New-Object System.Windows.Forms.Label
-        $lTitle.Text = $Title; $lTitle.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
-        $lTitle.ForeColor = $cP.Text; $lTitle.Location = New-Object System.Drawing.Point(75, 15); $lTitle.AutoSize = $true
-        
-        $lSub = New-Object System.Windows.Forms.Label
-        $lSub.Text = $Desc; $lSub.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Regular)
-        $lSub.ForeColor = [System.Drawing.Color]::Gray; $lSub.Location = New-Object System.Drawing.Point(75, 42)
-        # PERBAIKAN: Tinggi area teks dinaikkan menjadi 85 agar bisa memuat 3-4 baris teks
-        $lSub.Size = New-Object System.Drawing.Size(250, 85) 
-        $lSub.AutoSize = $false; $lSub.AutoEllipsis = $true
+        $ico = New-Object System.Windows.Forms.Label 
+        $ico.Text = [char]$IconCode; $ico.Font = New-Object System.Drawing.Font("Segoe MDL2 Assets", 24) 
+        $ico.AutoSize = $true; $ico.Location = New-Object System.Drawing.Point(15, 45) 
+        try { $ico.ForeColor = [System.Drawing.Color]::FromName($ColorName) } catch { $ico.ForeColor = $cP.Accent } 
+         
+        $lTitle = New-Object System.Windows.Forms.Label 
+        $lTitle.Text = $Title; $lTitle.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold) 
+        $lTitle.ForeColor = $cP.Text; $lTitle.Location = New-Object System.Drawing.Point(75, 15); $lTitle.AutoSize = $true 
+         
+        $lSub = New-Object System.Windows.Forms.Label 
+        $lSub.Text = $Desc; $lSub.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Regular) 
+        $lSub.ForeColor = [System.Drawing.Color]::Gray; $lSub.Location = New-Object System.Drawing.Point(75, 42) 
+        $lSub.Size = New-Object System.Drawing.Size(250, 85)  
+        $lSub.AutoSize = $false; $lSub.AutoEllipsis = $true 
 
-        $hover = if ($global:IsDarkMode) { [System.Drawing.Color]::FromArgb(45, 45, 55) } else { [System.Drawing.Color]::FromArgb(235, 235, 235) }
-        $normal = if ($global:IsDarkMode) { [System.Drawing.Color]::FromArgb(30, 30, 35) } else { [System.Drawing.Color]::White }
+        $hover = if ($global:IsDarkMode) { [System.Drawing.Color]::FromArgb(45, 45, 55) } else { [System.Drawing.Color]::FromArgb(235, 235, 235) } 
+        $normal = if ($global:IsDarkMode) { [System.Drawing.Color]::FromArgb(30, 30, 35) } else { [System.Drawing.Color]::White } 
 
-        $card.Add_MouseEnter({ $this.BackColor = $hover }.GetNewClosure()); $card.Add_MouseLeave({ $this.BackColor = $normal }.GetNewClosure())
-        $ico.Add_MouseEnter({ $this.Parent.BackColor = $hover }.GetNewClosure()); $ico.Add_MouseLeave({ $this.Parent.BackColor = $normal }.GetNewClosure())
-        $lTitle.Add_MouseEnter({ $this.Parent.BackColor = $hover }.GetNewClosure()); $lTitle.Add_MouseLeave({ $this.Parent.BackColor = $normal }.GetNewClosure())
-        $lSub.Add_MouseEnter({ $this.Parent.BackColor = $hover }.GetNewClosure()); $lSub.Add_MouseLeave({ $this.Parent.BackColor = $normal }.GetNewClosure())
+        $card.Add_MouseEnter({ $this.BackColor = $hover }.GetNewClosure()); $card.Add_MouseLeave({ $this.BackColor = $normal }.GetNewClosure()) 
+        $ico.Add_MouseEnter({ $this.Parent.BackColor = $hover }.GetNewClosure()); $ico.Add_MouseLeave({ $this.Parent.BackColor = $normal }.GetNewClosure()) 
+        $lTitle.Add_MouseEnter({ $this.Parent.BackColor = $hover }.GetNewClosure()); $lTitle.Add_MouseLeave({ $this.Parent.BackColor = $normal }.GetNewClosure()) 
+        $lSub.Add_MouseEnter({ $this.Parent.BackColor = $hover }.GetNewClosure()); $lSub.Add_MouseLeave({ $this.Parent.BackColor = $normal }.GetNewClosure()) 
 
-        $card.Controls.Add($ico); $card.Controls.Add($lTitle); $card.Controls.Add($lSub)
-        $card.Add_Click($ActionScript); $ico.Add_Click($ActionScript); $lTitle.Add_Click($ActionScript); $lSub.Add_Click($ActionScript)
-        return $card
-    }
+        $card.Controls.Add($ico); $card.Controls.Add($lTitle); $card.Controls.Add($lSub) 
+        $card.Add_Click($ActionScript); $ico.Add_Click($ActionScript); $lTitle.Add_Click($ActionScript); $lSub.Add_Click($ActionScript) 
+        return $card 
+    } 
 
-    $radBanner = 20
+    $radBanner = 20 
 
-    # =========================================================
-    # BANNER 1: WINDOWS DOWNLOAD
-    # =========================================================
-    $banner1 = New-Object System.Windows.Forms.Panel
-    $banner1.Size = New-Object System.Drawing.Size(715, 90); $banner1.Margin = New-Object System.Windows.Forms.Padding(15, 25, 15, 15)
-    $banner1.BackColor = [System.Drawing.Color]::DodgerBlue
-    $pathB1 = New-Object System.Drawing.Drawing2D.GraphicsPath
-    $pathB1.AddArc(0,0,$radBanner,$radBanner,180,90); $pathB1.AddArc($banner1.Width-$radBanner,0,$radBanner,$radBanner,270,90)
-    $pathB1.AddArc($banner1.Width-$radBanner,$banner1.Height-$radBanner,$radBanner,$radBanner,0,90); $pathB1.AddArc(0,$banner1.Height-$radBanner,$radBanner,$radBanner,90,90)
-    $pathB1.CloseAllFigures(); $banner1.Region = New-Object System.Drawing.Region($pathB1)
+    # ========================================================= 
+    # BANNER 1: WINDOWS DOWNLOAD 
+    # ========================================================= 
+    $banner1 = New-Object System.Windows.Forms.Panel 
+    $banner1.Size = New-Object System.Drawing.Size(715, 90); $banner1.Margin = New-Object System.Windows.Forms.Padding(15, 25, 15, 15) 
+    $banner1.BackColor = [System.Drawing.Color]::DodgerBlue 
+    $pathB1 = New-Object System.Drawing.Drawing2D.GraphicsPath 
+    $pathB1.AddArc(0,0,$radBanner,$radBanner,180,90); $pathB1.AddArc($banner1.Width-$radBanner,0,$radBanner,$radBanner,270,90) 
+    $pathB1.AddArc($banner1.Width-$radBanner,$banner1.Height-$radBanner,$radBanner,$radBanner,0,90); $pathB1.AddArc(0,$banner1.Height-$radBanner,$radBanner,$radBanner,90,90) 
+    $pathB1.CloseAllFigures(); $banner1.Region = New-Object System.Drawing.Region($pathB1) 
 
-    $lblT1 = New-Object System.Windows.Forms.Label; $lblT1.Text = "Download Windows ISO"; $lblT1.Font = New-Object System.Drawing.Font("Segoe UI", 16, [System.Drawing.FontStyle]::Bold)
-    $lblT1.ForeColor = [System.Drawing.Color]::White; $lblT1.AutoSize = $true; $lblT1.Location = New-Object System.Drawing.Point(25, 20)
-    $lblS1 = New-Object System.Windows.Forms.Label; $lblS1.Text = "Unduh file instalasi resmi Windows 10, Windows 11, dan versi ARM."; $lblS1.Font = New-Object System.Drawing.Font("Segoe UI", 10)
-    $lblS1.ForeColor = [System.Drawing.Color]::LightCyan; $lblS1.AutoSize = $true; $lblS1.Location = New-Object System.Drawing.Point(28, 52)
-    $banner1.Controls.Add($lblT1); $banner1.Controls.Add($lblS1); $pnlMain.Controls.Add($banner1)
+    $lblT1 = New-Object System.Windows.Forms.Label; $lblT1.Text = "Download Windows ISO"; $lblT1.Font = New-Object System.Drawing.Font("Segoe UI", 16, [System.Drawing.FontStyle]::Bold) 
+    $lblT1.ForeColor = [System.Drawing.Color]::White; $lblT1.AutoSize = $true; $lblT1.Location = New-Object System.Drawing.Point(25, 20) 
+    $lblS1 = New-Object System.Windows.Forms.Label; $lblS1.Text = "Unduh file instalasi resmi Windows 10, Windows 11, dan versi ARM."; $lblS1.Font = New-Object System.Drawing.Font("Segoe UI", 10) 
+    $lblS1.ForeColor = [System.Drawing.Color]::LightCyan; $lblS1.AutoSize = $true; $lblS1.Location = New-Object System.Drawing.Point(28, 52) 
+    $banner1.Controls.Add($lblT1); $banner1.Controls.Add($lblS1); $pnlMain.Controls.Add($banner1) 
 
-    # ACTION CARDS WINDOWS
-    $pnlMain.Controls.Add((Create-DownloadCard "Windows 10" "Unduh file ISO Windows 10 (Multi-edition)." 0xE8A4 "DeepSkyBlue" { Action-OpenUrl "https://www.microsoft.com/en-us/software-download/windows10" }))
-    $pnlMain.Controls.Add((Create-DownloadCard "Windows 11" "Unduh file ISO Windows 11 terbaru." 0xE8A4 "MediumSlateBlue" { Action-OpenUrl "https://www.microsoft.com/en-us/software-download/windows11" }))
-    $pnlMain.Controls.Add((Create-DownloadCard "Windows ARM" "Unduh file instalasi Windows untuk perangkat berarsitektur ARM (Snapdragon, dll)." 0xE8A4 "Orange" { Action-OpenUrl "https://www.microsoft.com/en-us/software-download/windows11arm64" }))
+    # ACTION CARDS WINDOWS 
+    $pnlMain.Controls.Add((Create-DownloadCard "Windows 10" "Unduh file ISO Windows 10 (Multi-edition)." 0xE8A4 "DeepSkyBlue" { Action-OpenUrl "https://www.microsoft.com/en-us/software-download/windows10" })) 
+    $pnlMain.Controls.Add((Create-DownloadCard "Windows 11" "Unduh file ISO Windows 11 terbaru." 0xE8A4 "MediumSlateBlue" { Action-OpenUrl "https://www.microsoft.com/en-us/software-download/windows11" })) 
+    $pnlMain.Controls.Add((Create-DownloadCard "Windows ARM" "Unduh file instalasi Windows untuk perangkat berarsitektur ARM (Snapdragon, dll)." 0xE8A4 "Orange" { Action-OpenUrl "https://www.microsoft.com/en-us/software-download/windows11arm64" })) 
 
-    # =========================================================
-    # BANNER 2: OFFICE DOWNLOAD
-    # =========================================================
-    $banner2 = New-Object System.Windows.Forms.Panel
-    $banner2.Size = New-Object System.Drawing.Size(715, 90); $banner2.Margin = New-Object System.Windows.Forms.Padding(15, 10, 15, 15)
-    $banner2.BackColor = [System.Drawing.Color]::Tomato
-    $pathB2 = New-Object System.Drawing.Drawing2D.GraphicsPath
-    $pathB2.AddArc(0,0,$radBanner,$radBanner,180,90); $pathB2.AddArc($banner2.Width-$radBanner,0,$radBanner,$radBanner,270,90)
-    $pathB2.AddArc($banner2.Width-$radBanner,$banner2.Height-$radBanner,$radBanner,$radBanner,0,90); $pathB2.AddArc(0,$banner2.Height-$radBanner,$radBanner,$radBanner,90,90)
-    $pathB2.CloseAllFigures(); $banner2.Region = New-Object System.Drawing.Region($pathB2)
+    # ========================================================= 
+    # BANNER 2: OFFICE DOWNLOAD 
+    # ========================================================= 
+    $banner2 = New-Object System.Windows.Forms.Panel 
+    $banner2.Size = New-Object System.Drawing.Size(715, 90); $banner2.Margin = New-Object System.Windows.Forms.Padding(15, 10, 15, 15) 
+    $banner2.BackColor = [System.Drawing.Color]::Tomato 
+    $pathB2 = New-Object System.Drawing.Drawing2D.GraphicsPath 
+    $pathB2.AddArc(0,0,$radBanner,$radBanner,180,90); $pathB2.AddArc($banner2.Width-$radBanner,0,$radBanner,$radBanner,270,90) 
+    $pathB2.AddArc($banner2.Width-$radBanner,$banner2.Height-$radBanner,$radBanner,$radBanner,0,90); $pathB2.AddArc(0,$banner2.Height-$radBanner,$radBanner,$radBanner,90,90) 
+    $pathB2.CloseAllFigures(); $banner2.Region = New-Object System.Drawing.Region($pathB2) 
 
-    $lblT2 = New-Object System.Windows.Forms.Label; $lblT2.Text = "Download Microsoft Office"; $lblT2.Font = New-Object System.Drawing.Font("Segoe UI", 16, [System.Drawing.FontStyle]::Bold)
-    $lblT2.ForeColor = [System.Drawing.Color]::White; $lblT2.AutoSize = $true; $lblT2.Location = New-Object System.Drawing.Point(25, 20)
-    $lblS2 = New-Object System.Windows.Forms.Label; $lblS2.Text = "Pilih versi Office Anda (Mendukung Online & Offline Installer)."; $lblS2.Font = New-Object System.Drawing.Font("Segoe UI", 10)
-    $lblS2.ForeColor = [System.Drawing.Color]::MistyRose; $lblS2.AutoSize = $true; $lblS2.Location = New-Object System.Drawing.Point(28, 52)
-    $banner2.Controls.Add($lblT2); $banner2.Controls.Add($lblS2); $pnlMain.Controls.Add($banner2)
+    $lblT2 = New-Object System.Windows.Forms.Label; $lblT2.Text = "Download Microsoft Office"; $lblT2.Font = New-Object System.Drawing.Font("Segoe UI", 16, [System.Drawing.FontStyle]::Bold) 
+    $lblT2.ForeColor = [System.Drawing.Color]::White; $lblT2.AutoSize = $true; $lblT2.Location = New-Object System.Drawing.Point(25, 20) 
+    $lblS2 = New-Object System.Windows.Forms.Label; $lblS2.Text = "Pilih versi Office Anda (Mendukung Online & Offline Installer)."; $lblS2.Font = New-Object System.Drawing.Font("Segoe UI", 10) 
+    $lblS2.ForeColor = [System.Drawing.Color]::MistyRose; $lblS2.AutoSize = $true; $lblS2.Location = New-Object System.Drawing.Point(28, 52) 
+    $banner2.Controls.Add($lblT2); $banner2.Controls.Add($lblS2); $pnlMain.Controls.Add($banner2) 
 
-    # --- MENU POP-UP: M365 ---
-    $global:menuM365 = New-Object System.Windows.Forms.ContextMenuStrip; $global:menuM365.Cursor = [System.Windows.Forms.Cursors]::Hand
-    $global:menuM365.Items.Add("[Online] Installer - English").Add_Click({ Action-OpenUrl "https://c2rsetup.officeapps.live.com/c2r/download.aspx?ProductreleaseID=O365ProPlusRetail&platform=x64&language=en-us&version=O16GA" })
-    $global:menuM365.Items.Add("[Online] Installer - Indonesia").Add_Click({ Action-OpenUrl "https://c2rsetup.officeapps.live.com/c2r/download.aspx?ProductreleaseID=O365ProPlusRetail&platform=x64&language=id-id&version=O16GA" })
-    $global:menuM365.Items.Add("-") # Separator
-    $global:menuM365.Items.Add("[Offline] Installer (IMG/ISO) - English").Add_Click({ Action-OpenUrl "https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/O365ProPlusRetail.img" })
-    $global:menuM365.Items.Add("[Offline] Installer (IMG/ISO) - Indonesia").Add_Click({ Action-OpenUrl "https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/id-id/O365ProPlusRetail.img" })
+    # --- MENU POP-UP: M365 --- 
+    $global:menuM365 = New-Object System.Windows.Forms.ContextMenuStrip; $global:menuM365.Cursor = [System.Windows.Forms.Cursors]::Hand 
+    $global:menuM365.Items.Add("[Online] Installer - English").Add_Click({ Action-OpenUrl "https://c2rsetup.officeapps.live.com/c2r/download.aspx?ProductreleaseID=O365ProPlusRetail&platform=x64&language=en-us&version=O16GA" }) 
+    $global:menuM365.Items.Add("[Online] Installer - Indonesia").Add_Click({ Action-OpenUrl "https://c2rsetup.officeapps.live.com/c2r/download.aspx?ProductreleaseID=O365ProPlusRetail&platform=x64&language=id-id&version=O16GA" }) 
+    $global:menuM365.Items.Add("-") # Separator 
+    $global:menuM365.Items.Add("[Offline] Installer (IMG/ISO) - English").Add_Click({ Action-OpenUrl "https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/O365ProPlusRetail.img" }) 
+    $global:menuM365.Items.Add("[Offline] Installer (IMG/ISO) - Indonesia").Add_Click({ Action-OpenUrl "https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/id-id/O365ProPlusRetail.img" }) 
 
-    # --- MENU POP-UP: OFFICE 2024 HOME ---
-    $global:menu24Home = New-Object System.Windows.Forms.ContextMenuStrip; $global:menu24Home.Cursor = [System.Windows.Forms.Cursors]::Hand
-    $global:menu24Home.Items.Add("[Online] Installer - English").Add_Click({ Action-OpenUrl "https://c2rsetup.officeapps.live.com/c2r/download.aspx?ProductreleaseID=Home2024Retail&platform=x64&language=en-us&version=O16GA" })
-    $global:menu24Home.Items.Add("[Online] Installer - Indonesia").Add_Click({ Action-OpenUrl "https://c2rsetup.officeapps.live.com/c2r/download.aspx?ProductreleaseID=Home2024Retail&platform=x64&language=id-id&version=O16GA" })
-    $global:menu24Home.Items.Add("-") # Separator
-    $global:menu24Home.Items.Add("[Offline] Installer (IMG/ISO) - English").Add_Click({ Action-OpenUrl "https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/Home2024Retail.img" })
-    $global:menu24Home.Items.Add("[Offline] Installer (IMG/ISO) - Indonesia").Add_Click({ Action-OpenUrl "https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/id-id/Home2024Retail.img" })
+    # --- MENU POP-UP: OFFICE 2024 HOME --- 
+    $global:menu24Home = New-Object System.Windows.Forms.ContextMenuStrip; $global:menu24Home.Cursor = [System.Windows.Forms.Cursors]::Hand 
+    $global:menu24Home.Items.Add("[Online] Installer - English").Add_Click({ Action-OpenUrl "https://c2rsetup.officeapps.live.com/c2r/download.aspx?ProductreleaseID=Home2024Retail&platform=x64&language=en-us&version=O16GA" }) 
+    $global:menu24Home.Items.Add("[Online] Installer - Indonesia").Add_Click({ Action-OpenUrl "https://c2rsetup.officeapps.live.com/c2r/download.aspx?ProductreleaseID=Home2024Retail&platform=x64&language=id-id&version=O16GA" }) 
+    $global:menu24Home.Items.Add("-") # Separator 
+    $global:menu24Home.Items.Add("[Offline] Installer (IMG/ISO) - English").Add_Click({ Action-OpenUrl "https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/Home2024Retail.img" }) 
+    $global:menu24Home.Items.Add("[Offline] Installer (IMG/ISO) - Indonesia").Add_Click({ Action-OpenUrl "https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/id-id/Home2024Retail.img" }) 
 
-    # --- MENU POP-UP: OFFICE 2024 PROPLUS ---
-    $global:menu24Pro = New-Object System.Windows.Forms.ContextMenuStrip; $global:menu24Pro.Cursor = [System.Windows.Forms.Cursors]::Hand
-    $global:menu24Pro.Items.Add("[Online] Installer - English").Add_Click({ Action-OpenUrl "https://c2rsetup.officeapps.live.com/c2r/download.aspx?ProductreleaseID=ProPlus2024Retail&platform=x64&language=en-us&version=O16GA" })
-    $global:menu24Pro.Items.Add("[Online] Installer - Indonesia").Add_Click({ Action-OpenUrl "https://c2rsetup.officeapps.live.com/c2r/download.aspx?ProductreleaseID=ProPlus2024Retail&platform=x64&language=id-id&version=O16GA" })
-    $global:menu24Pro.Items.Add("-") # Separator
-    $global:menu24Pro.Items.Add("[Offline] Installer (IMG/ISO) - English").Add_Click({ Action-OpenUrl "https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/ProPlus2024Retail.img" })
-    $global:menu24Pro.Items.Add("[Offline] Installer (IMG/ISO) - Indonesia").Add_Click({ Action-OpenUrl "https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/id-id/ProPlus2024Retail.img" })
+    # --- MENU POP-UP: OFFICE 2024 PROPLUS --- 
+    $global:menu24Pro = New-Object System.Windows.Forms.ContextMenuStrip; $global:menu24Pro.Cursor = [System.Windows.Forms.Cursors]::Hand 
+    $global:menu24Pro.Items.Add("[Online] Installer - English").Add_Click({ Action-OpenUrl "https://c2rsetup.officeapps.live.com/c2r/download.aspx?ProductreleaseID=ProPlus2024Retail&platform=x64&language=en-us&version=O16GA" }) 
+    $global:menu24Pro.Items.Add("[Online] Installer - Indonesia").Add_Click({ Action-OpenUrl "https://c2rsetup.officeapps.live.com/c2r/download.aspx?ProductreleaseID=ProPlus2024Retail&platform=x64&language=id-id&version=O16GA" }) 
+    $global:menu24Pro.Items.Add("-") # Separator 
+    $global:menu24Pro.Items.Add("[Offline] Installer (IMG/ISO) - English").Add_Click({ Action-OpenUrl "https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/ProPlus2024Retail.img" }) 
+    $global:menu24Pro.Items.Add("[Offline] Installer (IMG/ISO) - Indonesia").Add_Click({ Action-OpenUrl "https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/id-id/ProPlus2024Retail.img" }) 
 
-    # --- MENU POP-UP: VISIO PRO ---
-    $global:menuVisioPro = New-Object System.Windows.Forms.ContextMenuStrip; $global:menuVisioPro.Cursor = [System.Windows.Forms.Cursors]::Hand
-    $global:menuVisioPro.Items.Add("[Online] Installer - English").Add_Click({ Action-OpenUrl "https://c2rsetup.officeapps.live.com/c2r/download.aspx?ProductreleaseID=VisioPro2024Retail&platform=x64&language=en-us&version=O16GA" })
-    $global:menuVisioPro.Items.Add("-") # Separator
-    $global:menuVisioPro.Items.Add("[Offline] Installer (IMG/ISO) - English").Add_Click({ Action-OpenUrl "https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/VisioPro2024Retail.img" })
+    # --- MENU POP-UP: VISIO PRO --- 
+    $global:menuVisioPro = New-Object System.Windows.Forms.ContextMenuStrip; $global:menuVisioPro.Cursor = [System.Windows.Forms.Cursors]::Hand 
+    $global:menuVisioPro.Items.Add("[Online] Installer - English").Add_Click({ Action-OpenUrl "https://c2rsetup.officeapps.live.com/c2r/download.aspx?ProductreleaseID=VisioPro2024Retail&platform=x64&language=en-us&version=O16GA" }) 
+    $global:menuVisioPro.Items.Add("-") # Separator 
+    $global:menuVisioPro.Items.Add("[Offline] Installer (IMG/ISO) - English").Add_Click({ Action-OpenUrl "https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/VisioPro2024Retail.img" }) 
 
-    # ACTION CARDS OFFICE DENGAN TEKS FULL ASLI
-    $btnM365 = Create-DownloadCard "Microsoft 365 ProPlus" "Apps: Access, Excel, Lync, OneNote, Outlook, PowerPoint, Publisher, Word, OneDrive.`nKlik untuk memilih mode download (Online/Offline) dan Bahasa." 0xEB41 "Crimson" { 
-        $global:menuM365.Show([System.Windows.Forms.Cursor]::Position) 
-    }
-    $pnlMain.Controls.Add($btnM365)
+    # ACTION CARDS OFFICE DENGAN TEKS FULL ASLI 
+    $btnM365 = Create-DownloadCard "Microsoft 365 ProPlus" "Apps: Access, Excel, Lync, OneNote, Outlook, PowerPoint, Publisher, Word, OneDrive.`nKlik untuk memilih mode download (Online/Offline) dan Bahasa." 0xEB41 "Crimson" {  
+        $global:menuM365.Show([System.Windows.Forms.Cursor]::Position)  
+    } 
+    $pnlMain.Controls.Add($btnM365) 
 
-    $btn24Home = Create-DownloadCard "Office 2024 Home" "Apps: Excel, OneNote, PowerPoint, Word, OneDrive.`nKlik untuk memilih mode download (Online/Offline) dan Bahasa." 0xE8A5 "Coral" { 
-        $global:menu24Home.Show([System.Windows.Forms.Cursor]::Position) 
-    }
-    $pnlMain.Controls.Add($btn24Home)
+    $btn24Home = Create-DownloadCard "Office 2024 Home" "Apps: Excel, OneNote, PowerPoint, Word, OneDrive.`nKlik untuk memilih mode download (Online/Offline) dan Bahasa." 0xE8A5 "Coral" {  
+        $global:menu24Home.Show([System.Windows.Forms.Cursor]::Position)  
+    } 
+    $pnlMain.Controls.Add($btn24Home) 
 
     $btn24Pro = Create-DownloadCard "Office 2024 ProPlus" "Apps: Access, Excel, OneNote, Outlook, PowerPoint, Word, OneDrive.`nKlik untuk memilih mode download (Online/Offline) dan Bahasa." 0xE8A5 "OrangeRed" { 
-        $global:menu24Pro.Show([System.Windows.Forms.Cursor]::Position) 
-    }
-    $pnlMain.Controls.Add($btn24Pro)
+        $global:menu24Pro.Show([System.Windows.Forms.Cursor]::Position)  
+    } 
+    $pnlMain.Controls.Add($btn24Pro) 
 
-    $btnVisioPro = Create-DownloadCard "Visio Professional" "Aplikasi standar industri untuk membuat diagram, flowchart, dan denah.`nKlik untuk memilih mode download (Online/Offline) dan Bahasa." 0xE8A5 "DarkOrchid" { 
-        $global:menuVisioPro.Show([System.Windows.Forms.Cursor]::Position) 
-    }
-    $pnlMain.Controls.Add($btnVisioPro)
+    $btnVisioPro = Create-DownloadCard "Visio Professional" "Aplikasi standar industri untuk membuat diagram, flowchart, dan denah.`nKlik untuk memilih mode download (Online/Offline) dan Bahasa." 0xE8A5 "DarkOrchid" {  
+        $global:menuVisioPro.Show([System.Windows.Forms.Cursor]::Position)  
+    } 
+    $pnlMain.Controls.Add($btnVisioPro) 
 
-    # Spacer bawah
-    $spacer = New-Object System.Windows.Forms.Panel; $spacer.Size = New-Object System.Drawing.Size(715, 40); $pnlMain.Controls.Add($spacer)
-    $contentPanel.Controls.Add($pnlMain)
+    # ========================================================= 
+    # BANNER 3: OFFICE UNINSTALLER (SELECTIVE EXTRACTION)
+    # ========================================================= 
+    $banner3 = New-Object System.Windows.Forms.Panel
+    $banner3.Size = New-Object System.Drawing.Size(715, 90); $banner3.Margin = New-Object System.Windows.Forms.Padding(15, 10, 15, 15)
+    $banner3.BackColor = [System.Drawing.Color]::MediumVioletRed
+    $pathB3 = New-Object System.Drawing.Drawing2D.GraphicsPath
+    $pathB3.AddArc(0,0,$radBanner,$radBanner,180,90); $pathB3.AddArc($banner3.Width-$radBanner,0,$radBanner,$radBanner,270,90)
+    $pathB3.AddArc($banner3.Width-$radBanner,$banner3.Height-$radBanner,$radBanner,$radBanner,0,90); $pathB3.AddArc(0,$banner3.Height-$radBanner,$radBanner,$radBanner,90,90)
+    $pathB3.CloseAllFigures(); $banner3.Region = New-Object System.Drawing.Region($pathB3)
+
+    $lblT3 = New-Object System.Windows.Forms.Label; $lblT3.Text = "Office Uninstaller Tool"; $lblT3.Font = New-Object System.Drawing.Font("Segoe UI", 16, [System.Drawing.FontStyle]::Bold)
+    $lblT3.ForeColor = [System.Drawing.Color]::White; $lblT3.AutoSize = $true; $lblT3.Location = New-Object System.Drawing.Point(25, 20)
+    $lblS3 = New-Object System.Windows.Forms.Label; $lblS3.Text = "Hapus bersih instalasi Microsoft Office hingga ke registry (Cloud-Fetched)."; $lblS3.Font = New-Object System.Drawing.Font("Segoe UI", 10)
+    $lblS3.ForeColor = [System.Drawing.Color]::LavenderBlush; $lblS3.AutoSize = $true; $lblS3.Location = New-Object System.Drawing.Point(28, 52)
+    $banner3.Controls.Add($lblT3); $banner3.Controls.Add($lblS3); $pnlMain.Controls.Add($banner3)
+
+    # ACTION CARD UNINSTALL OFFICE (DENGAN KONFIRMASI)
+    $btnUninstall = Create-DownloadCard "Uninstall Office" "Otomatis memuat dan menjalankan Office Scrubber." 0xE74D "Crimson" {
+        
+        $confirm = [System.Windows.Forms.MessageBox]::Show("Waroeng Tools akan memuat Office Scrubber.`n`nPastikan koneksi internet Anda stabil. Lanjutkan?", "Konfirmasi Unduhan", 4, 64)
+        
+        if ($confirm -eq 'Yes') {
+            try {
+                # Ubah kursor menjadi loading
+                [System.Windows.Forms.Cursor]::Current = [System.Windows.Forms.Cursors]::WaitCursor
+                
+                $tempDir = $env:TEMP
+                $zipPath = Join-Path $tempDir "BatUtil_Temp.zip"
+                $scrubDir = Join-Path $tempDir "Waroeng_OfficeScrubber"
+                $scrubCmd = Join-Path $scrubDir "OfficeScrubber.cmd"
+
+                # Hapus folder penampungan jika sebelumnya ada
+                if (Test-Path $scrubDir) { Remove-Item -Path $scrubDir -Recurse -Force -ErrorAction SilentlyContinue }
+                New-Item -ItemType Directory -Path $scrubDir -Force | Out-Null
+
+                # Unduh ZIP utama dari repositori GitHub
+                $url = "https://github.com/abbodi1406/BatUtil/archive/refs/heads/master.zip"
+                Invoke-WebRequest -Uri $url -OutFile $zipPath -UseBasicParsing
+                
+                # --- PROSES EKSTRAKSI SELEKTIF (.NET FRAMEWORK) ---
+                Add-Type -AssemblyName System.IO.Compression.FileSystem
+                $zip = [System.IO.Compression.ZipFile]::OpenRead($zipPath)
+                
+                foreach ($entry in $zip.Entries) {
+                    # Filter Regex: Hanya ekstrak file/folder di dalam folder "OfficeScrubber"
+                    if ($entry.FullName -match "^BatUtil-master/OfficeScrubber/(.+)") {
+                        $relativePath = $matches[1]
+                        $targetPath = Join-Path $scrubDir $relativePath
+                        
+                        if ($entry.FullName.EndsWith("/")) {
+                            if (-not (Test-Path $targetPath)) { New-Item -ItemType Directory -Path $targetPath -Force | Out-Null }
+                        } else {
+                            $parentDir = Split-Path $targetPath -Parent
+                            if (-not (Test-Path $parentDir)) { New-Item -ItemType Directory -Path $parentDir -Force | Out-Null }
+                            [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $targetPath, $true)
+                        }
+                    }
+                }
+                $zip.Dispose()
+                
+                # Langsung HAPUS file ZIP master-nya
+                Remove-Item -Path $zipPath -Force -ErrorAction SilentlyContinue
+
+                # Kembalikan kursor ke normal
+                [System.Windows.Forms.Cursor]::Current = [System.Windows.Forms.Cursors]::Default
+
+                # Jalankan skrip OfficeScrubber
+                if (Test-Path $scrubCmd) {
+                    # Buka terminal CMD dan tunggu pengguna selesai menggunakannya
+                    Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"$scrubCmd`"" -Wait
+                    
+                    # PROSES PEMBERSIHAN OTOMATIS (ZERO-FOOTPRINT)
+                    Remove-Item -Path $scrubDir -Recurse -Force -ErrorAction SilentlyContinue
+                    
+                } else {
+                    [System.Windows.Forms.MessageBox]::Show("Gagal menemukan file OfficeScrubber.cmd setelah ekstraksi.", "Error", 0, 16)
+                }
+
+            } catch {
+                [System.Windows.Forms.Cursor]::Current = [System.Windows.Forms.Cursors]::Default
+                [System.Windows.Forms.MessageBox]::Show("Terjadi kesalahan teknis saat memuat:`n$($_.Exception.Message)", "Gagal", 0, 16)
+            }
+        }
+    }
+    $pnlMain.Controls.Add($btnUninstall)
+
+    # Spacer bawah 
+    $spacer = New-Object System.Windows.Forms.Panel; $spacer.Size = New-Object System.Drawing.Size(715, 40); $pnlMain.Controls.Add($spacer) 
+    $contentPanel.Controls.Add($pnlMain) 
 }
 
 # ==========================================
