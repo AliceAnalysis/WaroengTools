@@ -425,9 +425,9 @@ function Get-DetailedSpecs {
     } catch { return $null }
 }
 
-# ==========================================
-# 2. RENDER PUSAT KENDALI (MODERN UI)
-# ==========================================
+# ========================================================
+# MULAI RENDER DASHBOARD
+# ========================================================
 function Render-Dashboard {
     $data = Get-DetailedSpecs
     $cP = if ($global:IsDarkMode) { $ThemePalettes.Dark } else { $ThemePalettes.Light }
@@ -568,571 +568,12 @@ function Render-Placeholder ($Title) {
     $contentPanel.Controls.Add($lbl)
 }
 
-# ==========================================
-#    RENDER WINDOWS UPDATES (MODERN UI)
-# ==========================================
-# --- 1. Fungsi Disable Update (Pause hingga 2075) ---
-function Action-UpdateDisable {
-    Write-Log "Process Started: Disabling Windows Update..."
-    try {
-        [System.Windows.Forms.Cursor]::Current = [System.Windows.Forms.Cursors]::WaitCursor
-
-        # Matikan & Disable semua Services
-        $services = @("wuauserv", "bits", "dosvc", "UsoSvc", "WaaSMedicSvc")
-        foreach ($svc in $services) {
-            Stop-Service -Name $svc -Force -ErrorAction SilentlyContinue
-            Set-Service -Name $svc -StartupType Disabled -ErrorAction SilentlyContinue
-        }
-
-        # Atur Tanggal Pause mentok sampai 2075
-        $now = "2025-01-01T00:00:00Z"
-        $future = "2075-01-01T00:00:00Z"
-        
-        # Eksekusi Registry UX Settings
-        $uxPath = "HKLM:\SOFTWARE\Microsoft\WindowsUpdate\UX\Settings"
-        if (-not (Test-Path $uxPath)) { New-Item -Path $uxPath -Force | Out-Null }
-        Set-ItemProperty -Path $uxPath -Name "PauseUpdatesStartTime" -Value $now -Force
-        Set-ItemProperty -Path $uxPath -Name "PauseFeatureUpdatesStartTime" -Value $now -Force
-        Set-ItemProperty -Path $uxPath -Name "PauseQualityUpdatesStartTime" -Value $now -Force
-        Set-ItemProperty -Path $uxPath -Name "PauseUpdatesExpiryTime" -Value $future -Force
-        Set-ItemProperty -Path $uxPath -Name "PauseFeatureUpdatesEndTime" -Value $future -Force
-        Set-ItemProperty -Path $uxPath -Name "PauseQualityUpdatesEndTime" -Value $future -Force
-
-        # Eksekusi Registry UpdatePolicy
-        $upPath = "HKLM:\SOFTWARE\Microsoft\WindowsUpdate\UpdatePolicy\Settings"
-        if (-not (Test-Path $upPath)) { New-Item -Path $upPath -Force | Out-Null }
-        Set-ItemProperty -Path $upPath -Name "PausedFeatureStatus" -Value 1 -Type DWord -Force
-        Set-ItemProperty -Path $upPath -Name "PausedQualityStatus" -Value 1 -Type DWord -Force
-        Set-ItemProperty -Path $upPath -Name "PausedFeatureDate" -Value $now -Force
-        Set-ItemProperty -Path $upPath -Name "PausedQualityDate" -Value $now -Force
-
-        [System.Windows.Forms.Cursor]::Current = [System.Windows.Forms.Cursors]::Default
-        Write-Log "Success: Windows Update and its services have been forcibly disabled until 2075."
-        [System.Windows.Forms.MessageBox]::Show("Windows Update beserta layanannya berhasil dimatikan secara paksa hingga tahun 2075!", "Sukses", "OK", "Information")
-    } catch {
-        [System.Windows.Forms.Cursor]::Current = [System.Windows.Forms.Cursors]::Default
-        Write-Log "Failed: Unable to disable Windows Update. Error Details: $($_.Exception.Message)"
-        [System.Windows.Forms.MessageBox]::Show("Gagal mematikan Windows Update.`nDetail: $($_.Exception.Message)", "Error", "OK", "Error")
-    }
-}
-
-function Action-UpdateEnable {
-    Write-Log "Process Started: Enabling Windows Update..."
-    try {
-        [System.Windows.Forms.Cursor]::Current = [System.Windows.Forms.Cursors]::WaitCursor
-
-        # Aktifkan & Start Services ke Default
-        $autoServices = @("wuauserv", "bits", "dosvc", "UsoSvc")
-        foreach ($svc in $autoServices) {
-            Set-Service -Name $svc -StartupType Automatic -ErrorAction SilentlyContinue
-            Start-Service -Name $svc -ErrorAction SilentlyContinue
-        }
-        Set-Service -Name "WaaSMedicSvc" -StartupType Manual -ErrorAction SilentlyContinue
-        Start-Service -Name "WaaSMedicSvc" -ErrorAction SilentlyContinue
-
-        # Hapus Kunci Pause
-        $uxPath = "HKLM:\SOFTWARE\Microsoft\WindowsUpdate\UX\Settings"
-        if (Test-Path $uxPath) {
-            $props = @("PauseUpdatesStartTime", "PauseFeatureUpdatesStartTime", "PauseQualityUpdatesStartTime", "PauseUpdatesExpiryTime", "PauseFeatureUpdatesEndTime", "PauseQualityUpdatesEndTime")
-            foreach ($prop in $props) { Remove-ItemProperty -Path $uxPath -Name $prop -ErrorAction SilentlyContinue }
-        }
-
-        # Hapus Registry Tweak
-        $polAU = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU"
-        if (Test-Path $polAU) { Remove-Item -Path $polAU -Recurse -Force -ErrorAction SilentlyContinue }
-        $upPath = "HKLM:\SOFTWARE\Microsoft\WindowsUpdate\UpdatePolicy\Settings"
-        if (Test-Path $upPath) { Remove-Item -Path $upPath -Recurse -Force -ErrorAction SilentlyContinue }
-
-        [System.Windows.Forms.Cursor]::Current = [System.Windows.Forms.Cursors]::Default
-        Write-Log "Success: Windows Update has been successfully restored to factory defaults."
-        [System.Windows.Forms.MessageBox]::Show("Windows Update berhasil diaktifkan kembali ke standar pabrik.", "Sukses", "OK", "Information")
-    } catch {
-        [System.Windows.Forms.Cursor]::Current = [System.Windows.Forms.Cursors]::Default
-        Write-Log "Failed: Unable to enable Windows Update. Error Details: $($_.Exception.Message)"
-        [System.Windows.Forms.MessageBox]::Show("Gagal mengaktifkan Windows Update.`nDetail: $($_.Exception.Message)", "Error", "OK", "Error")
-    }
-}
-
-# --- 3. Fungsi Reset Komponen (Hapus Cache & Restart Service) ---
-function Action-UpdateReset {
-    Write-Log "Action Triggered: Opening Reset Mode dialog..."
-    
-    # --- Membuat Jendela Dialog Pilihan Reset ---
-    $frmReset = New-Object System.Windows.Forms.Form
-    $frmReset.Text = "Pilih Mode Reset"
-    $frmReset.Size = New-Object System.Drawing.Size(400, 260)
-    $frmReset.StartPosition = "CenterScreen"
-    $frmReset.FormBorderStyle = "FixedToolWindow"
-    $frmReset.TopMost = $true
-    $frmReset.BackColor = [System.Drawing.Color]::White
-
-    $lblInfo = New-Object System.Windows.Forms.Label
-    $lblInfo.Text = "Pilih tingkat perbaikan komponen Windows Update:"
-    $lblInfo.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
-    $lblInfo.AutoSize = $true
-    $lblInfo.Location = New-Object System.Drawing.Point(20, 20)
-    $frmReset.Controls.Add($lblInfo)
-
-    # Tombol 1: Standard Reset
-    $btnStd = New-Object System.Windows.Forms.Button
-    $btnStd.Text = "Standard Reset (Disarankan)"
-    $btnStd.Location = New-Object System.Drawing.Point(20, 60)
-    $btnStd.Size = New-Object System.Drawing.Size(345, 40)
-    $btnStd.BackColor = [System.Drawing.Color]::DodgerBlue
-    $btnStd.ForeColor = [System.Drawing.Color]::White
-    $btnStd.FlatStyle = "Flat"
-    $btnStd.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
-    $btnStd.Cursor = "Hand"
-    $btnStd.Add_Click({
-        $frmReset.Tag = "Standard"
-        $frmReset.DialogResult = "OK"
-    })
-    $frmReset.Controls.Add($btnStd)
-
-    $lblStd = New-Object System.Windows.Forms.Label
-    $lblStd.Text = "Aman. Menghapus Cache dan Network tanpa merusak UAC."
-    $lblStd.Font = New-Object System.Drawing.Font("Segoe UI", 8)
-    $lblStd.ForeColor = [System.Drawing.Color]::Gray
-    $lblStd.AutoSize = $true
-    $lblStd.Location = New-Object System.Drawing.Point(20, 105)
-    $frmReset.Controls.Add($lblStd)
-
-    # Tombol 2: Deep Reset
-    $btnDeep = New-Object System.Windows.Forms.Button
-    $btnDeep.Text = "Deep Reset (Tingkat Lanjut)"
-    $btnDeep.Location = New-Object System.Drawing.Point(20, 140)
-    $btnDeep.Size = New-Object System.Drawing.Size(345, 40)
-    $btnDeep.BackColor = [System.Drawing.Color]::Crimson
-    $btnDeep.ForeColor = [System.Drawing.Color]::White
-    $btnDeep.FlatStyle = "Flat"
-    $btnDeep.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
-    $btnDeep.Cursor = "Hand"
-    $btnDeep.Add_Click({
-        $confirm = [System.Windows.Forms.MessageBox]::Show("Mode ini akan mendaftarkan ulang seluruh DLL inti Windows.`n`nEfek samping: Pengaturan UAC Anda mungkin akan ter-reset ke Default (Always Notify).`n`nGunakan hanya jika Standard Reset gagal.`nLanjutkan?", "Peringatan Deep Reset", 4, 48)
-        if ($confirm -eq 'Yes') {
-            $frmReset.Tag = "Deep"
-            $frmReset.DialogResult = "OK"
-        }
-    })
-    $frmReset.Controls.Add($btnDeep)
-
-    $lblDeep = New-Object System.Windows.Forms.Label
-    $lblDeep.Text = "Hanya jika gagal. Registrasi ulang DLL penuh (Beresiko mereset UAC)."
-    $lblDeep.Font = New-Object System.Drawing.Font("Segoe UI", 8)
-    $lblDeep.ForeColor = [System.Drawing.Color]::Gray
-    $lblDeep.AutoSize = $true
-    $lblDeep.Location = New-Object System.Drawing.Point(20, 185)
-    $frmReset.Controls.Add($lblDeep)
-
-    # --- Logika Eksekusi Berdasarkan Pilihan ---
-    if ($frmReset.ShowDialog() -eq "OK") {
-        $mode = $frmReset.Tag
-        Write-Log "Process Started: Resetting Windows Update Components (Mode: $mode)..."
-        try {
-            [System.Windows.Forms.Cursor]::Current = [System.Windows.Forms.Cursors]::WaitCursor
-            
-            # 1. Matikan services terkait Windows Update (Berlaku untuk kedua mode)
-            $services = @("wuauserv", "cryptSvc", "bits", "msiserver")
-            foreach ($svc in $services) {
-                Stop-Service -Name $svc -Force -ErrorAction SilentlyContinue
-            }
-
-            # 2. Hapus file qmgr*.dat (Berlaku untuk kedua mode)
-            $qmgrPath = "$env:ALLUSERSPROFILE\Application Data\Microsoft\Network\Downloader\qmgr*.dat"
-            Remove-Item -Path $qmgrPath -Force -ErrorAction SilentlyContinue
-
-            # 3. Rename folder Cache SoftwareDistribution & catroot2 (Berlaku untuk kedua mode)
-            $sdPath = "$env:windir\SoftwareDistribution"
-            if (Test-Path "$sdPath.old") { Remove-Item -Path "$sdPath.old" -Recurse -Force -ErrorAction SilentlyContinue }
-            if (Test-Path $sdPath) { Rename-Item -Path $sdPath -NewName "SoftwareDistribution.old" -ErrorAction SilentlyContinue }
-
-            $crPath = "$env:windir\System32\catroot2"
-            if (Test-Path "$crPath.old") { Remove-Item -Path "$crPath.old" -Recurse -Force -ErrorAction SilentlyContinue }
-            if (Test-Path $crPath) { Rename-Item -Path $crPath -NewName "catroot2.old" -ErrorAction SilentlyContinue }
-
-            # --- EKSEKUSI KHUSUS MODE DEEP RESET ---
-            if ($mode -eq "Deep") {
-                Write-Log "Deep Reset: Re-registering System DLLs and Security Descriptors..."
-                # 4. Reset Security Descriptor BITS & WUAUSERV
-                & sc.exe sdset bits "D:(A;;CCLCSWRPWPDTLOCRRC;;;SY)(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;BA)" | Out-Null
-                & sc.exe sdset wuauserv "D:(A;;CCLCSWRPWPDTLOCRRC;;;SY)(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;BA)" | Out-Null
-
-                # 5. Re-register Windows Update DLLs
-                $dlls = @(
-                    "atl.dll", "urlmon.dll", "mshtml.dll", "shdocvw.dll", "browseui.dll", "jscript.dll", "vbscript.dll", 
-                    "scrrun.dll", "msxml.dll", "msxml3.dll", "msxml6.dll", "actxprxy.dll", "softpub.dll", "wintrust.dll", 
-                    "dssenh.dll", "rsaenh.dll", "gpkcsp.dll", "sccbase.dll", "slbcsp.dll", "cryptdlg.dll", "oleaut32.dll", 
-                    "ole32.dll", "shell32.dll", "initpki.dll", "wuapi.dll", "wuaueng.dll", "wuaueng1.dll", "wucltui.dll", 
-                    "wups.dll", "wups2.dll", "wuweb.dll", "qmgr.dll", "qmgrprxy.dll", "wucltux.dll", "muweb.dll", "wuwebv.dll"
-                )
-                
-                $currentLocation = Get-Location
-                Set-Location "$env:windir\System32"
-                foreach ($dll in $dlls) {
-                    Start-Process -FilePath "regsvr32.exe" -ArgumentList "/s $dll" -Wait -WindowStyle Hidden -ErrorAction SilentlyContinue
-                }
-                Set-Location $currentLocation
-            }
-
-            # 6. Reset Network Winsock & WinHTTP Proxy (Berlaku untuk kedua mode)
-            & netsh winsock reset | Out-Null
-            & netsh winhttp reset proxy | Out-Null
-
-            # 7. Nyalakan kembali services (Berlaku untuk kedua mode)
-            foreach ($svc in $services) {
-                Start-Service -Name $svc -ErrorAction SilentlyContinue
-            }
-            
-            [System.Windows.Forms.Cursor]::Current = [System.Windows.Forms.Cursors]::Default
-            Write-Log "Success: Fully reset Windows Update components ($mode Mode)."
-            [System.Windows.Forms.MessageBox]::Show("Reset Windows Update ($mode Mode) berhasil!`n`nSangat disarankan untuk RESTART PC setelah pesan ini ditutup.", "Sukses", "OK", "Information")
-        } catch {
-            [System.Windows.Forms.Cursor]::Current = [System.Windows.Forms.Cursors]::Default
-            Write-Log "Failed: An error occurred while resetting components. Error Details: $($_.Exception.Message)"
-            [System.Windows.Forms.MessageBox]::Show("Terjadi kesalahan saat mereset komponen.`nDetail: $($_.Exception.Message)", "Error", "OK", "Error")
-        }
-    } else {
-        Write-Log "Process Cancelled: User closed the Reset Mode dialog."
-    }
-}
-
-function Action-UpdatePauseCustom {
-    Write-Log "Action Triggered: Opening Custom Date Picker dialog..."
-    # --- Membuat Jendela Kalender (Date Picker) ---
-    $formDate = New-Object System.Windows.Forms.Form
-    $formDate.Text = "Pilih Tanggal Pause"
-    $formDate.Size = New-Object System.Drawing.Size(350, 200)
-    $formDate.StartPosition = "CenterScreen"
-    $formDate.FormBorderStyle = "FixedToolWindow"
-    $formDate.TopMost = $true
-    $formDate.BackColor = [System.Drawing.Color]::White
-
-    $lblInfo = New-Object System.Windows.Forms.Label
-    $lblInfo.Text = "Tentukan tanggal kapan Update akan dilanjutkan:"
-    $lblInfo.Font = New-Object System.Drawing.Font("Segoe UI", 9)
-    $lblInfo.AutoSize = $true
-    $lblInfo.Location = New-Object System.Drawing.Point(20, 20)
-    $formDate.Controls.Add($lblInfo)
-
-    # Alat Pemilih Tanggal
-    $dtPicker = New-Object System.Windows.Forms.DateTimePicker
-    $dtPicker.Location = New-Object System.Drawing.Point(20, 55)
-    $dtPicker.Size = New-Object System.Drawing.Size(290, 30)
-    $dtPicker.Font = New-Object System.Drawing.Font("Segoe UI", 10)
-    $dtPicker.Format = [System.Windows.Forms.DateTimePickerFormat]::Long
-    $dtPicker.MinDate = [DateTime]::Now # Tidak bisa pilih tanggal mundur
-    $formDate.Controls.Add($dtPicker)
-
-    # Tombol Simpan
-    $btnSave = New-Object System.Windows.Forms.Button
-    $btnSave.Text = "Simpan"
-    $btnSave.Location = New-Object System.Drawing.Point(235, 110)
-    $btnSave.Size = New-Object System.Drawing.Size(75, 30)
-    $btnSave.BackColor = [System.Drawing.Color]::MediumPurple
-    $btnSave.ForeColor = [System.Drawing.Color]::White
-    $btnSave.FlatStyle = "Flat"
-    $btnSave.Cursor = "Hand"
-    $btnSave.DialogResult = "OK"
-    $formDate.Controls.Add($btnSave)
-
-    $formDate.AcceptButton = $btnSave
-
-    # --- Logika Registry Jika Tombol Simpan Ditekan ---
-    if ($formDate.ShowDialog() -eq "OK") {
-        try {
-            Write-Log "Applying custom pause update date..."
-            # Format waktu wajib menggunakan ISO 8601 (UTC) untuk Registry Windows Update
-            $selectedDate = $dtPicker.Value.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
-            $now = [DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
-            
-            $regPath = "HKLM:\SOFTWARE\Microsoft\WindowsUpdate\UX\Settings"
-            if (-not (Test-Path $regPath)) { New-Item -Path $regPath -Force | Out-Null }
-
-            # Memasukkan data pause ke Registry
-            Set-ItemProperty -Path $regPath -Name "PauseUpdatesStartTime" -Value $now -Force
-            Set-ItemProperty -Path $regPath -Name "PauseFeatureUpdatesStartTime" -Value $now -Force
-            Set-ItemProperty -Path $regPath -Name "PauseQualityUpdatesStartTime" -Value $now -Force
-            
-            Set-ItemProperty -Path $regPath -Name "PauseUpdatesExpiryTime" -Value $selectedDate -Force
-            Set-ItemProperty -Path $regPath -Name "PauseFeatureUpdatesEndTime" -Value $selectedDate -Force
-            Set-ItemProperty -Path $regPath -Name "PauseQualityUpdatesEndTime" -Value $selectedDate -Force
-
-            # Restart Service Windows Update agar langsung berefek
-            Restart-Service -Name wuauserv -Force -ErrorAction SilentlyContinue
-
-            $tglIndo = $dtPicker.Value.ToString("dd MMMM yyyy")
-            Write-Log "Success: Windows Update paused until $($selectedDate) (UTC)."
-            [System.Windows.Forms.MessageBox]::Show("Windows Update berhasil ditunda hingga $tglIndo.", "Sukses", "OK", "Information")
-        } catch {
-            Write-Log "Failed: Error applying custom pause date. Error Details: $($_.Exception.Message)"
-            [System.Windows.Forms.MessageBox]::Show("Gagal menyimpan pengaturan tanggal.`nDetail: $($_.Exception.Message)", "Error", "OK", "Error")
-        }
-    } else {
-        Write-Log "Process Cancelled: User closed the Custom Date Picker dialog."
-    }
-}
-
-function Action-UpdateHide {
-    Write-Log "Process Started: Downloading Windows Update Hide Tool (wushowhide.diagcab)..."
-    # URL resmi Microsoft untuk tool wushowhide.diagcab
-    $url = "http://download.microsoft.com/download/f/2/2/f22d5fdb-59cd-4275-8c95-1be17bf70b21/wushowhide.diagcab"
-    $dest = "$env:TEMP\wushowhide.diagcab"
-
-    try {
-        # Mengubah kursor menjadi loading
-        [System.Windows.Forms.Cursor]::Current = [System.Windows.Forms.Cursors]::WaitCursor
-
-        # Mengunduh file ke folder Temp
-        Invoke-WebRequest -Uri $url -OutFile $dest -UseBasicParsing -ErrorAction Stop
-        
-        # Kembalikan kursor ke normal
-        [System.Windows.Forms.Cursor]::Current = [System.Windows.Forms.Cursors]::Default
-
-        if (Test-Path $dest) {
-            Write-Log "Success: Successfully launched."
-            # Membuka tool troubleshooter Microsoft
-            Start-Process -FilePath $dest
-        } else {
-            Write-Log "Failed: The file  was not found."
-            [System.Windows.Forms.MessageBox]::Show("File gagal ditemukan setelah diunduh.", "Error", "OK", "Error")
-        }
-    } catch {
-        [System.Windows.Forms.Cursor]::Current = [System.Windows.Forms.Cursors]::Default
-        Write-Log "Failed: Unable to download wushowhide tool from Microsoft server. Error Details: $($_.Exception.Message)"
-        [System.Windows.Forms.MessageBox]::Show("Gagal mengunduh tool dari Microsoft.`nPastikan internet Anda aktif.`n`nDetail: $($_.Exception.Message)", "Download Error", "OK", "Error")
-    }
-}
-
-function Render-WindowsUpdates {
-    $contentPanel.Controls.Clear()
-    $cP = if ($global:IsDarkMode) { $ThemePalettes.Dark } else { $ThemePalettes.Light }
-
-    # --- HELPER: PELENGKUNG SUDUT CARD ---
-    $SetRounded = {
-        param($ctrl, $r)
-        if ($ctrl.Width -le 0 -or $ctrl.Height -le 0) { return }
-        $D = $r * 2
-        $p = New-Object System.Drawing.Drawing2D.GraphicsPath
-        $p.AddArc(0, 0, $D, $D, 180, 90)
-        $p.AddArc($ctrl.Width - $D, 0, $D, $D, 270, 90)
-        $p.AddArc($ctrl.Width - $D, $ctrl.Height - $D, $D, $D, 0, 90)
-        $p.AddArc(0, $ctrl.Height - $D, $D, $D, 90, 90)
-        $p.CloseAllFigures()
-        $ctrl.Region = New-Object System.Drawing.Region($p)
-    }
-
-    # PANEL UTAMA (Wadah Scroll Utama)
-    $pnlMain = New-Object System.Windows.Forms.Panel
-    $pnlMain.Dock = "Fill"
-    $pnlMain.BackColor = $cP.Bg
-    $pnlMain.AutoScroll = $true
-
-    # --- 1. HEADER BANNER ---
-    $bannerCard = New-Object System.Windows.Forms.Panel
-    $bannerCard.Size = New-Object System.Drawing.Size(735, 110)
-    $bannerCard.Location = New-Object System.Drawing.Point(30, 30)
-    $bannerCard.BackColor = $cP.Header 
-    
-    $lblTitle = New-Object System.Windows.Forms.Label
-    $lblTitle.Text = "Windows Update Manager"
-    $lblTitle.Font = New-Object System.Drawing.Font("Segoe UI", 18, [System.Drawing.FontStyle]::Bold)
-    $lblTitle.ForeColor = [System.Drawing.Color]::White
-    $lblTitle.AutoSize = $true
-    $lblTitle.Location = New-Object System.Drawing.Point(25, 20)
-    $bannerCard.Controls.Add($lblTitle)
-
-    $lblSubTitle = New-Object System.Windows.Forms.Label
-    $lblSubTitle.Text = "Ambil alih kendali pembaruan otomatis Windows, atur jadwal pause, atau kunci versi OS."
-    $lblSubTitle.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Regular)
-    $lblSubTitle.ForeColor = [System.Drawing.Color]::LightGray
-    $lblSubTitle.AutoSize = $true
-    $lblSubTitle.Location = New-Object System.Drawing.Point(28, 60)
-    $bannerCard.Controls.Add($lblSubTitle)
-
-    $pnlMain.Controls.Add($bannerCard)
-    $null = $bannerCard.Handle; &$SetRounded $bannerCard 20
-
-    # --- 2. CONTAINER FLOW (DIUBAH: KUNCI LEBAR MAKSIMAL) ---
-    $flowGrid = New-Object System.Windows.Forms.FlowLayoutPanel
-    $flowGrid.Location = New-Object System.Drawing.Point(30, 150)
-    $flowGrid.Width = 735 # Set lebar fix sama dengan banner
-    $flowGrid.AutoSize = $true
-    $flowGrid.AutoSizeMode = "GrowAndShrink"
-    # Ini kuncinya: Paksa tinggi bertambah, tapi lebar mentok di 735 agar turun ke baris baru!
-    $flowGrid.MaximumSize = New-Object System.Drawing.Size(735, 0) 
-    $flowGrid.WrapContents = $true
-    $flowGrid.AutoScroll = $false 
-    $flowGrid.Padding = New-Object System.Windows.Forms.Padding(0, 0, 0, 40)
-    $pnlMain.Controls.Add($flowGrid)
-
-    # --- HELPER FUNCTION UNTUK KARTU TOMBOL (2 KOLOM) ---
-    function Add-UpdateCard ($Title, $Desc, $IconCode, $IconColor, $ActionScript) {
-        $card = New-Object System.Windows.Forms.Panel
-        # Hitungan presisi: (735 - 15 margin kanan) / 2 = 360. Kita paskan di 352 agar aman.
-        $card.Size = New-Object System.Drawing.Size(352, 105)
-        $card.Margin = New-Object System.Windows.Forms.Padding(0, 10, 15, 10)
-        $card.BackColor = if ($global:IsDarkMode) {[System.Drawing.Color]::FromArgb(45, 45, 50)} else {[System.Drawing.Color]::White}
-        $card.Cursor = "Hand"
-
-        $ico = New-Object System.Windows.Forms.Label
-        $ico.Text = [char]$IconCode
-        $ico.Font = New-Object System.Drawing.Font("Segoe MDL2 Assets", 24)
-        $ico.AutoSize = $true
-        $ico.Location = New-Object System.Drawing.Point(15, 30)
-        try { $ico.ForeColor = [System.Drawing.Color]::FromName($IconColor) } catch { $ico.ForeColor = [System.Drawing.Color]::FromArgb(0, 102, 204) }
-        $card.Controls.Add($ico)
-
-        $lTitle = New-Object System.Windows.Forms.Label
-        $lTitle.Text = $Title
-        $lTitle.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
-        $lTitle.ForeColor = if ($global:IsDarkMode) {[System.Drawing.Color]::White} else {[System.Drawing.Color]::FromArgb(40, 40, 40)}
-        $lTitle.Location = New-Object System.Drawing.Point(65, 18)
-        $lTitle.Width = $card.Width - 80
-        $card.Controls.Add($lTitle)
-
-        $lSub = New-Object System.Windows.Forms.Label
-        $lSub.Text = $Desc
-        $lSub.Font = New-Object System.Drawing.Font("Segoe UI", 9)
-        $lSub.ForeColor = [System.Drawing.Color]::Gray
-        $lSub.Location = New-Object System.Drawing.Point(67, 48)
-        $lSub.Size = New-Object System.Drawing.Size(($card.Width - 85), 45)
-        $card.Controls.Add($lSub)
-
-        $card.Add_Click($ActionScript); $ico.Add_Click($ActionScript); $lTitle.Add_Click($ActionScript); $lSub.Add_Click($ActionScript)
-        $card.Add_MouseEnter({ $this.BackColor = if ($global:IsDarkMode) {[System.Drawing.Color]::FromArgb(60, 60, 65)} else {[System.Drawing.Color]::FromArgb(235, 245, 255)} })
-        $card.Add_MouseLeave({ $this.BackColor = if ($global:IsDarkMode) {[System.Drawing.Color]::FromArgb(45, 45, 50)} else {[System.Drawing.Color]::White} })
-
-        $flowGrid.Controls.Add($card)
-        $null = $card.Handle; &$SetRounded $card 12
-    }
-
-    # --- MENAMBAHKAN ACTION CARDS ---
-    Add-UpdateCard "Disable Windows Update" "Hentikan paksa pembaruan otomatis hingga tahun 2075." 0xE71A "Red" { Action-UpdateDisable }
-    Add-UpdateCard "Custom Pause Date" "Pilih sendiri tanggal kapan Windows Update akan dilanjutkan." 0xE787 "MediumPurple" { Action-UpdatePauseCustom }
-    Add-UpdateCard "Enable Windows Update" "Kembalikan pengaturan pembaruan otomatis ke standar pabrik." 0xE898 "LimeGreen" { Action-UpdateEnable }
-    Add-UpdateCard "Reset Update Components" "Perbaiki error download dengan mereset servis & folder cache." 0xE823 "Orange" { Action-UpdateReset }
-    Add-UpdateCard "Hide/Show Updates" "Alat resmi Microsoft untuk sembunyikan update bermasalah." 0xE890 "DeepSkyBlue" { Action-UpdateHide }
-
-    # --- SPECIAL CARD: LOCK TARGET VERSION (FULL WIDTH DENGAN UI KERENMU) ---
-    $lockCard = New-Object System.Windows.Forms.Panel
-    $lockCard.Size = New-Object System.Drawing.Size(719, 105)
-    $lockCard.Margin = New-Object System.Windows.Forms.Padding(0, 10, 15, 10)
-    $lockCard.BackColor = if ($global:IsDarkMode) {[System.Drawing.Color]::FromArgb(45, 45, 50)} else {[System.Drawing.Color]::White}
-    
-    $icoLock = New-Object System.Windows.Forms.Label
-    $icoLock.Text = [char]0xE72E 
-    $icoLock.Font = New-Object System.Drawing.Font("Segoe MDL2 Assets", 24)
-    $icoLock.AutoSize = $true
-    $icoLock.Location = New-Object System.Drawing.Point(15, 30)
-    $icoLock.ForeColor = [System.Drawing.Color]::Gold
-    $lockCard.Controls.Add($icoLock)
-
-    $lTitleLock = New-Object System.Windows.Forms.Label
-    $lTitleLock.Text = "Lock Target Version"
-    $lTitleLock.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
-    $lTitleLock.ForeColor = if ($global:IsDarkMode) {[System.Drawing.Color]::White} else {[System.Drawing.Color]::FromArgb(40, 40, 40)}
-    $lTitleLock.Location = New-Object System.Drawing.Point(65, 18)
-    $lTitleLock.AutoSize = $true
-    $lockCard.Controls.Add($lTitleLock)
-
-    $lSubLock = New-Object System.Windows.Forms.Label
-    $lSubLock.Text = "Kunci OS untuk mencegah update paksa ke versi lain."
-    $lSubLock.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Regular)
-    $lSubLock.ForeColor = [System.Drawing.Color]::Gray
-    $lSubLock.Location = New-Object System.Drawing.Point(67, 48)
-    $lSubLock.Size = New-Object System.Drawing.Size(300, 40)
-    $lockCard.Controls.Add($lSubLock)
-
-    $cbOS = New-Object System.Windows.Forms.ComboBox
-    $cbOS.Name = "ComboOS"
-    $cbOS.Items.AddRange(@("Windows 10", "Windows 11"))
-    $cbOS.SelectedIndex = 1 
-    $cbOS.Size = New-Object System.Drawing.Size(105, 30)
-    $cbOS.Location = New-Object System.Drawing.Point(375, 38)
-    $cbOS.DropDownStyle = "DropDownList"
-    $lockCard.Controls.Add($cbOS)
-
-    $cbVer = New-Object System.Windows.Forms.ComboBox
-    $cbVer.Name = "ComboVer"
-    $cbVer.Size = New-Object System.Drawing.Size(65, 30)
-    $cbVer.Location = New-Object System.Drawing.Point(490, 38)
-    $cbVer.DropDownStyle = "DropDownList"
-    $cbVer.Items.AddRange(@("21H2", "22H2", "23H2", "24H2", "25H2"))
-    $cbVer.SelectedIndex = 2 
-    $lockCard.Controls.Add($cbVer)
-
-    $cbOS.Add_SelectedIndexChanged({
-        $cVer = $this.Parent.Controls["ComboVer"]
-        if ($cVer) {
-            $cVer.Items.Clear()
-            if ($this.SelectedItem.ToString() -eq "Windows 10") {
-                $cVer.Items.AddRange(@("21H2", "22H2"))
-                $cVer.SelectedIndex = 1 
-            } else {
-                $cVer.Items.AddRange(@("21H2", "22H2", "23H2", "24H2", "25H2"))
-                $cVer.SelectedIndex = 2 
-            }
-        }
-    })
-    
-    $btnLock = New-Object System.Windows.Forms.Button
-    $btnLock.Text = "Lock"
-    $btnLock.BackColor = $cP.Header
-    $btnLock.ForeColor = [System.Drawing.Color]::White
-    $btnLock.FlatStyle = "Flat"
-    $btnLock.Size = New-Object System.Drawing.Size(60, 28)
-    $btnLock.Location = New-Object System.Drawing.Point(565, 37)
-    $btnLock.Cursor = "Hand"
-    $btnLock.Add_Click({
-        $cOS = $this.Parent.Controls["ComboOS"]
-        $cVer = $this.Parent.Controls["ComboVer"]
-        
-        # Format tulisan harus "Windows10" atau "Windows11" tanpa spasi
-        $prod = $cOS.SelectedItem.ToString().Replace(" ", "")
-        $ver = $cVer.SelectedItem.ToString()
-        
-        try {
-            $Path = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate"
-            if (-not (Test-Path $Path)) { New-Item -Path $Path -Force | Out-Null }
-            Set-ItemProperty -Path $Path -Name "ProductVersion" -Value $prod -Force
-            Set-ItemProperty -Path $Path -Name "TargetReleaseVersion" -Value 1 -Type DWord -Force
-            Set-ItemProperty -Path $Path -Name "TargetReleaseVersionInfo" -Value $ver -Force
-            [System.Windows.Forms.MessageBox]::Show("Berhasil dikunci!`nSistem tidak akan melewati versi $prod $ver.`nSilakan Restart PC untuk menerapkan.", "Success", "OK", "Information")
-        } catch {
-            [System.Windows.Forms.MessageBox]::Show("Gagal mengunci versi. Pastikan Anda menjalankan aplikasi sebagai Administrator.", "Error", "OK", "Error")
-        }
-    })
-    $lockCard.Controls.Add($btnLock)
-
-    $btnClear = New-Object System.Windows.Forms.Button
-    $btnClear.Text = "Clear"
-    $btnClear.BackColor = [System.Drawing.Color]::Crimson
-    $btnClear.ForeColor = [System.Drawing.Color]::White
-    $btnClear.FlatStyle = "Flat"
-    $btnClear.Size = New-Object System.Drawing.Size(60, 28)
-    $btnClear.Location = New-Object System.Drawing.Point(635, 37)
-    $btnClear.Cursor = "Hand"
-    $btnClear.Add_Click({
-        try {
-            $Path = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate"
-            Remove-ItemProperty -Path $Path -Name "ProductVersion" -ErrorAction SilentlyContinue
-            Remove-ItemProperty -Path $Path -Name "TargetReleaseVersion" -ErrorAction SilentlyContinue
-            Remove-ItemProperty -Path $Path -Name "TargetReleaseVersionInfo" -ErrorAction SilentlyContinue
-            [System.Windows.Forms.MessageBox]::Show("Kunci Versi OS berhasil dihapus! Sistem akan menerima update otomatis kembali.", "Success", "OK", "Information")
-        } catch {
-            [System.Windows.Forms.MessageBox]::Show("Gagal menghapus kunci versi.", "Error", "OK", "Error")
-        }
-    })
-    $lockCard.Controls.Add($btnClear)
-
-    $flowGrid.Controls.Add($lockCard)
-    $null = $lockCard.Handle; &$SetRounded $lockCard 12
-
-    $contentPanel.Controls.Add($pnlMain)
-}
+# ========================================================
+# SELESAI RENDER DASHBOARD
+# ========================================================
 
 # ========================================================
-# BAGIAN: LOGIKA SOFTWARE CENTER & PACKAGE MANAGER
+# MULAI SOFTWARE CENTER
 # ========================================================
 
 # --- DATABASE APLIKASI & FITUR (DIPERLUAS & SUPER LENGKAP) ---
@@ -1225,7 +666,7 @@ $global:SoftwareDatabase = @(
     [PSCustomObject]@{ Tab="ThirdParty"; Category="Browser"; Name="Tor Browser"; Winget="TorProject.TorBrowser"; Choco="tor-browser"; Type="App" }
     [PSCustomObject]@{ Tab="ThirdParty"; Category="Browser"; Name="Vivaldi"; Winget="VivaldiTechnologies.Vivaldi"; Choco="vivaldi"; Type="App" }
     [PSCustomObject]@{ Tab="ThirdParty"; Category="Browser"; Name="Waterfox"; Winget="Waterfox.Waterfox"; Choco="waterfox"; Type="App" }
-    [PSCustomObject]@{ Tab="ThirdParty"; Category="Browser"; Name="Zen Browser"; Winget="ZenBrowser.Zen"; Choco="zen-browser"; Type="App" }
+    [PSCustomObject]@{ Tab="ThirdParty"; Category="Browser"; Name="Zen Browser"; Winget="Zen-Team.Zen-Browser"; Choco="zen-browser --pre"; Type="App" }
     [PSCustomObject]@{ Tab="ThirdParty"; Category="Browser"; Name="Thorium"; Winget="Alex313031.Thorium"; Choco="thorium"; Type="App" }
     [PSCustomObject]@{ Tab="ThirdParty"; Category="Browser"; Name="LibreWolf"; Winget="LibreWolf.LibreWolf"; Choco="librewolf"; Type="App" }
     [PSCustomObject]@{ Tab="ThirdParty"; Category="Browser"; Name="DuckDuckGo"; Winget="DuckDuckGo.Desktop"; Choco="duckduckgo"; Type="App" }
@@ -2033,7 +1474,792 @@ function Render-SoftwareCenter {
 # ========================================================
 
 # ========================================================
-# BAGIAN: LOGIKA UPGRADE LICENSE
+# MULAI RENDER WINDOWS DEFENDER
+# ========================================================
+function Action-DefEnableIT {
+    Write-Log "Starting IT Limit Fix (Reset Policies)..."
+    $keys = @(
+        "HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies",
+        "HKCU:\Software\Microsoft\WindowsSelfHost", "HKCU:\Software\Policies",
+        "HKLM:\Software\Microsoft\Policies", "HKLM:\Software\Microsoft\Windows\CurrentVersion\Policies",
+        "HKLM:\Software\Microsoft\Windows\CurrentVersion\WindowsStore\WindowsUpdate",
+        "HKLM:\Software\Microsoft\WindowsSelfHost", "HKLM:\Software\Policies",
+        "HKLM:\Software\WOW6432Node\Microsoft\Policies",
+        "HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Policies"
+    )
+    foreach ($k in $keys) { if (Test-Path $k) { Remove-Item -Path $k -Recurse -Force -ErrorAction SilentlyContinue } }
+    [System.Windows.Forms.MessageBox]::Show("IT Limit Policies have been reset!", "Success", "OK", "Information")
+}
+
+function Action-DefDisable {
+    $msg = "PENTING: Fitur ini HANYA BEKERJA jika 'Tamper Protection' di Windows Security sudah dimatikan secara manual.`n`nApakah Anda sudah mematikannya?"
+    $ask = [System.Windows.Forms.MessageBox]::Show($msg, "Cek Tamper Protection", "YesNo", "Warning")
+    
+    if ($ask -eq "Yes") {
+        Write-Log "Disabling Windows Defender..."
+        try {
+            # --- 1. Disabling Windows Defender entirely ---
+            $basePath = "HKLM\SOFTWARE\Policies\Microsoft\Windows Defender"
+            cmd.exe /c "reg add `"$basePath`" /v `"DisableAntiSpyware`" /t REG_DWORD /d 1 /f" | Out-Null
+            cmd.exe /c "reg add `"$basePath`" /v `"DisableRealtimeMonitoring`" /t REG_DWORD /d 1 /f" | Out-Null
+            cmd.exe /c "reg add `"$basePath`" /v `"DisableAntiVirus`" /t REG_DWORD /d 1 /f" | Out-Null
+            cmd.exe /c "reg add `"$basePath`" /v `"DisableSpecialRunningModes`" /t REG_DWORD /d 1 /f" | Out-Null
+            cmd.exe /c "reg add `"$basePath`" /v `"DisableRoutinelyTakingAction`" /t REG_DWORD /d 1 /f" | Out-Null
+            cmd.exe /c "reg add `"$basePath`" /v `"ServiceKeepAlive`" /t REG_DWORD /d 0 /f" | Out-Null
+
+            # --- 2. Disable real-time protection ---
+            $rtPath = "HKLM\SOFTWARE\Policies\Microsoft\Windows Defender\Real-Time Protection"
+            cmd.exe /c "reg add `"$rtPath`" /v `"DisableBehaviorMonitoring`" /t REG_DWORD /d 1 /f" | Out-Null
+            cmd.exe /c "reg add `"$rtPath`" /v `"DisableOnAccessProtection`" /t REG_DWORD /d 1 /f" | Out-Null
+            cmd.exe /c "reg add `"$rtPath`" /v `"DisableScanOnRealtimeEnable`" /t REG_DWORD /d 1 /f" | Out-Null
+            cmd.exe /c "reg add `"$rtPath`" /v `"DisableRealtimeMonitoring`" /t REG_DWORD /d 1 /f" | Out-Null
+
+            # --- 3. Disable automatic signature updates ---
+            $sigPath = "HKLM\SOFTWARE\Policies\Microsoft\Windows Defender\Signature Updates"
+            cmd.exe /c "reg add `"$sigPath`" /v `"ForceUpdateFromMU`" /t REG_DWORD /d 0 /f" | Out-Null
+
+            # --- 4. Disable block feature & Other Policies ---
+            $spyPath = "HKLM\SOFTWARE\Policies\Microsoft\Windows Defender\Spynet"
+            cmd.exe /c "reg add `"$spyPath`" /v `"DisableBlockAtFirstSeen`" /t REG_DWORD /d 1 /f" | Out-Null
+            cmd.exe /c "reg add `"$spyPath`" /v `"SubmitSamplesConsent`" /t REG_DWORD /d 2 /f" | Out-Null
+            
+            $mpPath = "HKLM\SOFTWARE\Policies\Microsoft\Windows Defender\MpEngine"
+            cmd.exe /c "reg add `"$mpPath`" /v `"MpEnablePus`" /t REG_DWORD /d 0 /f" | Out-Null
+            cmd.exe /c "reg add `"$mpPath`" /v `"MpEngineRunTime`" /t REG_DWORD /d 0 /f" | Out-Null
+
+            $repPath = "HKLM\SOFTWARE\Policies\Microsoft\Windows Defender\Reporting"
+            cmd.exe /c "reg add `"$repPath`" /v `"DisableEnhancedNotifications`" /t REG_DWORD /d 1 /f" | Out-Null
+
+            # --- 5. Stop and Disable Services ---
+            cmd.exe /c "sc stop WinDefend" | Out-Null
+            cmd.exe /c "sc stop Sense" | Out-Null
+            cmd.exe /c "sc config WinDefend start= disabled" | Out-Null
+            cmd.exe /c "sc config Sense start= disabled" | Out-Null
+
+            [System.Windows.Forms.MessageBox]::Show("Windows Defender telah dinonaktifkan secara mendalam via Registry.`nSilakan RESTART PC Anda agar efeknya bekerja penuh.", "Done", "OK", "Information")
+        } catch {
+            [System.Windows.Forms.MessageBox]::Show("Gagal mengeksekusi perintah. Pastikan Anda menjalankan aplikasi ini sebagai Administrator (Run as Admin).", "Error", "OK", "Error")
+        }
+    }
+}
+
+function Action-DefEnable {
+    Write-Log "Enabling Windows Defender..."
+    try {
+        # Menghapus seluruh folder Windows Defender di Policies Registry (Kembali ke Default)
+        $basePath = "HKLM\SOFTWARE\Policies\Microsoft\Windows Defender"
+        cmd.exe /c "reg delete `"$basePath`" /f" | Out-Null
+        
+        # Mengembalikan service ke Automatic dan mencoba menyalakannya
+        cmd.exe /c "sc config WinDefend start= auto" | Out-Null
+        cmd.exe /c "sc config Sense start= auto" | Out-Null
+        cmd.exe /c "sc start WinDefend" | Out-Null
+        cmd.exe /c "sc start Sense" | Out-Null
+
+        [System.Windows.Forms.MessageBox]::Show("Pengaturan Windows Defender telah dikembalikan ke standar pabrik.`nSilakan RESTART PC Anda agar fitur perlindungan aktif kembali.", "Success", "OK", "Information")
+    } catch {
+        [System.Windows.Forms.MessageBox]::Show("Terjadi kesalahan. Pastikan aplikasi berjalan sebagai Administrator.", "Error", "OK", "Error")
+    }
+}
+
+function Render-WindowsDefender {
+    $contentPanel.Controls.Clear()
+    $cP = if ($global:IsDarkMode) { $ThemePalettes.Dark } else { $ThemePalettes.Light }
+
+    $pnlMain = New-Object System.Windows.Forms.Panel
+    $pnlMain.Dock = "Fill"
+    $pnlMain.BackColor = $cP.Bg
+    $pnlMain.AutoScroll = $true
+
+    # --- 1. HEADER BANNER ---
+    $bannerCard = New-Object System.Windows.Forms.Panel
+    $bannerCard.Size = New-Object System.Drawing.Size(735, 110)
+    $bannerCard.Location = New-Object System.Drawing.Point(30, 30)
+    $bannerCard.BackColor = $cP.Header 
+    
+    $banRadius = 20
+    $banPath = New-Object System.Drawing.Drawing2D.GraphicsPath
+    $banPath.AddArc(0, 0, $banRadius, $banRadius, 180, 90)
+    $banPath.AddArc($bannerCard.Width - $banRadius, 0, $banRadius, $banRadius, 270, 90)
+    $banPath.AddArc($bannerCard.Width - $banRadius, $bannerCard.Height - $banRadius, $banRadius, $banRadius, 0, 90)
+    $banPath.AddArc(0, $bannerCard.Height - $banRadius, $banRadius, $banRadius, 90, 90)
+    $banPath.CloseAllFigures()
+    $bannerCard.Region = New-Object System.Drawing.Region($banPath)
+
+    $lblTitle = New-Object System.Windows.Forms.Label
+    $lblTitle.Text = "Windows Defender Manager"
+    $lblTitle.Font = New-Object System.Drawing.Font("Segoe UI", 18, [System.Drawing.FontStyle]::Bold)
+    $lblTitle.ForeColor = [System.Drawing.Color]::White
+    $lblTitle.AutoSize = $true
+    $lblTitle.Location = New-Object System.Drawing.Point(25, 20)
+    $bannerCard.Controls.Add($lblTitle)
+
+    $lblSubTitle = New-Object System.Windows.Forms.Label
+    $lblSubTitle.Text = "Kelola proteksi bawaan Windows dan bersihkan batasan sistem (IT Policies) dengan aman."
+    $lblSubTitle.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Regular)
+    $lblSubTitle.ForeColor = [System.Drawing.Color]::LightGray
+    $lblSubTitle.AutoSize = $true
+    $lblSubTitle.Location = New-Object System.Drawing.Point(28, 60)
+    $bannerCard.Controls.Add($lblSubTitle)
+
+    $pnlMain.Controls.Add($bannerCard)
+
+    # --- 2. GRID UNTUK ACTION CARDS ---
+    $flpCards = New-Object System.Windows.Forms.FlowLayoutPanel
+    $flpCards.Location = New-Object System.Drawing.Point(25, 160)
+    $flpCards.Size = New-Object System.Drawing.Size(770, 0)
+    $flpCards.AutoSize = $true
+    $flpCards.AutoSizeMode = "GrowAndShrink"
+    $flpCards.AutoScroll = $false # DIMATIKAN AGAR TIDAK ADA DOUBLE SCROLL
+    $flpCards.FlowDirection = "TopDown"
+    $flpCards.WrapContents = $false
+
+    # --- HELPER FUNCTION UNTUK KARTU TOMBOL (FIXED) ---
+    function Create-ActionCard ($Title, $Desc, $IconCode, $ColorName, $ActionScript) {
+        $card = New-Object System.Windows.Forms.Panel
+        $card.Size = New-Object System.Drawing.Size(735, 90)
+        $card.Margin = New-Object System.Windows.Forms.Padding(5, 5, 15, 10)
+        $card.BackColor = $cP.Card
+        $card.Cursor = [System.Windows.Forms.Cursors]::Hand
+
+        $rad = 15
+        $path = New-Object System.Drawing.Drawing2D.GraphicsPath
+        $path.AddArc(0, 0, $rad, $rad, 180, 90)
+        $path.AddArc($card.Width - $rad, 0, $rad, $rad, 270, 90)
+        $path.AddArc($card.Width - $rad, $card.Height - $rad, $rad, $rad, 0, 90)
+        $path.AddArc(0, $card.Height - $rad, $rad, $rad, 90, 90)
+        $path.CloseAllFigures()
+        $card.Region = New-Object System.Drawing.Region($path)
+
+        $ico = New-Object System.Windows.Forms.Label
+        $ico.Text = [char]$IconCode
+        $ico.Font = New-Object System.Drawing.Font("Segoe MDL2 Assets", 24)
+        $ico.AutoSize = $true
+        $ico.Location = New-Object System.Drawing.Point(20, 25)
+        try { $ico.ForeColor = [System.Drawing.Color]::FromName($ColorName) } catch { $ico.ForeColor = $cP.Accent }
+        $card.Controls.Add($ico)
+
+        $lTitle = New-Object System.Windows.Forms.Label
+        $lTitle.Text = $Title
+        $lTitle.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
+        $lTitle.ForeColor = $cP.Text
+        $lTitle.Location = New-Object System.Drawing.Point(80, 20)
+        $lTitle.AutoSize = $true
+        $card.Controls.Add($lTitle)
+
+        $lSub = New-Object System.Windows.Forms.Label
+        $lSub.Text = $Desc
+        $lSub.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Regular)
+        $lSub.ForeColor = [System.Drawing.Color]::Gray
+        $lSub.Location = New-Object System.Drawing.Point(80, 48)
+        $lSub.Size = New-Object System.Drawing.Size(630, 20)
+        $lSub.AutoSize = $false
+        $lSub.AutoEllipsis = $true
+        $card.Controls.Add($lSub)
+
+        # --- PERBAIKAN FINAL: Evaluasi warna langsung di dalam kurung kurawal ---
+        $card.Add_MouseEnter({ $this.BackColor = if ($global:IsDarkMode) { [System.Drawing.Color]::FromArgb(45, 45, 55) } else { [System.Drawing.Color]::FromArgb(235, 235, 235) } })
+        $card.Add_MouseLeave({ $this.BackColor = if ($global:IsDarkMode) { [System.Drawing.Color]::FromArgb(30, 30, 35) } else { [System.Drawing.Color]::White } })
+
+        $ico.Add_MouseEnter({ $this.Parent.BackColor = if ($global:IsDarkMode) { [System.Drawing.Color]::FromArgb(45, 45, 55) } else { [System.Drawing.Color]::FromArgb(235, 235, 235) } })
+        $ico.Add_MouseLeave({ $this.Parent.BackColor = if ($global:IsDarkMode) { [System.Drawing.Color]::FromArgb(30, 30, 35) } else { [System.Drawing.Color]::White } })
+
+        $lTitle.Add_MouseEnter({ $this.Parent.BackColor = if ($global:IsDarkMode) { [System.Drawing.Color]::FromArgb(45, 45, 55) } else { [System.Drawing.Color]::FromArgb(235, 235, 235) } })
+        $lTitle.Add_MouseLeave({ $this.Parent.BackColor = if ($global:IsDarkMode) { [System.Drawing.Color]::FromArgb(30, 30, 35) } else { [System.Drawing.Color]::White } })
+
+        $lSub.Add_MouseEnter({ $this.Parent.BackColor = if ($global:IsDarkMode) { [System.Drawing.Color]::FromArgb(45, 45, 55) } else { [System.Drawing.Color]::FromArgb(235, 235, 235) } })
+        $lSub.Add_MouseLeave({ $this.Parent.BackColor = if ($global:IsDarkMode) { [System.Drawing.Color]::FromArgb(30, 30, 35) } else { [System.Drawing.Color]::White } })
+
+        $card.Add_Click($ActionScript)
+        $ico.Add_Click($ActionScript)
+        $lTitle.Add_Click($ActionScript)
+        $lSub.Add_Click($ActionScript)
+
+        return $card
+    }
+
+    # Action Cards
+    $flpCards.Controls.Add((Create-ActionCard "Reset IT Policies (Unlock Settings)" "Hapus semua batasan/policy lokal Windows. Berguna jika Defender terkunci 'Managed by your organization'." 0xE90F "Orange" { Action-DefEnableIT }))
+    $flpCards.Controls.Add((Create-ActionCard "Disable Windows Defender" "Matikan perlindungan Real-time, AntiVirus, dan Spyware secara paksa lewat Registry." 0xE711 "Red" { Action-DefDisable }))
+    $flpCards.Controls.Add((Create-ActionCard "Enable Windows Defender" "Pulihkan pengaturan Default perlindungan Windows dan nyalakan ulang servis." 0xE8FB "LimeGreen" { Action-DefEnable }))
+
+    $pnlMain.Controls.Add($flpCards)
+    $contentPanel.Controls.Add($pnlMain)
+}
+
+# ========================================================
+# SELESAI RENDER WINDOWS DEFENDER
+# ========================================================
+
+# ==========================================
+# MULAI RENDER WINDOWS UPDATES
+# ==========================================
+# --- 1. Fungsi Disable Update (Pause hingga 2075) ---
+function Action-UpdateDisable {
+    Write-Log "Process Started: Disabling Windows Update..."
+    try {
+        [System.Windows.Forms.Cursor]::Current = [System.Windows.Forms.Cursors]::WaitCursor
+
+        # Matikan & Disable semua Services
+        $services = @("wuauserv", "bits", "dosvc", "UsoSvc", "WaaSMedicSvc")
+        foreach ($svc in $services) {
+            Stop-Service -Name $svc -Force -ErrorAction SilentlyContinue
+            Set-Service -Name $svc -StartupType Disabled -ErrorAction SilentlyContinue
+        }
+
+        # Atur Tanggal Pause mentok sampai 2075
+        $now = "2025-01-01T00:00:00Z"
+        $future = "2075-01-01T00:00:00Z"
+        
+        # Eksekusi Registry UX Settings
+        $uxPath = "HKLM:\SOFTWARE\Microsoft\WindowsUpdate\UX\Settings"
+        if (-not (Test-Path $uxPath)) { New-Item -Path $uxPath -Force | Out-Null }
+        Set-ItemProperty -Path $uxPath -Name "PauseUpdatesStartTime" -Value $now -Force
+        Set-ItemProperty -Path $uxPath -Name "PauseFeatureUpdatesStartTime" -Value $now -Force
+        Set-ItemProperty -Path $uxPath -Name "PauseQualityUpdatesStartTime" -Value $now -Force
+        Set-ItemProperty -Path $uxPath -Name "PauseUpdatesExpiryTime" -Value $future -Force
+        Set-ItemProperty -Path $uxPath -Name "PauseFeatureUpdatesEndTime" -Value $future -Force
+        Set-ItemProperty -Path $uxPath -Name "PauseQualityUpdatesEndTime" -Value $future -Force
+
+        # Eksekusi Registry UpdatePolicy
+        $upPath = "HKLM:\SOFTWARE\Microsoft\WindowsUpdate\UpdatePolicy\Settings"
+        if (-not (Test-Path $upPath)) { New-Item -Path $upPath -Force | Out-Null }
+        Set-ItemProperty -Path $upPath -Name "PausedFeatureStatus" -Value 1 -Type DWord -Force
+        Set-ItemProperty -Path $upPath -Name "PausedQualityStatus" -Value 1 -Type DWord -Force
+        Set-ItemProperty -Path $upPath -Name "PausedFeatureDate" -Value $now -Force
+        Set-ItemProperty -Path $upPath -Name "PausedQualityDate" -Value $now -Force
+
+        [System.Windows.Forms.Cursor]::Current = [System.Windows.Forms.Cursors]::Default
+        Write-Log "Success: Windows Update and its services have been forcibly disabled until 2075."
+        [System.Windows.Forms.MessageBox]::Show("Windows Update beserta layanannya berhasil dimatikan secara paksa hingga tahun 2075!", "Sukses", "OK", "Information")
+    } catch {
+        [System.Windows.Forms.Cursor]::Current = [System.Windows.Forms.Cursors]::Default
+        Write-Log "Failed: Unable to disable Windows Update. Error Details: $($_.Exception.Message)"
+        [System.Windows.Forms.MessageBox]::Show("Gagal mematikan Windows Update.`nDetail: $($_.Exception.Message)", "Error", "OK", "Error")
+    }
+}
+
+function Action-UpdateEnable {
+    Write-Log "Process Started: Enabling Windows Update..."
+    try {
+        [System.Windows.Forms.Cursor]::Current = [System.Windows.Forms.Cursors]::WaitCursor
+
+        # Aktifkan & Start Services ke Default
+        $autoServices = @("wuauserv", "bits", "dosvc", "UsoSvc")
+        foreach ($svc in $autoServices) {
+            Set-Service -Name $svc -StartupType Automatic -ErrorAction SilentlyContinue
+            Start-Service -Name $svc -ErrorAction SilentlyContinue
+        }
+        Set-Service -Name "WaaSMedicSvc" -StartupType Manual -ErrorAction SilentlyContinue
+        Start-Service -Name "WaaSMedicSvc" -ErrorAction SilentlyContinue
+
+        # Hapus Kunci Pause
+        $uxPath = "HKLM:\SOFTWARE\Microsoft\WindowsUpdate\UX\Settings"
+        if (Test-Path $uxPath) {
+            $props = @("PauseUpdatesStartTime", "PauseFeatureUpdatesStartTime", "PauseQualityUpdatesStartTime", "PauseUpdatesExpiryTime", "PauseFeatureUpdatesEndTime", "PauseQualityUpdatesEndTime")
+            foreach ($prop in $props) { Remove-ItemProperty -Path $uxPath -Name $prop -ErrorAction SilentlyContinue }
+        }
+
+        # Hapus Registry Tweak
+        $polAU = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU"
+        if (Test-Path $polAU) { Remove-Item -Path $polAU -Recurse -Force -ErrorAction SilentlyContinue }
+        $upPath = "HKLM:\SOFTWARE\Microsoft\WindowsUpdate\UpdatePolicy\Settings"
+        if (Test-Path $upPath) { Remove-Item -Path $upPath -Recurse -Force -ErrorAction SilentlyContinue }
+
+        [System.Windows.Forms.Cursor]::Current = [System.Windows.Forms.Cursors]::Default
+        Write-Log "Success: Windows Update has been successfully restored to factory defaults."
+        [System.Windows.Forms.MessageBox]::Show("Windows Update berhasil diaktifkan kembali ke standar pabrik.", "Sukses", "OK", "Information")
+    } catch {
+        [System.Windows.Forms.Cursor]::Current = [System.Windows.Forms.Cursors]::Default
+        Write-Log "Failed: Unable to enable Windows Update. Error Details: $($_.Exception.Message)"
+        [System.Windows.Forms.MessageBox]::Show("Gagal mengaktifkan Windows Update.`nDetail: $($_.Exception.Message)", "Error", "OK", "Error")
+    }
+}
+
+# --- 3. Fungsi Reset Komponen (Hapus Cache & Restart Service) ---
+function Action-UpdateReset {
+    Write-Log "Action Triggered: Opening Reset Mode dialog..."
+    
+    # --- Membuat Jendela Dialog Pilihan Reset ---
+    $frmReset = New-Object System.Windows.Forms.Form
+    $frmReset.Text = "Pilih Mode Reset"
+    $frmReset.Size = New-Object System.Drawing.Size(400, 260)
+    $frmReset.StartPosition = "CenterScreen"
+    $frmReset.FormBorderStyle = "FixedToolWindow"
+    $frmReset.TopMost = $true
+    $frmReset.BackColor = [System.Drawing.Color]::White
+
+    $lblInfo = New-Object System.Windows.Forms.Label
+    $lblInfo.Text = "Pilih tingkat perbaikan komponen Windows Update:"
+    $lblInfo.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
+    $lblInfo.AutoSize = $true
+    $lblInfo.Location = New-Object System.Drawing.Point(20, 20)
+    $frmReset.Controls.Add($lblInfo)
+
+    # Tombol 1: Standard Reset
+    $btnStd = New-Object System.Windows.Forms.Button
+    $btnStd.Text = "Standard Reset (Disarankan)"
+    $btnStd.Location = New-Object System.Drawing.Point(20, 60)
+    $btnStd.Size = New-Object System.Drawing.Size(345, 40)
+    $btnStd.BackColor = [System.Drawing.Color]::DodgerBlue
+    $btnStd.ForeColor = [System.Drawing.Color]::White
+    $btnStd.FlatStyle = "Flat"
+    $btnStd.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
+    $btnStd.Cursor = "Hand"
+    $btnStd.Add_Click({
+        $frmReset.Tag = "Standard"
+        $frmReset.DialogResult = "OK"
+    })
+    $frmReset.Controls.Add($btnStd)
+
+    $lblStd = New-Object System.Windows.Forms.Label
+    $lblStd.Text = "Aman. Menghapus Cache dan Network tanpa merusak UAC."
+    $lblStd.Font = New-Object System.Drawing.Font("Segoe UI", 8)
+    $lblStd.ForeColor = [System.Drawing.Color]::Gray
+    $lblStd.AutoSize = $true
+    $lblStd.Location = New-Object System.Drawing.Point(20, 105)
+    $frmReset.Controls.Add($lblStd)
+
+    # Tombol 2: Deep Reset
+    $btnDeep = New-Object System.Windows.Forms.Button
+    $btnDeep.Text = "Deep Reset (Tingkat Lanjut)"
+    $btnDeep.Location = New-Object System.Drawing.Point(20, 140)
+    $btnDeep.Size = New-Object System.Drawing.Size(345, 40)
+    $btnDeep.BackColor = [System.Drawing.Color]::Crimson
+    $btnDeep.ForeColor = [System.Drawing.Color]::White
+    $btnDeep.FlatStyle = "Flat"
+    $btnDeep.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
+    $btnDeep.Cursor = "Hand"
+    $btnDeep.Add_Click({
+        $confirm = [System.Windows.Forms.MessageBox]::Show("Mode ini akan mendaftarkan ulang seluruh DLL inti Windows.`n`nEfek samping: Pengaturan UAC Anda mungkin akan ter-reset ke Default (Always Notify).`n`nGunakan hanya jika Standard Reset gagal.`nLanjutkan?", "Peringatan Deep Reset", 4, 48)
+        if ($confirm -eq 'Yes') {
+            $frmReset.Tag = "Deep"
+            $frmReset.DialogResult = "OK"
+        }
+    })
+    $frmReset.Controls.Add($btnDeep)
+
+    $lblDeep = New-Object System.Windows.Forms.Label
+    $lblDeep.Text = "Hanya jika gagal. Registrasi ulang DLL penuh (Beresiko mereset UAC)."
+    $lblDeep.Font = New-Object System.Drawing.Font("Segoe UI", 8)
+    $lblDeep.ForeColor = [System.Drawing.Color]::Gray
+    $lblDeep.AutoSize = $true
+    $lblDeep.Location = New-Object System.Drawing.Point(20, 185)
+    $frmReset.Controls.Add($lblDeep)
+
+    # --- Logika Eksekusi Berdasarkan Pilihan ---
+    if ($frmReset.ShowDialog() -eq "OK") {
+        $mode = $frmReset.Tag
+        Write-Log "Process Started: Resetting Windows Update Components (Mode: $mode)..."
+        try {
+            [System.Windows.Forms.Cursor]::Current = [System.Windows.Forms.Cursors]::WaitCursor
+            
+            # 1. Matikan services terkait Windows Update (Berlaku untuk kedua mode)
+            $services = @("wuauserv", "cryptSvc", "bits", "msiserver")
+            foreach ($svc in $services) {
+                Stop-Service -Name $svc -Force -ErrorAction SilentlyContinue
+            }
+
+            # 2. Hapus file qmgr*.dat (Berlaku untuk kedua mode)
+            $qmgrPath = "$env:ALLUSERSPROFILE\Application Data\Microsoft\Network\Downloader\qmgr*.dat"
+            Remove-Item -Path $qmgrPath -Force -ErrorAction SilentlyContinue
+
+            # 3. Rename folder Cache SoftwareDistribution & catroot2 (Berlaku untuk kedua mode)
+            $sdPath = "$env:windir\SoftwareDistribution"
+            if (Test-Path "$sdPath.old") { Remove-Item -Path "$sdPath.old" -Recurse -Force -ErrorAction SilentlyContinue }
+            if (Test-Path $sdPath) { Rename-Item -Path $sdPath -NewName "SoftwareDistribution.old" -ErrorAction SilentlyContinue }
+
+            $crPath = "$env:windir\System32\catroot2"
+            if (Test-Path "$crPath.old") { Remove-Item -Path "$crPath.old" -Recurse -Force -ErrorAction SilentlyContinue }
+            if (Test-Path $crPath) { Rename-Item -Path $crPath -NewName "catroot2.old" -ErrorAction SilentlyContinue }
+
+            # --- EKSEKUSI KHUSUS MODE DEEP RESET ---
+            if ($mode -eq "Deep") {
+                Write-Log "Deep Reset: Re-registering System DLLs and Security Descriptors..."
+                # 4. Reset Security Descriptor BITS & WUAUSERV
+                & sc.exe sdset bits "D:(A;;CCLCSWRPWPDTLOCRRC;;;SY)(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;BA)" | Out-Null
+                & sc.exe sdset wuauserv "D:(A;;CCLCSWRPWPDTLOCRRC;;;SY)(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;BA)" | Out-Null
+
+                # 5. Re-register Windows Update DLLs
+                $dlls = @(
+                    "atl.dll", "urlmon.dll", "mshtml.dll", "shdocvw.dll", "browseui.dll", "jscript.dll", "vbscript.dll", 
+                    "scrrun.dll", "msxml.dll", "msxml3.dll", "msxml6.dll", "actxprxy.dll", "softpub.dll", "wintrust.dll", 
+                    "dssenh.dll", "rsaenh.dll", "gpkcsp.dll", "sccbase.dll", "slbcsp.dll", "cryptdlg.dll", "oleaut32.dll", 
+                    "ole32.dll", "shell32.dll", "initpki.dll", "wuapi.dll", "wuaueng.dll", "wuaueng1.dll", "wucltui.dll", 
+                    "wups.dll", "wups2.dll", "wuweb.dll", "qmgr.dll", "qmgrprxy.dll", "wucltux.dll", "muweb.dll", "wuwebv.dll"
+                )
+                
+                $currentLocation = Get-Location
+                Set-Location "$env:windir\System32"
+                foreach ($dll in $dlls) {
+                    Start-Process -FilePath "regsvr32.exe" -ArgumentList "/s $dll" -Wait -WindowStyle Hidden -ErrorAction SilentlyContinue
+                }
+                Set-Location $currentLocation
+            }
+
+            # 6. Reset Network Winsock & WinHTTP Proxy (Berlaku untuk kedua mode)
+            & netsh winsock reset | Out-Null
+            & netsh winhttp reset proxy | Out-Null
+
+            # 7. Nyalakan kembali services (Berlaku untuk kedua mode)
+            foreach ($svc in $services) {
+                Start-Service -Name $svc -ErrorAction SilentlyContinue
+            }
+            
+            [System.Windows.Forms.Cursor]::Current = [System.Windows.Forms.Cursors]::Default
+            Write-Log "Success: Fully reset Windows Update components ($mode Mode)."
+            [System.Windows.Forms.MessageBox]::Show("Reset Windows Update ($mode Mode) berhasil!`n`nSangat disarankan untuk RESTART PC setelah pesan ini ditutup.", "Sukses", "OK", "Information")
+        } catch {
+            [System.Windows.Forms.Cursor]::Current = [System.Windows.Forms.Cursors]::Default
+            Write-Log "Failed: An error occurred while resetting components. Error Details: $($_.Exception.Message)"
+            [System.Windows.Forms.MessageBox]::Show("Terjadi kesalahan saat mereset komponen.`nDetail: $($_.Exception.Message)", "Error", "OK", "Error")
+        }
+    } else {
+        Write-Log "Process Cancelled: User closed the Reset Mode dialog."
+    }
+}
+
+function Action-UpdatePauseCustom {
+    Write-Log "Action Triggered: Opening Custom Date Picker dialog..."
+    # --- Membuat Jendela Kalender (Date Picker) ---
+    $formDate = New-Object System.Windows.Forms.Form
+    $formDate.Text = "Pilih Tanggal Pause"
+    $formDate.Size = New-Object System.Drawing.Size(350, 200)
+    $formDate.StartPosition = "CenterScreen"
+    $formDate.FormBorderStyle = "FixedToolWindow"
+    $formDate.TopMost = $true
+    $formDate.BackColor = [System.Drawing.Color]::White
+
+    $lblInfo = New-Object System.Windows.Forms.Label
+    $lblInfo.Text = "Tentukan tanggal kapan Update akan dilanjutkan:"
+    $lblInfo.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+    $lblInfo.AutoSize = $true
+    $lblInfo.Location = New-Object System.Drawing.Point(20, 20)
+    $formDate.Controls.Add($lblInfo)
+
+    # Alat Pemilih Tanggal
+    $dtPicker = New-Object System.Windows.Forms.DateTimePicker
+    $dtPicker.Location = New-Object System.Drawing.Point(20, 55)
+    $dtPicker.Size = New-Object System.Drawing.Size(290, 30)
+    $dtPicker.Font = New-Object System.Drawing.Font("Segoe UI", 10)
+    $dtPicker.Format = [System.Windows.Forms.DateTimePickerFormat]::Long
+    $dtPicker.MinDate = [DateTime]::Now # Tidak bisa pilih tanggal mundur
+    $formDate.Controls.Add($dtPicker)
+
+    # Tombol Simpan
+    $btnSave = New-Object System.Windows.Forms.Button
+    $btnSave.Text = "Simpan"
+    $btnSave.Location = New-Object System.Drawing.Point(235, 110)
+    $btnSave.Size = New-Object System.Drawing.Size(75, 30)
+    $btnSave.BackColor = [System.Drawing.Color]::MediumPurple
+    $btnSave.ForeColor = [System.Drawing.Color]::White
+    $btnSave.FlatStyle = "Flat"
+    $btnSave.Cursor = "Hand"
+    $btnSave.DialogResult = "OK"
+    $formDate.Controls.Add($btnSave)
+
+    $formDate.AcceptButton = $btnSave
+
+    # --- Logika Registry Jika Tombol Simpan Ditekan ---
+    if ($formDate.ShowDialog() -eq "OK") {
+        try {
+            Write-Log "Applying custom pause update date..."
+            # Format waktu wajib menggunakan ISO 8601 (UTC) untuk Registry Windows Update
+            $selectedDate = $dtPicker.Value.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+            $now = [DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
+            
+            $regPath = "HKLM:\SOFTWARE\Microsoft\WindowsUpdate\UX\Settings"
+            if (-not (Test-Path $regPath)) { New-Item -Path $regPath -Force | Out-Null }
+
+            # Memasukkan data pause ke Registry
+            Set-ItemProperty -Path $regPath -Name "PauseUpdatesStartTime" -Value $now -Force
+            Set-ItemProperty -Path $regPath -Name "PauseFeatureUpdatesStartTime" -Value $now -Force
+            Set-ItemProperty -Path $regPath -Name "PauseQualityUpdatesStartTime" -Value $now -Force
+            
+            Set-ItemProperty -Path $regPath -Name "PauseUpdatesExpiryTime" -Value $selectedDate -Force
+            Set-ItemProperty -Path $regPath -Name "PauseFeatureUpdatesEndTime" -Value $selectedDate -Force
+            Set-ItemProperty -Path $regPath -Name "PauseQualityUpdatesEndTime" -Value $selectedDate -Force
+
+            # Restart Service Windows Update agar langsung berefek
+            Restart-Service -Name wuauserv -Force -ErrorAction SilentlyContinue
+
+            $tglIndo = $dtPicker.Value.ToString("dd MMMM yyyy")
+            Write-Log "Success: Windows Update paused until $($selectedDate) (UTC)."
+            [System.Windows.Forms.MessageBox]::Show("Windows Update berhasil ditunda hingga $tglIndo.", "Sukses", "OK", "Information")
+        } catch {
+            Write-Log "Failed: Error applying custom pause date. Error Details: $($_.Exception.Message)"
+            [System.Windows.Forms.MessageBox]::Show("Gagal menyimpan pengaturan tanggal.`nDetail: $($_.Exception.Message)", "Error", "OK", "Error")
+        }
+    } else {
+        Write-Log "Process Cancelled: User closed the Custom Date Picker dialog."
+    }
+}
+
+function Action-UpdateHide {
+    Write-Log "Process Started: Downloading Windows Update Hide Tool (wushowhide.diagcab)..."
+    # URL resmi Microsoft untuk tool wushowhide.diagcab
+    $url = "http://download.microsoft.com/download/f/2/2/f22d5fdb-59cd-4275-8c95-1be17bf70b21/wushowhide.diagcab"
+    $dest = "$env:TEMP\wushowhide.diagcab"
+
+    try {
+        # Mengubah kursor menjadi loading
+        [System.Windows.Forms.Cursor]::Current = [System.Windows.Forms.Cursors]::WaitCursor
+
+        # Mengunduh file ke folder Temp
+        Invoke-WebRequest -Uri $url -OutFile $dest -UseBasicParsing -ErrorAction Stop
+        
+        # Kembalikan kursor ke normal
+        [System.Windows.Forms.Cursor]::Current = [System.Windows.Forms.Cursors]::Default
+
+        if (Test-Path $dest) {
+            Write-Log "Success: Successfully launched."
+            # Membuka tool troubleshooter Microsoft
+            Start-Process -FilePath $dest
+        } else {
+            Write-Log "Failed: The file  was not found."
+            [System.Windows.Forms.MessageBox]::Show("File gagal ditemukan setelah diunduh.", "Error", "OK", "Error")
+        }
+    } catch {
+        [System.Windows.Forms.Cursor]::Current = [System.Windows.Forms.Cursors]::Default
+        Write-Log "Failed: Unable to download wushowhide tool from Microsoft server. Error Details: $($_.Exception.Message)"
+        [System.Windows.Forms.MessageBox]::Show("Gagal mengunduh tool dari Microsoft.`nPastikan internet Anda aktif.`n`nDetail: $($_.Exception.Message)", "Download Error", "OK", "Error")
+    }
+}
+
+function Render-WindowsUpdates {
+    $contentPanel.Controls.Clear()
+    $cP = if ($global:IsDarkMode) { $ThemePalettes.Dark } else { $ThemePalettes.Light }
+
+    # --- HELPER: PELENGKUNG SUDUT CARD ---
+    $SetRounded = {
+        param($ctrl, $r)
+        if ($ctrl.Width -le 0 -or $ctrl.Height -le 0) { return }
+        $D = $r * 2
+        $p = New-Object System.Drawing.Drawing2D.GraphicsPath
+        $p.AddArc(0, 0, $D, $D, 180, 90)
+        $p.AddArc($ctrl.Width - $D, 0, $D, $D, 270, 90)
+        $p.AddArc($ctrl.Width - $D, $ctrl.Height - $D, $D, $D, 0, 90)
+        $p.AddArc(0, $ctrl.Height - $D, $D, $D, 90, 90)
+        $p.CloseAllFigures()
+        $ctrl.Region = New-Object System.Drawing.Region($p)
+    }
+
+    # PANEL UTAMA (Wadah Scroll Utama)
+    $pnlMain = New-Object System.Windows.Forms.Panel
+    $pnlMain.Dock = "Fill"
+    $pnlMain.BackColor = $cP.Bg
+    $pnlMain.AutoScroll = $true
+
+    # --- 1. HEADER BANNER ---
+    $bannerCard = New-Object System.Windows.Forms.Panel
+    $bannerCard.Size = New-Object System.Drawing.Size(735, 110)
+    $bannerCard.Location = New-Object System.Drawing.Point(30, 30)
+    $bannerCard.BackColor = $cP.Header 
+    
+    $lblTitle = New-Object System.Windows.Forms.Label
+    $lblTitle.Text = "Windows Update Manager"
+    $lblTitle.Font = New-Object System.Drawing.Font("Segoe UI", 18, [System.Drawing.FontStyle]::Bold)
+    $lblTitle.ForeColor = [System.Drawing.Color]::White
+    $lblTitle.AutoSize = $true
+    $lblTitle.Location = New-Object System.Drawing.Point(25, 20)
+    $bannerCard.Controls.Add($lblTitle)
+
+    $lblSubTitle = New-Object System.Windows.Forms.Label
+    $lblSubTitle.Text = "Ambil alih kendali pembaruan otomatis Windows, atur jadwal pause, atau kunci versi OS."
+    $lblSubTitle.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Regular)
+    $lblSubTitle.ForeColor = [System.Drawing.Color]::LightGray
+    $lblSubTitle.AutoSize = $true
+    $lblSubTitle.Location = New-Object System.Drawing.Point(28, 60)
+    $bannerCard.Controls.Add($lblSubTitle)
+
+    $pnlMain.Controls.Add($bannerCard)
+    $null = $bannerCard.Handle; &$SetRounded $bannerCard 20
+
+    # --- 2. CONTAINER FLOW (DIUBAH: KUNCI LEBAR MAKSIMAL) ---
+    $flowGrid = New-Object System.Windows.Forms.FlowLayoutPanel
+    $flowGrid.Location = New-Object System.Drawing.Point(30, 150)
+    $flowGrid.Width = 735 # Set lebar fix sama dengan banner
+    $flowGrid.AutoSize = $true
+    $flowGrid.AutoSizeMode = "GrowAndShrink"
+    # Ini kuncinya: Paksa tinggi bertambah, tapi lebar mentok di 735 agar turun ke baris baru!
+    $flowGrid.MaximumSize = New-Object System.Drawing.Size(735, 0) 
+    $flowGrid.WrapContents = $true
+    $flowGrid.AutoScroll = $false 
+    $flowGrid.Padding = New-Object System.Windows.Forms.Padding(0, 0, 0, 40)
+    $pnlMain.Controls.Add($flowGrid)
+
+    # --- HELPER FUNCTION UNTUK KARTU TOMBOL (2 KOLOM) ---
+    function Add-UpdateCard ($Title, $Desc, $IconCode, $IconColor, $ActionScript) {
+        $card = New-Object System.Windows.Forms.Panel
+        # Hitungan presisi: (735 - 15 margin kanan) / 2 = 360. Kita paskan di 352 agar aman.
+        $card.Size = New-Object System.Drawing.Size(352, 105)
+        $card.Margin = New-Object System.Windows.Forms.Padding(0, 10, 15, 10)
+        $card.BackColor = if ($global:IsDarkMode) {[System.Drawing.Color]::FromArgb(45, 45, 50)} else {[System.Drawing.Color]::White}
+        $card.Cursor = "Hand"
+
+        $ico = New-Object System.Windows.Forms.Label
+        $ico.Text = [char]$IconCode
+        $ico.Font = New-Object System.Drawing.Font("Segoe MDL2 Assets", 24)
+        $ico.AutoSize = $true
+        $ico.Location = New-Object System.Drawing.Point(15, 30)
+        try { $ico.ForeColor = [System.Drawing.Color]::FromName($IconColor) } catch { $ico.ForeColor = [System.Drawing.Color]::FromArgb(0, 102, 204) }
+        $card.Controls.Add($ico)
+
+        $lTitle = New-Object System.Windows.Forms.Label
+        $lTitle.Text = $Title
+        $lTitle.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
+        $lTitle.ForeColor = if ($global:IsDarkMode) {[System.Drawing.Color]::White} else {[System.Drawing.Color]::FromArgb(40, 40, 40)}
+        $lTitle.Location = New-Object System.Drawing.Point(65, 18)
+        $lTitle.Width = $card.Width - 80
+        $card.Controls.Add($lTitle)
+
+        $lSub = New-Object System.Windows.Forms.Label
+        $lSub.Text = $Desc
+        $lSub.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+        $lSub.ForeColor = [System.Drawing.Color]::Gray
+        $lSub.Location = New-Object System.Drawing.Point(67, 48)
+        $lSub.Size = New-Object System.Drawing.Size(($card.Width - 85), 45)
+        $card.Controls.Add($lSub)
+
+        $card.Add_Click($ActionScript); $ico.Add_Click($ActionScript); $lTitle.Add_Click($ActionScript); $lSub.Add_Click($ActionScript)
+        $card.Add_MouseEnter({ $this.BackColor = if ($global:IsDarkMode) {[System.Drawing.Color]::FromArgb(60, 60, 65)} else {[System.Drawing.Color]::FromArgb(235, 245, 255)} })
+        $card.Add_MouseLeave({ $this.BackColor = if ($global:IsDarkMode) {[System.Drawing.Color]::FromArgb(45, 45, 50)} else {[System.Drawing.Color]::White} })
+
+        $flowGrid.Controls.Add($card)
+        $null = $card.Handle; &$SetRounded $card 12
+    }
+
+    # --- MENAMBAHKAN ACTION CARDS ---
+    Add-UpdateCard "Disable Windows Update" "Hentikan paksa pembaruan otomatis hingga tahun 2075." 0xE71A "Red" { Action-UpdateDisable }
+    Add-UpdateCard "Custom Pause Date" "Pilih sendiri tanggal kapan Windows Update akan dilanjutkan." 0xE787 "MediumPurple" { Action-UpdatePauseCustom }
+    Add-UpdateCard "Enable Windows Update" "Kembalikan pengaturan pembaruan otomatis ke standar pabrik." 0xE898 "LimeGreen" { Action-UpdateEnable }
+    Add-UpdateCard "Reset Update Components" "Perbaiki error download dengan mereset servis & folder cache." 0xE823 "Orange" { Action-UpdateReset }
+    Add-UpdateCard "Hide/Show Updates" "Alat resmi Microsoft untuk sembunyikan update bermasalah." 0xE890 "DeepSkyBlue" { Action-UpdateHide }
+
+    # --- SPECIAL CARD: LOCK TARGET VERSION (FULL WIDTH DENGAN UI KERENMU) ---
+    $lockCard = New-Object System.Windows.Forms.Panel
+    $lockCard.Size = New-Object System.Drawing.Size(719, 105)
+    $lockCard.Margin = New-Object System.Windows.Forms.Padding(0, 10, 15, 10)
+    $lockCard.BackColor = if ($global:IsDarkMode) {[System.Drawing.Color]::FromArgb(45, 45, 50)} else {[System.Drawing.Color]::White}
+    
+    $icoLock = New-Object System.Windows.Forms.Label
+    $icoLock.Text = [char]0xE72E 
+    $icoLock.Font = New-Object System.Drawing.Font("Segoe MDL2 Assets", 24)
+    $icoLock.AutoSize = $true
+    $icoLock.Location = New-Object System.Drawing.Point(15, 30)
+    $icoLock.ForeColor = [System.Drawing.Color]::Gold
+    $lockCard.Controls.Add($icoLock)
+
+    $lTitleLock = New-Object System.Windows.Forms.Label
+    $lTitleLock.Text = "Lock Target Version"
+    $lTitleLock.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
+    $lTitleLock.ForeColor = if ($global:IsDarkMode) {[System.Drawing.Color]::White} else {[System.Drawing.Color]::FromArgb(40, 40, 40)}
+    $lTitleLock.Location = New-Object System.Drawing.Point(65, 18)
+    $lTitleLock.AutoSize = $true
+    $lockCard.Controls.Add($lTitleLock)
+
+    $lSubLock = New-Object System.Windows.Forms.Label
+    $lSubLock.Text = "Kunci OS untuk mencegah update paksa ke versi lain."
+    $lSubLock.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Regular)
+    $lSubLock.ForeColor = [System.Drawing.Color]::Gray
+    $lSubLock.Location = New-Object System.Drawing.Point(67, 48)
+    $lSubLock.Size = New-Object System.Drawing.Size(300, 40)
+    $lockCard.Controls.Add($lSubLock)
+
+    $cbOS = New-Object System.Windows.Forms.ComboBox
+    $cbOS.Name = "ComboOS"
+    $cbOS.Items.AddRange(@("Windows 10", "Windows 11"))
+    $cbOS.SelectedIndex = 1 
+    $cbOS.Size = New-Object System.Drawing.Size(105, 30)
+    $cbOS.Location = New-Object System.Drawing.Point(375, 38)
+    $cbOS.DropDownStyle = "DropDownList"
+    $lockCard.Controls.Add($cbOS)
+
+    $cbVer = New-Object System.Windows.Forms.ComboBox
+    $cbVer.Name = "ComboVer"
+    $cbVer.Size = New-Object System.Drawing.Size(65, 30)
+    $cbVer.Location = New-Object System.Drawing.Point(490, 38)
+    $cbVer.DropDownStyle = "DropDownList"
+    $cbVer.Items.AddRange(@("21H2", "22H2", "23H2", "24H2", "25H2"))
+    $cbVer.SelectedIndex = 2 
+    $lockCard.Controls.Add($cbVer)
+
+    $cbOS.Add_SelectedIndexChanged({
+        $cVer = $this.Parent.Controls["ComboVer"]
+        if ($cVer) {
+            $cVer.Items.Clear()
+            if ($this.SelectedItem.ToString() -eq "Windows 10") {
+                $cVer.Items.AddRange(@("21H2", "22H2"))
+                $cVer.SelectedIndex = 1 
+            } else {
+                $cVer.Items.AddRange(@("21H2", "22H2", "23H2", "24H2", "25H2"))
+                $cVer.SelectedIndex = 2 
+            }
+        }
+    })
+    
+    $btnLock = New-Object System.Windows.Forms.Button
+    $btnLock.Text = "Lock"
+    $btnLock.BackColor = $cP.Header
+    $btnLock.ForeColor = [System.Drawing.Color]::White
+    $btnLock.FlatStyle = "Flat"
+    $btnLock.Size = New-Object System.Drawing.Size(60, 28)
+    $btnLock.Location = New-Object System.Drawing.Point(565, 37)
+    $btnLock.Cursor = "Hand"
+    $btnLock.Add_Click({
+        $cOS = $this.Parent.Controls["ComboOS"]
+        $cVer = $this.Parent.Controls["ComboVer"]
+        
+        # Format tulisan harus "Windows10" atau "Windows11" tanpa spasi
+        $prod = $cOS.SelectedItem.ToString().Replace(" ", "")
+        $ver = $cVer.SelectedItem.ToString()
+        
+        try {
+            $Path = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate"
+            if (-not (Test-Path $Path)) { New-Item -Path $Path -Force | Out-Null }
+            Set-ItemProperty -Path $Path -Name "ProductVersion" -Value $prod -Force
+            Set-ItemProperty -Path $Path -Name "TargetReleaseVersion" -Value 1 -Type DWord -Force
+            Set-ItemProperty -Path $Path -Name "TargetReleaseVersionInfo" -Value $ver -Force
+            [System.Windows.Forms.MessageBox]::Show("Berhasil dikunci!`nSistem tidak akan melewati versi $prod $ver.`nSilakan Restart PC untuk menerapkan.", "Success", "OK", "Information")
+        } catch {
+            [System.Windows.Forms.MessageBox]::Show("Gagal mengunci versi. Pastikan Anda menjalankan aplikasi sebagai Administrator.", "Error", "OK", "Error")
+        }
+    })
+    $lockCard.Controls.Add($btnLock)
+
+    $btnClear = New-Object System.Windows.Forms.Button
+    $btnClear.Text = "Clear"
+    $btnClear.BackColor = [System.Drawing.Color]::Crimson
+    $btnClear.ForeColor = [System.Drawing.Color]::White
+    $btnClear.FlatStyle = "Flat"
+    $btnClear.Size = New-Object System.Drawing.Size(60, 28)
+    $btnClear.Location = New-Object System.Drawing.Point(635, 37)
+    $btnClear.Cursor = "Hand"
+    $btnClear.Add_Click({
+        try {
+            $Path = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate"
+            Remove-ItemProperty -Path $Path -Name "ProductVersion" -ErrorAction SilentlyContinue
+            Remove-ItemProperty -Path $Path -Name "TargetReleaseVersion" -ErrorAction SilentlyContinue
+            Remove-ItemProperty -Path $Path -Name "TargetReleaseVersionInfo" -ErrorAction SilentlyContinue
+            [System.Windows.Forms.MessageBox]::Show("Kunci Versi OS berhasil dihapus! Sistem akan menerima update otomatis kembali.", "Success", "OK", "Information")
+        } catch {
+            [System.Windows.Forms.MessageBox]::Show("Gagal menghapus kunci versi.", "Error", "OK", "Error")
+        }
+    })
+    $lockCard.Controls.Add($btnClear)
+
+    $flowGrid.Controls.Add($lockCard)
+    $null = $lockCard.Handle; &$SetRounded $lockCard 12
+
+    $contentPanel.Controls.Add($pnlMain)
+}
+
+# ========================================================
+# SELESAI RENDER WINDOWS UPDATES
+# ========================================================
+
+# ========================================================
+# MULAI RENDER UPGRADE LICENSE
 # ========================================================
 function Action-LicHome {
     Write-Log "Action Triggered: Changing Windows edition to Home..."
@@ -2299,6 +2525,15 @@ function Render-UpgradeLicense {
 
     $contentPanel.Controls.Add($pnlMain)
 }
+
+# ========================================================
+# SELESAI RENDER WINDOWS DEFENDER
+# ========================================================
+
+
+# ========================================================
+# MULAI RENDER DOWNLOAD ISO
+# ========================================================
 
 # =========================================================================
 # ACTIONS: OPEN DOWNLOAD URL
@@ -2567,6 +2802,14 @@ function Render-DownloadOS {
     $spacer = New-Object System.Windows.Forms.Panel; $spacer.Size = New-Object System.Drawing.Size(715, 40); $pnlMain.Controls.Add($spacer) 
     $contentPanel.Controls.Add($pnlMain) 
 }
+
+# ========================================================
+# SELESAI RENDER DOWNLOAD ISO
+# ========================================================
+
+# ========================================================
+# MULAI RENDER WINDOWS TWEAKS
+# ========================================================
 
 # ==========================================
 # [BLOK 1] DATABASE WINDOWS TWEAKS
@@ -11264,7 +11507,7 @@ exit /b 0
 '@
 }
                 }
-
+                
                 # Eksekusi Script Revert
                     if (![string]::IsNullOrWhiteSpace($revertScript)) {
                         try {
@@ -11311,7 +11554,11 @@ exit /b 0
 }
 
 # ========================================================
-# BAGIAN: LOGIKA SYSTEM REPAIR
+# SELESAI RENDER WINDOWS TWEAKS
+# ========================================================
+
+# ========================================================
+# MULAI RENDER SYSTEM REPAIR
 # ========================================================
 function Action-RepStandard {
     Write-Log "Action Triggered: User initiated Standard System Repair."
@@ -11518,7 +11765,11 @@ function Render-SystemRepair {
 }
 
 # ========================================================
-# BAGIAN: LOGIKA SYSTEM REPORT
+# SELESAI RENDER SYSTEM REPAIR
+# ========================================================
+
+# ========================================================
+# MULAI RENDER SYSTEM REPORT
 # ========================================================
 function Action-ReportNFO {
     Write-Log "Action Triggered: User initiated NFO System Report export."
@@ -11699,7 +11950,11 @@ function Render-SystemReport {
 }
 
 # ========================================================
-# BAGIAN: LOGIKA BACKUP & RESTORE
+# SELESAI RENDER SYSTEM REPORT
+# ========================================================
+
+# ========================================================
+# MULAI RENDER BACKUP / RESTORE
 # ========================================================
 # --- Helper untuk Memilih Folder ---
 function Get-UserSelectedPath ($Description) {
@@ -11992,9 +12247,12 @@ function Render-BackupRestore {
 }
 
 # ========================================================
-# BAGIAN: LOGIKA ADD SETTINGS (MANUAL NOTES)
+# SELESAI RENDER BACKUP / RESTORE
 # ========================================================
 
+# ========================================================
+# MULAI RENDER TECHNICAL GUIDES
+# ========================================================
 # --- Helper: Menampilkan Jendela Catatan ---
 function Show-NoteWindow ($Title, $Content) {
     # Setup Form
@@ -12358,9 +12616,12 @@ function Render-AddSettings {
 }
 
 # ========================================================
-# BAGIAN: LOGIKA OTHER TOOLS
+# SELESAI RENDER TECHNICAL GUIDES
 # ========================================================
 
+# ========================================================
+# MULAI RENDER OTHER TOOLS
+# ========================================================
 function Action-ToolTemp {
     Write-Log "Cleaning Temp Files..."
     if ([System.Windows.Forms.MessageBox]::Show("Script akan menghapus file sampah di C:\Windows\Temp dan %TEMP% User.`n`nLanjutkan?", "Konfirmasi", "YesNo", "Warning") -eq "Yes") {
@@ -12610,221 +12871,7 @@ function Render-OtherTools {
 }
 
 # ========================================================
-# MULAI BAGIAN: LOGIKA WINDOWS DEFENDER
-# ========================================================
-function Action-DefEnableIT {
-    Write-Log "Starting IT Limit Fix (Reset Policies)..."
-    $keys = @(
-        "HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies",
-        "HKCU:\Software\Microsoft\WindowsSelfHost", "HKCU:\Software\Policies",
-        "HKLM:\Software\Microsoft\Policies", "HKLM:\Software\Microsoft\Windows\CurrentVersion\Policies",
-        "HKLM:\Software\Microsoft\Windows\CurrentVersion\WindowsStore\WindowsUpdate",
-        "HKLM:\Software\Microsoft\WindowsSelfHost", "HKLM:\Software\Policies",
-        "HKLM:\Software\WOW6432Node\Microsoft\Policies",
-        "HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Policies"
-    )
-    foreach ($k in $keys) { if (Test-Path $k) { Remove-Item -Path $k -Recurse -Force -ErrorAction SilentlyContinue } }
-    [System.Windows.Forms.MessageBox]::Show("IT Limit Policies have been reset!", "Success", "OK", "Information")
-}
-
-function Action-DefDisable {
-    $msg = "PENTING: Fitur ini HANYA BEKERJA jika 'Tamper Protection' di Windows Security sudah dimatikan secara manual.`n`nApakah Anda sudah mematikannya?"
-    $ask = [System.Windows.Forms.MessageBox]::Show($msg, "Cek Tamper Protection", "YesNo", "Warning")
-    
-    if ($ask -eq "Yes") {
-        Write-Log "Disabling Windows Defender..."
-        try {
-            # --- 1. Disabling Windows Defender entirely ---
-            $basePath = "HKLM\SOFTWARE\Policies\Microsoft\Windows Defender"
-            cmd.exe /c "reg add `"$basePath`" /v `"DisableAntiSpyware`" /t REG_DWORD /d 1 /f" | Out-Null
-            cmd.exe /c "reg add `"$basePath`" /v `"DisableRealtimeMonitoring`" /t REG_DWORD /d 1 /f" | Out-Null
-            cmd.exe /c "reg add `"$basePath`" /v `"DisableAntiVirus`" /t REG_DWORD /d 1 /f" | Out-Null
-            cmd.exe /c "reg add `"$basePath`" /v `"DisableSpecialRunningModes`" /t REG_DWORD /d 1 /f" | Out-Null
-            cmd.exe /c "reg add `"$basePath`" /v `"DisableRoutinelyTakingAction`" /t REG_DWORD /d 1 /f" | Out-Null
-            cmd.exe /c "reg add `"$basePath`" /v `"ServiceKeepAlive`" /t REG_DWORD /d 0 /f" | Out-Null
-
-            # --- 2. Disable real-time protection ---
-            $rtPath = "HKLM\SOFTWARE\Policies\Microsoft\Windows Defender\Real-Time Protection"
-            cmd.exe /c "reg add `"$rtPath`" /v `"DisableBehaviorMonitoring`" /t REG_DWORD /d 1 /f" | Out-Null
-            cmd.exe /c "reg add `"$rtPath`" /v `"DisableOnAccessProtection`" /t REG_DWORD /d 1 /f" | Out-Null
-            cmd.exe /c "reg add `"$rtPath`" /v `"DisableScanOnRealtimeEnable`" /t REG_DWORD /d 1 /f" | Out-Null
-            cmd.exe /c "reg add `"$rtPath`" /v `"DisableRealtimeMonitoring`" /t REG_DWORD /d 1 /f" | Out-Null
-
-            # --- 3. Disable automatic signature updates ---
-            $sigPath = "HKLM\SOFTWARE\Policies\Microsoft\Windows Defender\Signature Updates"
-            cmd.exe /c "reg add `"$sigPath`" /v `"ForceUpdateFromMU`" /t REG_DWORD /d 0 /f" | Out-Null
-
-            # --- 4. Disable block feature & Other Policies ---
-            $spyPath = "HKLM\SOFTWARE\Policies\Microsoft\Windows Defender\Spynet"
-            cmd.exe /c "reg add `"$spyPath`" /v `"DisableBlockAtFirstSeen`" /t REG_DWORD /d 1 /f" | Out-Null
-            cmd.exe /c "reg add `"$spyPath`" /v `"SubmitSamplesConsent`" /t REG_DWORD /d 2 /f" | Out-Null
-            
-            $mpPath = "HKLM\SOFTWARE\Policies\Microsoft\Windows Defender\MpEngine"
-            cmd.exe /c "reg add `"$mpPath`" /v `"MpEnablePus`" /t REG_DWORD /d 0 /f" | Out-Null
-            cmd.exe /c "reg add `"$mpPath`" /v `"MpEngineRunTime`" /t REG_DWORD /d 0 /f" | Out-Null
-
-            $repPath = "HKLM\SOFTWARE\Policies\Microsoft\Windows Defender\Reporting"
-            cmd.exe /c "reg add `"$repPath`" /v `"DisableEnhancedNotifications`" /t REG_DWORD /d 1 /f" | Out-Null
-
-            # --- 5. Stop and Disable Services ---
-            cmd.exe /c "sc stop WinDefend" | Out-Null
-            cmd.exe /c "sc stop Sense" | Out-Null
-            cmd.exe /c "sc config WinDefend start= disabled" | Out-Null
-            cmd.exe /c "sc config Sense start= disabled" | Out-Null
-
-            [System.Windows.Forms.MessageBox]::Show("Windows Defender telah dinonaktifkan secara mendalam via Registry.`nSilakan RESTART PC Anda agar efeknya bekerja penuh.", "Done", "OK", "Information")
-        } catch {
-            [System.Windows.Forms.MessageBox]::Show("Gagal mengeksekusi perintah. Pastikan Anda menjalankan aplikasi ini sebagai Administrator (Run as Admin).", "Error", "OK", "Error")
-        }
-    }
-}
-
-function Action-DefEnable {
-    Write-Log "Enabling Windows Defender..."
-    try {
-        # Menghapus seluruh folder Windows Defender di Policies Registry (Kembali ke Default)
-        $basePath = "HKLM\SOFTWARE\Policies\Microsoft\Windows Defender"
-        cmd.exe /c "reg delete `"$basePath`" /f" | Out-Null
-        
-        # Mengembalikan service ke Automatic dan mencoba menyalakannya
-        cmd.exe /c "sc config WinDefend start= auto" | Out-Null
-        cmd.exe /c "sc config Sense start= auto" | Out-Null
-        cmd.exe /c "sc start WinDefend" | Out-Null
-        cmd.exe /c "sc start Sense" | Out-Null
-
-        [System.Windows.Forms.MessageBox]::Show("Pengaturan Windows Defender telah dikembalikan ke standar pabrik.`nSilakan RESTART PC Anda agar fitur perlindungan aktif kembali.", "Success", "OK", "Information")
-    } catch {
-        [System.Windows.Forms.MessageBox]::Show("Terjadi kesalahan. Pastikan aplikasi berjalan sebagai Administrator.", "Error", "OK", "Error")
-    }
-}
-
-function Render-WindowsDefender {
-    $contentPanel.Controls.Clear()
-    $cP = if ($global:IsDarkMode) { $ThemePalettes.Dark } else { $ThemePalettes.Light }
-
-    $pnlMain = New-Object System.Windows.Forms.Panel
-    $pnlMain.Dock = "Fill"
-    $pnlMain.BackColor = $cP.Bg
-    $pnlMain.AutoScroll = $true
-
-    # --- 1. HEADER BANNER ---
-    $bannerCard = New-Object System.Windows.Forms.Panel
-    $bannerCard.Size = New-Object System.Drawing.Size(735, 110)
-    $bannerCard.Location = New-Object System.Drawing.Point(30, 30)
-    $bannerCard.BackColor = $cP.Header 
-    
-    $banRadius = 20
-    $banPath = New-Object System.Drawing.Drawing2D.GraphicsPath
-    $banPath.AddArc(0, 0, $banRadius, $banRadius, 180, 90)
-    $banPath.AddArc($bannerCard.Width - $banRadius, 0, $banRadius, $banRadius, 270, 90)
-    $banPath.AddArc($bannerCard.Width - $banRadius, $bannerCard.Height - $banRadius, $banRadius, $banRadius, 0, 90)
-    $banPath.AddArc(0, $bannerCard.Height - $banRadius, $banRadius, $banRadius, 90, 90)
-    $banPath.CloseAllFigures()
-    $bannerCard.Region = New-Object System.Drawing.Region($banPath)
-
-    $lblTitle = New-Object System.Windows.Forms.Label
-    $lblTitle.Text = "Windows Defender Manager"
-    $lblTitle.Font = New-Object System.Drawing.Font("Segoe UI", 18, [System.Drawing.FontStyle]::Bold)
-    $lblTitle.ForeColor = [System.Drawing.Color]::White
-    $lblTitle.AutoSize = $true
-    $lblTitle.Location = New-Object System.Drawing.Point(25, 20)
-    $bannerCard.Controls.Add($lblTitle)
-
-    $lblSubTitle = New-Object System.Windows.Forms.Label
-    $lblSubTitle.Text = "Kelola proteksi bawaan Windows dan bersihkan batasan sistem (IT Policies) dengan aman."
-    $lblSubTitle.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Regular)
-    $lblSubTitle.ForeColor = [System.Drawing.Color]::LightGray
-    $lblSubTitle.AutoSize = $true
-    $lblSubTitle.Location = New-Object System.Drawing.Point(28, 60)
-    $bannerCard.Controls.Add($lblSubTitle)
-
-    $pnlMain.Controls.Add($bannerCard)
-
-    # --- 2. GRID UNTUK ACTION CARDS ---
-    $flpCards = New-Object System.Windows.Forms.FlowLayoutPanel
-    $flpCards.Location = New-Object System.Drawing.Point(25, 160)
-    $flpCards.Size = New-Object System.Drawing.Size(770, 0)
-    $flpCards.AutoSize = $true
-    $flpCards.AutoSizeMode = "GrowAndShrink"
-    $flpCards.AutoScroll = $false # DIMATIKAN AGAR TIDAK ADA DOUBLE SCROLL
-    $flpCards.FlowDirection = "TopDown"
-    $flpCards.WrapContents = $false
-
-    # --- HELPER FUNCTION UNTUK KARTU TOMBOL (FIXED) ---
-    function Create-ActionCard ($Title, $Desc, $IconCode, $ColorName, $ActionScript) {
-        $card = New-Object System.Windows.Forms.Panel
-        $card.Size = New-Object System.Drawing.Size(735, 90)
-        $card.Margin = New-Object System.Windows.Forms.Padding(5, 5, 15, 10)
-        $card.BackColor = $cP.Card
-        $card.Cursor = [System.Windows.Forms.Cursors]::Hand
-
-        $rad = 15
-        $path = New-Object System.Drawing.Drawing2D.GraphicsPath
-        $path.AddArc(0, 0, $rad, $rad, 180, 90)
-        $path.AddArc($card.Width - $rad, 0, $rad, $rad, 270, 90)
-        $path.AddArc($card.Width - $rad, $card.Height - $rad, $rad, $rad, 0, 90)
-        $path.AddArc(0, $card.Height - $rad, $rad, $rad, 90, 90)
-        $path.CloseAllFigures()
-        $card.Region = New-Object System.Drawing.Region($path)
-
-        $ico = New-Object System.Windows.Forms.Label
-        $ico.Text = [char]$IconCode
-        $ico.Font = New-Object System.Drawing.Font("Segoe MDL2 Assets", 24)
-        $ico.AutoSize = $true
-        $ico.Location = New-Object System.Drawing.Point(20, 25)
-        try { $ico.ForeColor = [System.Drawing.Color]::FromName($ColorName) } catch { $ico.ForeColor = $cP.Accent }
-        $card.Controls.Add($ico)
-
-        $lTitle = New-Object System.Windows.Forms.Label
-        $lTitle.Text = $Title
-        $lTitle.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
-        $lTitle.ForeColor = $cP.Text
-        $lTitle.Location = New-Object System.Drawing.Point(80, 20)
-        $lTitle.AutoSize = $true
-        $card.Controls.Add($lTitle)
-
-        $lSub = New-Object System.Windows.Forms.Label
-        $lSub.Text = $Desc
-        $lSub.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Regular)
-        $lSub.ForeColor = [System.Drawing.Color]::Gray
-        $lSub.Location = New-Object System.Drawing.Point(80, 48)
-        $lSub.Size = New-Object System.Drawing.Size(630, 20)
-        $lSub.AutoSize = $false
-        $lSub.AutoEllipsis = $true
-        $card.Controls.Add($lSub)
-
-        # --- PERBAIKAN FINAL: Evaluasi warna langsung di dalam kurung kurawal ---
-        $card.Add_MouseEnter({ $this.BackColor = if ($global:IsDarkMode) { [System.Drawing.Color]::FromArgb(45, 45, 55) } else { [System.Drawing.Color]::FromArgb(235, 235, 235) } })
-        $card.Add_MouseLeave({ $this.BackColor = if ($global:IsDarkMode) { [System.Drawing.Color]::FromArgb(30, 30, 35) } else { [System.Drawing.Color]::White } })
-
-        $ico.Add_MouseEnter({ $this.Parent.BackColor = if ($global:IsDarkMode) { [System.Drawing.Color]::FromArgb(45, 45, 55) } else { [System.Drawing.Color]::FromArgb(235, 235, 235) } })
-        $ico.Add_MouseLeave({ $this.Parent.BackColor = if ($global:IsDarkMode) { [System.Drawing.Color]::FromArgb(30, 30, 35) } else { [System.Drawing.Color]::White } })
-
-        $lTitle.Add_MouseEnter({ $this.Parent.BackColor = if ($global:IsDarkMode) { [System.Drawing.Color]::FromArgb(45, 45, 55) } else { [System.Drawing.Color]::FromArgb(235, 235, 235) } })
-        $lTitle.Add_MouseLeave({ $this.Parent.BackColor = if ($global:IsDarkMode) { [System.Drawing.Color]::FromArgb(30, 30, 35) } else { [System.Drawing.Color]::White } })
-
-        $lSub.Add_MouseEnter({ $this.Parent.BackColor = if ($global:IsDarkMode) { [System.Drawing.Color]::FromArgb(45, 45, 55) } else { [System.Drawing.Color]::FromArgb(235, 235, 235) } })
-        $lSub.Add_MouseLeave({ $this.Parent.BackColor = if ($global:IsDarkMode) { [System.Drawing.Color]::FromArgb(30, 30, 35) } else { [System.Drawing.Color]::White } })
-
-        $card.Add_Click($ActionScript)
-        $ico.Add_Click($ActionScript)
-        $lTitle.Add_Click($ActionScript)
-        $lSub.Add_Click($ActionScript)
-
-        return $card
-    }
-
-    # Action Cards
-    $flpCards.Controls.Add((Create-ActionCard "Reset IT Policies (Unlock Settings)" "Hapus semua batasan/policy lokal Windows. Berguna jika Defender terkunci 'Managed by your organization'." 0xE90F "Orange" { Action-DefEnableIT }))
-    $flpCards.Controls.Add((Create-ActionCard "Disable Windows Defender" "Matikan perlindungan Real-time, AntiVirus, dan Spyware secara paksa lewat Registry." 0xE711 "Red" { Action-DefDisable }))
-    $flpCards.Controls.Add((Create-ActionCard "Enable Windows Defender" "Pulihkan pengaturan Default perlindungan Windows dan nyalakan ulang servis." 0xE8FB "LimeGreen" { Action-DefEnable }))
-
-    $pnlMain.Controls.Add($flpCards)
-    $contentPanel.Controls.Add($pnlMain)
-}
-
-# ========================================================
-# SELESAI BAGIAN LOGIKA DEFENDER
+# SELESAI RENDER OTHER TOOLS
 # ========================================================
 
 function Navigate-To ($MenuName) {
@@ -12837,54 +12884,38 @@ function Navigate-To ($MenuName) {
     # 2. Cek Menu Apa yang Dipilih
     switch ($MenuName) {
         "Dashboard" { 
-            # Pastikan function Render-Dashboard sudah ada sebelumnya
-            if (Get-Command "Render-Dashboard" -ErrorAction SilentlyContinue) { 
-                Render-Dashboard 
-            } else {
-                Write-Host "Function Render-Dashboard belum dibuat"
-            }
+            Render-Dashboard 
         }
-
 	    "Software Center" {
             Render-SoftwareCenter
         }
-
         "Windows Defender" { 
             Render-WindowsDefender
         }
-
         "Windows Updates" { 
             Render-WindowsUpdates 
         }
-
         "Upgrade License" {
             Render-UpgradeLicense
         }
-
         "Windows Tweaks" {
             Render-WindowsTweaks
         }
-
         "System Repair" {
             Render-SystemRepair
         }
-
         "System Report" {
             Render-SystemReport
         }
-
         "Backup / Restore" {
             Render-BackupRestore
         }
-
         "Download ISO" {
             Render-DownloadOS
         }
-
         "Technical Guides" {
             Render-AddSettings
         }
-
         "Other Tools" {
             Render-OtherTools
         }
