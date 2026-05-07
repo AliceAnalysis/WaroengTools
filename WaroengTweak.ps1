@@ -23,7 +23,7 @@
 #>
 
 # ========================================================
-# AUTO-ELEVATE TO ADMINISTRATOR
+# ELEVATE TO ADMINISTRATOR
 # ========================================================
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 
