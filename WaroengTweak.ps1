@@ -14011,11 +14011,11 @@ function Render-OtherTools {
         $ctrl.Region = New-Object System.Drawing.Region($p)
     }
 
-    # PANEL UTAMA (Scroll utama diletakkan di sini)
+    # PANEL UTAMA (Scroll vertical dikunci di sini)
     $pnlMain = New-Object System.Windows.Forms.Panel
     $pnlMain.Dock = "Fill"
     $pnlMain.BackColor = $cP.Bg
-    $pnlMain.AutoScroll = $true  # <--- AKTIFKAN SCROLL HALAMAN DI SINI
+    $pnlMain.AutoScroll = $true  
 
     # --- 1. HEADER BANNER ---
     $bannerCard = New-Object System.Windows.Forms.Panel
@@ -14050,26 +14050,28 @@ function Render-OtherTools {
 
     $pnlMain.Controls.Add($bannerCard)
 
-    # --- 2. CONTAINER FLOW (Diperbaiki Layout-nya) ---
+    # --- 2. CONTAINER FLOW (KUNCI PERBAIKAN DI SINI) ---
     $flowGrid = New-Object System.Windows.Forms.FlowLayoutPanel
     $flowGrid.Location = New-Object System.Drawing.Point(30, 160)
     $flowGrid.Width = 735
-    $flowGrid.AutoScroll = $false         # <--- Matikan scroll internal agar tidak konflik
-    $flowGrid.AutoSize = $true           # <--- Biar grid memanjang otomatis ke bawah sesuai isi
+    # Trik Utama: Kunci lebar maksimal di 735 agar kartu otomatis membungkus (wrap) ke bawah
+    $flowGrid.MaximumSize = New-Object System.Drawing.Size(735, 0) 
+    $flowGrid.WrapContents = $true       # Memastikan fitur bungkus baris aktif
+    $flowGrid.AutoSize = $true           # Biar memanjang ke bawah mengikuti jumlah baris kartu
     $flowGrid.AutoSizeMode = "GrowAndShrink"
-    $flowGrid.Padding = New-Object System.Windows.Forms.Padding(0, 0, 0, 30) # Padding bawah biar tidak mepet
+    $flowGrid.AutoScroll = $false        # Matikan scroll internal biar tidak bentrok
+    $flowGrid.Padding = New-Object System.Windows.Forms.Padding(0, 0, 0, 40) # Spasi extra di bawah agar tidak kepotong
     $pnlMain.Controls.Add($flowGrid)
 
-    # --- FUNCTION HELPER: CREATE CARD FIX ---
+    # --- FUNCTION HELPER: CREATE CARD ---
     function Add-ToolCard ($Title, $Desc, $IconCode, $IconColor, $Action) {
         $card = New-Object System.Windows.Forms.Panel
-        # FIX: Gunakan ukuran static 345px agar tidak terkena bug Width = 0 saat inisialisasi awal
         $card.Size = New-Object System.Drawing.Size(345, 100) 
-        $card.Margin = New-Object System.Windows.Forms.Padding(0, 10, 20, 10)
+        $card.Margin = New-Object System.Windows.Forms.Padding(0, 10, 20, 10) # Jarak antar kartu yang presisi
         $card.BackColor = if ($global:IsDarkMode) {[System.Drawing.Color]::FromArgb(45, 45, 50)} else {[System.Drawing.Color]::White}
         $card.Cursor = "Hand"
 
-        # Icon Label dengan Warna Kustom
+        # Icon Label
         $ico = New-Object System.Windows.Forms.Label
         $ico.Text = [char]$IconCode
         $ico.Font = New-Object System.Drawing.Font("Segoe MDL2 Assets", 24)
@@ -14106,7 +14108,6 @@ function Render-OtherTools {
 
         $flowGrid.Controls.Add($card)
         
-        # Sempurnakan siklus render lengkungan objek
         $null = $card.Handle
         &$SetRounded $card 12
     }
@@ -14124,9 +14125,9 @@ function Render-OtherTools {
     Add-ToolCard "Enable Hyper-V (Auto)" "Aktifkan kembali mesin virtualisasi bcdedit untuk WSL, Docker, / VM." 0xEE3F "LimeGreen" { Action-HyperVEnable }
     Add-ToolCard "Create Restore Point" "Buat titik keamanan sistem (Safety Guard) saat ini sebelum tweaks ekstrem." 0xE73E "DodgerBlue" { Action-CreateRestorePoint }
 
-    # SINKRONISASI AKHIR LAYOUT ENGINE
-    $pnlMain.ResumeLayout()
+    # SINKRONISASI RENDER LAYOUT
     $flowGrid.ResumeLayout()
+    $pnlMain.ResumeLayout()
 
     $contentPanel.Controls.Add($pnlMain)
 }
