@@ -22,212 +22,308 @@
     ========================================================
 #>
 
-# ========================================================
-# ELEVATE TO ADMINISTRATOR
-# ========================================================
+# =========================================================================
+# FASE 1: ELEVASI HAK AKSES ADMINISTRATOR (UAC BYPASS LOGIC)
+# =========================================================================
+# Mengecek apakah user saat ini menjalankan PowerShell dengan hak akses Administrator.
+# Menggunakan library keamanan bawaan .NET (.WindowsPrincipal dan .WindowsBuiltInRole).
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 
+# Jika BUKAN Administrator, maka sistem akan mencoba "memaksa" elevasi akses.
 if (-not $isAdmin) {
     try {
-        # Mengecek apakah script sudah disave sebagai file .ps1
+        # Pengecekan krusial: Memastikan skrip ini sedang berjalan dari file fisik (.ps1).
+        # Variabel $PSCommandPath akan bernilai kosong jika skrip hanya di-copy-paste ke terminal.
         if ($PSCommandPath) {
-            # Jalankan ulang script ini dengan hak akses Admin (Verb RunAs)
+            
+            # Membuka kembali jendela PowerShell baru dan menjalankan file skrip ini.
+            # Parameter paling penting di sini adalah '-Verb RunAs'. 
+            # Perintah inilah yang memicu munculnya jendela konfirmasi biru/kuning (UAC Prompt) dari Windows.
             Start-Process powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs
-            Exit # Tutup jendela PowerShell yang tidak punya akses Admin
+            
+            # Langsung mematikan/menutup jendela PowerShell lama yang tidak memiliki akses Admin.
+            Exit 
         } else {
+            # Jika user menjalankan skrip tanpa menyimpannya ke file (misal di PowerShell ISE belum di-save),
+            # tampilkan peringatan GUI agar sistem tidak crash atau terjebak dalam loop.
             [System.Windows.Forms.MessageBox]::Show("Harap simpan script ini sebagai file .ps1 terlebih dahulu agar fitur Auto-Admin bisa bekerja.", "Error", "OK", "Error")
             Exit
         }
     } catch {
-        # Jika user menekan "No" pada prompt UAC Windows
+        # Blok catch ini berfungsi sebagai "Fail-Safe".
+        # Jika jendela UAC muncul lalu user menekan tombol "NO" atau "Cancel",
+        # maka akan terjadi error (Exception). Kita tangkap error itu dan tutup skripnya secara halus.
         Exit
     }
 }
-# ========================================================
+# =========================================================================
 
-# --- 1. SETUP SYSTEM ---
+# =========================================================================
+# FASE 2: PERSIAPAN ANTARMUKA GRAFIS (WINDOWS FORMS)
+# =========================================================================
+# Memuat library .NET Framework yang diperlukan untuk menggambar GUI dan warna.
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
-# --- GLOBAL VARIABLES & THEME CONFIG ---
-$global:IsDarkMode = $false # Default Start Mode
+# --- GLOBAL VARIABLES & THEME CONFIGURATION ---
+# Variabel global untuk mendeteksi apakah aplikasi sedang menggunakan mode gelap atau tidak.
+$global:IsDarkMode = $false # Default: Aplikasi dimulai dengan tema Terang (Light Mode)
 
-# Definisi Warna (Light vs Dark)
+# Menggunakan struktur data 'Hashtable' untuk menyimpan palet warna.
+# Ini adalah metode profesional (Theme Engine) agar pewarnaan UI terpusat di satu tempat.
 $ThemePalettes = @{
     Dark = @{
-        Bg      = [System.Drawing.Color]::FromArgb(18, 18, 18)
-        Card    = [System.Drawing.Color]::FromArgb(30, 30, 35)
-        Text    = [System.Drawing.Color]::FromArgb(240, 240, 240)
-        Accent  = [System.Drawing.Color]::FromArgb(86, 182, 194) # Cyan
-        Header  = [System.Drawing.Color]::FromArgb(0, 110, 200)   # Blue
-        Side    = [System.Drawing.Color]::FromArgb(25, 25, 30)
-        Icon    = [char]0xE706 # Sun Icon (untuk switch ke Light)
+        Bg      = [System.Drawing.Color]::FromArgb(18, 18, 18)        # Latar belakang gelap gulita
+        Card    = [System.Drawing.Color]::FromArgb(30, 30, 35)        # Warna panel/kotak sedikit lebih terang
+        Text    = [System.Drawing.Color]::FromArgb(240, 240, 240)     # Teks putih keabu-abuan agar tidak silau
+        Accent  = [System.Drawing.Color]::FromArgb(86, 182, 194)      # Warna Aksen: Cyan (Biru Muda)
+        Header  = [System.Drawing.Color]::FromArgb(0, 110, 200)       # Header Atas: Biru Khas Windows
+        Side    = [System.Drawing.Color]::FromArgb(25, 25, 30)        # Latar Sidebar kiri
+        Icon    = [char]0xE706 # Kode font ikon 'Matahari' (Segoe MDL2) untuk tombol ganti ke Light
     }
     Light = @{
-        Bg      = [System.Drawing.Color]::FromArgb(238, 241, 245)
-        Card    = [System.Drawing.Color]::White
-        Text    = [System.Drawing.Color]::FromArgb(40, 40, 40)
-        Accent  = [System.Drawing.Color]::FromArgb(0, 100, 180)   # Darker Blue
-        Header  = [System.Drawing.Color]::FromArgb(0, 110, 200)
-        Side    = [System.Drawing.Color]::FromArgb(28, 33, 40)
-        Icon    = [char]0xE708 # Moon Icon (untuk switch ke Dark)
+        Bg      = [System.Drawing.Color]::FromArgb(238, 241, 245)     # Latar belakang putih keabu-abuan (mirip Settings Windows 11)
+        Card    = [System.Drawing.Color]::White                       # Panel warna putih bersih
+        Text    = [System.Drawing.Color]::FromArgb(40, 40, 40)        # Teks hitam keabu-abuan
+        Accent  = [System.Drawing.Color]::FromArgb(0, 100, 180)       # Warna Aksen: Biru Tua
+        Header  = [System.Drawing.Color]::FromArgb(0, 110, 200)       # Header Atas: Biru Khas Windows
+        Side    = [System.Drawing.Color]::FromArgb(28, 33, 40)        # Latar Sidebar tetap gelap agar kontras
+        Icon    = [char]0xE708 # Kode font ikon 'Bulan' (Segoe MDL2) untuk tombol ganti ke Dark
     }
 }
 
-# Pilih palette awal
+# Menyuntikkan palet warna ke variabel $p berdasarkan status DarkMode saat aplikasi baru dibuka.
 $p = if ($global:IsDarkMode) { $ThemePalettes.Dark } else { $ThemePalettes.Light }
 
+# =========================================================================
+# FASE 3: INSTANSIASI JENDELA UTAMA (MAIN FORM)
+# =========================================================================
+# Membuat "Kanvas Kosong" atau jendela utama aplikasi
 $form = New-Object System.Windows.Forms.Form
-$form.Text = "Waroeng Tools v6.5"
-$form.Size = New-Object System.Drawing.Size(1150, 800)
-$form.StartPosition = "CenterScreen"
-$form.FormBorderStyle = "FixedSingle"
-$form.MaximizeBox = $false
-$form.BackColor = $p.Bg
+$form.Text = "Waroeng Tools v6.6.1"                           # Judul aplikasi di kiri atas jendela
+$form.Size = New-Object System.Drawing.Size(1150, 800)      # Ukuran resolusi jendela (Lebar x Tinggi)
+$form.StartPosition = "CenterScreen"                        # Agar jendela otomatis muncul tepat di tengah monitor
+$form.FormBorderStyle = "FixedSingle"                       # Mengunci jendela agar ujungnya tidak bisa ditarik/diperbesar (no resize)
+$form.MaximizeBox = $false                                  # Menonaktifkan tombol "Maximize" (Perbesar Layar Penuh)
+$form.BackColor = $p.Bg                                     # Mengatur warna latar belakang kanvas menggunakan palet tema
 
+# --- INJEKSI ICON APLIKASI ---
 try {
+    # Trik Cerdas: Alih-alih menyertakan file .ico (yang akan menambah ukuran file), 
+    # script ini "mencuri/mengekstrak" icon bawaan Windows dari file iscsicpl.exe (iSCSI Initiator)
+    # untuk dijadikan icon aplikasi Waroeng Tools.
     $form.Icon = [System.Drawing.Icon]::ExtractAssociatedIcon("$env:windir\System32\iscsicpl.exe")
 } catch {
+    # Jika karena suatu alasan file iscsicpl.exe tidak ada, gunakan icon default aplikasi PowerShell.
     Write-Host "Gagal memuat icon, menggunakan icon default."
 }
 
-# ========================================================
-# FUNGSI SWITCH THEME (LOGIC)
-# ========================================================
+# =========================================================================
+# FASE 4: FUNGSI PENGGANTI TEMA (THEME SWITCHER ENGINE)
+# =========================================================================
 function Toggle-Theme {
+    # Membalikkan status (toggle) variabel global. 
+    # Jika sebelumnya $false (Light), maka diubah menjadi $true (Dark), dan sebaliknya.
     $global:IsDarkMode = -not $global:IsDarkMode
+    
+    # Menentukan palet warna baru berdasarkan status yang baru saja diubah
     $newP = if ($global:IsDarkMode) { $ThemePalettes.Dark } else { $ThemePalettes.Light }
     
-    # 1. Update Container Utama
+    # ---------------------------------------------------------------------
+    # 1. Update Warna Latar Belakang Kontainer Utama
+    # ---------------------------------------------------------------------
+    # Mengubah warna 'Kanvas Utama', 'Panel Kanan', dan 'Panel Konten' secara instan
     $form.BackColor = $newP.Bg
     $rightPanel.BackColor = $newP.Bg
     $contentPanel.BackColor = $newP.Bg
     
-    # 2. Update Dashboard Card (Jika ada)
+    # ---------------------------------------------------------------------
+    # 2. Update Warna Elemen Spesifik (Dashboard Card)
+    # ---------------------------------------------------------------------
+    # Mencari kotak Dashboard (DashCard) di dalam Panel Konten menggunakan Where-Object
     $dashBox = $contentPanel.Controls | Where-Object { $_.Name -eq "DashCard" }
+    
+    # Jika kotak Dashboard ditemukan, ubah warnanya
     if ($dashBox) {
         $dashBox.BackColor = $newP.Card
-        # Update semua Label di dalam Card
+        
+        # Looping (perulangan) untuk mengecek setiap teks (Label) yang ada di dalam kotak Dashboard
+        # Kita menggunakan '.Tag' sebagai penanda unik untuk membedakan mana teks judul dan mana teks nilai
         foreach ($ctrl in $dashBox.Controls) {
+            # Jika Tag-nya "ValText" (Teks Nilai/Data), beri warna teks standar (Putih/Hitam)
             if ($ctrl.Tag -eq "ValText") { $ctrl.ForeColor = $newP.Text }
+            
+            # Jika Tag-nya "LabelText" (Teks Judul), beri warna aksen (Cyan/Biru) agar mencolok
             if ($ctrl.Tag -eq "LabelText") { $ctrl.ForeColor = $newP.Accent }
         }
     }
 
-    # 3. Update Icon Switcher
+    # ---------------------------------------------------------------------
+    # 3. Update Ikon Tombol & Log Sistem
+    # ---------------------------------------------------------------------
+    # Mengganti ikon tombol (Matahari untuk Light Mode, Bulan untuk Dark Mode)
     $btnTheme.Text = $newP.Icon
     
-    # 4. Log
+    # Menentukan nama mode saat ini untuk dicatat ke dalam Log
     $modeName = if ($global:IsDarkMode) { "Dark" } else { "Light" }
+    
+    # Mencatat aktivitas penggantian tema ke dalam panel Log Aplikasi
     Write-Log "Theme switched to: $modeName"
 }
 
-# ========================================================
-# LAYOUT UTAMA
-# ========================================================
+# =========================================================================
+# FASE 5: PEMBUATAN TATA LETAK UTAMA (MAIN LAYOUTING)
+# =========================================================================
+
+# ---------------------------------------------------------------------
+# 1. SIDEBAR (PANEL KIRI)
+# ---------------------------------------------------------------------
 $sidebar = New-Object System.Windows.Forms.Panel
-$sidebar.Dock = "Left"; $sidebar.Width = 270; $sidebar.BackColor = $ThemePalettes.Dark.Side # Sidebar selalu gelap agar elegan
-$form.Controls.Add($sidebar)
+$sidebar.Dock = "Left"          # Merapat dan memanjang penuh ke sisi Kiri jendela
+$sidebar.Width = 270            # Lebar tetap sebesar 270 pixel
+# UI Choice: Sidebar sengaja "dikunci" menggunakan warna Dark Side secara permanen
+# Ini memberikan ilusi desain profesional (layaknya aplikasi Discord atau Spotify) meski tema utamanya diganti.
+$sidebar.BackColor = $ThemePalettes.Dark.Side 
+$form.Controls.Add($sidebar)    # Memasukkan Sidebar ke dalam Kanvas Utama
 
+# ---------------------------------------------------------------------
+# 2. RIGHT PANEL (PANEL KANAN / KONTEN UTAMA)
+# ---------------------------------------------------------------------
 $rightPanel = New-Object System.Windows.Forms.Panel
-$rightPanel.Dock = "Fill"; $rightPanel.BackColor = $p.Bg
-$form.Controls.Add($rightPanel); $rightPanel.BringToFront()
+$rightPanel.Dock = "Fill"       # Mengisi seluruh SISA ruang kosong yang tidak dipakai oleh Sidebar
+$rightPanel.BackColor = $p.Bg   # Mengikuti warna palet tema aktif
+$form.Controls.Add($rightPanel)
+$rightPanel.BringToFront()      # Memastikan panel ini tidak tertimpa oleh elemen lain
 
-# --- SIDEBAR HEADER ---
+# =========================================================================
+# FASE 6: INJEKSI IDENTITAS & BRANDING (SIDEBAR HEADER)
+# =========================================================================
+
+# Membuat Teks Judul Aplikasi (Brand)
 $lblBrand = New-Object System.Windows.Forms.Label
 $lblBrand.Text = "WAROENG TOOLS"
 $lblBrand.Font = New-Object System.Drawing.Font("Segoe UI", 16, [System.Drawing.FontStyle]::Bold)
-$lblBrand.ForeColor = [System.Drawing.Color]::White
-$lblBrand.AutoSize = $true
-$lblBrand.Location = New-Object System.Drawing.Point(25, 30)
-$sidebar.Controls.Add($lblBrand)
+$lblBrand.ForeColor = [System.Drawing.Color]::White     # Teks putih tegas
+$lblBrand.AutoSize = $true                              # Ukuran kotak menyesuaikan panjang teks
+$lblBrand.Location = New-Object System.Drawing.Point(25, 30) # Posisi (X, Y) dari pojok kiri atas
+$sidebar.Controls.Add($lblBrand)                        # Memasukkan Teks ke dalam Sidebar
 
+# Membuat Teks Sub-Judul (Kategori Aplikasi)
 $lblSub = New-Object System.Windows.Forms.Label
 $lblSub.Text = "IT SYSTEM UTILITY"
 $lblSub.Font = New-Object System.Drawing.Font("Segoe UI", 8, [System.Drawing.FontStyle]::Regular)
-$lblSub.ForeColor = [System.Drawing.Color]::Gray
+$lblSub.ForeColor = [System.Drawing.Color]::Gray        # Teks abu-abu agar tidak menyaingi Judul
 $lblSub.AutoSize = $true
 $lblSub.Location = New-Object System.Drawing.Point(28, 65)
 $sidebar.Controls.Add($lblSub)
 
+# Membuat Teks Identitas Pembuat (Credit)
 $lblCreator = New-Object System.Windows.Forms.Label
 $lblCreator.Text = "Creator: Bagas Alam Saputra"
 $lblCreator.Font = New-Object System.Drawing.Font("Segoe UI", 8, [System.Drawing.FontStyle]::Italic)
-$lblCreator.ForeColor = $ThemePalettes.Dark.Accent # Menggunakan warna Cyan agar terlihat keren
+$lblCreator.ForeColor = $ThemePalettes.Dark.Accent      # Menggunakan warna Cyan dari palet agar senada
 $lblCreator.AutoSize = $true
 $lblCreator.Location = New-Object System.Drawing.Point(28, 85)
 $sidebar.Controls.Add($lblCreator)
-# ========================================================
-# KANAN: HEADER & LOG
-# ========================================================
+
+# =========================================================================
+# FASE 7: PEMBUATAN STRUKTUR PANEL KANAN (HEADER, KONTEN, LOG)
+# =========================================================================
+# 1. PANEL HEADER (Bagian Atas)
+# Berfungsi sebagai tempat judul halaman, tombol aksi, jam, dan profil user.
 $header = New-Object System.Windows.Forms.Panel
-$header.Dock = "Top"; $header.Height = 85; $header.BackColor = $p.Header
+$header.Dock = "Top"             # Menempel penuh di bagian atas
+$header.Height = 85              # Tinggi header tetap (85 pixel)
+$header.BackColor = $p.Header    # Mengikuti warna palet Header (Biru)
 $rightPanel.Controls.Add($header)
 
+# 2. PANEL LOG (Bagian Bawah)
+# Berfungsi sebagai terminal mini untuk menampilkan riwayat aktivitas (Log) aplikasi.
 $logPanel = New-Object System.Windows.Forms.Panel
-$logPanel.Dock = "Bottom"; $logPanel.Height = 100; $logPanel.BackColor = [System.Drawing.Color]::FromArgb(25, 25, 25)
+$logPanel.Dock = "Bottom"        # Menempel penuh di bagian bawah
+$logPanel.Height = 100           # Tinggi terminal log (100 pixel)
+$logPanel.BackColor = [System.Drawing.Color]::FromArgb(25, 25, 25) # Warna gelap pekat
 $rightPanel.Controls.Add($logPanel)
 
+# 3. PANEL KONTEN UTAMA (Bagian Tengah)
+# Berfungsi sebagai area kerja tempat menu utama/tweak ditampilkan.
 $contentPanel = New-Object System.Windows.Forms.Panel
-$contentPanel.Dock = "Fill"; $contentPanel.BackColor = $p.Bg; $contentPanel.Padding = New-Object System.Windows.Forms.Padding(30); $contentPanel.AutoScroll = $true
-$rightPanel.Controls.Add($contentPanel); $contentPanel.BringToFront()
+$contentPanel.Dock = "Fill"      # Mengisi sisa ruang di antara Header dan Log
+$contentPanel.BackColor = $p.Bg  # Mengikuti warna palet Latar Belakang (Gelap/Terang)
+$contentPanel.Padding = New-Object System.Windows.Forms.Padding(30) # Memberi jarak aman 30px dari tepi
+$contentPanel.AutoScroll = $true # Menambahkan fungsi scroll jika isi konten terlalu panjang
+$rightPanel.Controls.Add($contentPanel)
+$contentPanel.BringToFront()     # Memastikan panel ini berada di lapisan teratas
 
-# --- HEADER CONTENTS ---
+# =========================================================================
+# FASE 8: PENGISIAN ELEMEN HEADER & INTERAKTIVITAS
+# =========================================================================
+# --- JUDUL HALAMAN KIRI ---
 $lblPageTitle = New-Object System.Windows.Forms.Label
-$lblPageTitle.Text = "Dashboard"; $lblPageTitle.Font = New-Object System.Drawing.Font("Segoe UI", 20, [System.Drawing.FontStyle]::Bold); $lblPageTitle.ForeColor = [System.Drawing.Color]::White; $lblPageTitle.AutoSize = $true; $lblPageTitle.Location = New-Object System.Drawing.Point(30, 22)
+$lblPageTitle.Text = "Dashboard"
+$lblPageTitle.Font = New-Object System.Drawing.Font("Segoe UI", 20, [System.Drawing.FontStyle]::Bold)
+$lblPageTitle.ForeColor = [System.Drawing.Color]::White
+$lblPageTitle.AutoSize = $true
+$lblPageTitle.Location = New-Object System.Drawing.Point(30, 22)
 $header.Controls.Add($lblPageTitle)
 
-# Container Kanan Header
+# --- KONTAINER INFO KANAN (Tempat Tombol & Profil) ---
+# Menggunakan panel transparan di sebelah kanan agar elemen di dalamnya mudah diatur (X, Y)
 $headInfo = New-Object System.Windows.Forms.Panel
 $headInfo.Width = 600
 $headInfo.Height = 85
-$headInfo.Dock = "Right"
+$headInfo.Dock = "Right"         # Menempel di sisi kanan Header
 $headInfo.BackColor = "Transparent"
 $header.Controls.Add($headInfo)
 
-# 1. EXPORT LOG BUTTON (Save) - Posisi X=185
+# -------------------------------------------------------------------------
+# ELEMEN 1: TOMBOL EXPORT LOG (Ikon Disket/Save)
+# -------------------------------------------------------------------------
 $btnExportLog = New-Object System.Windows.Forms.Label
-$btnExportLog.Text = [char]0xE74E 
-$btnExportLog.Font = New-Object System.Drawing.Font("Segoe MDL2 Assets", 15)
+$btnExportLog.Text = [char]0xE74E # Kode Ikon 'Save' dari font bawaan Windows
+$btnExportLog.Font = New-Object System.Drawing.Font("Segoe MDL2 Assets", 15) # Font rahasia Windows 10/11
 $btnExportLog.ForeColor = [System.Drawing.Color]::White
 $btnExportLog.AutoSize = $true
-$btnExportLog.Cursor = "Hand"
+$btnExportLog.Cursor = "Hand"     # Mengubah kursor panah menjadi ikon 'Tangan' saat disorot
 $btnExportLog.Location = New-Object System.Drawing.Point(185, 31)
-$btnExportLog.Add_Click({ Export-Log })
-$btnExportLog.Add_MouseEnter({ $btnExportLog.ForeColor = [System.Drawing.Color]::LimeGreen })
-$btnExportLog.Add_MouseLeave({ $btnExportLog.ForeColor = [System.Drawing.Color]::White })
+
+# EVENT HANDLER: Menambahkan aksi interaktif pada tombol
+$btnExportLog.Add_Click({ Export-Log }) # Jika diklik, jalankan fungsi Export-Log
+$btnExportLog.Add_MouseEnter({ $btnExportLog.ForeColor = [System.Drawing.Color]::LimeGreen }) # Sorot -> Hijau
+$btnExportLog.Add_MouseLeave({ $btnExportLog.ForeColor = [System.Drawing.Color]::White })     # Lepas -> Putih
 $headInfo.Controls.Add($btnExportLog)
 
-# --- PEMBATAS 1 (Antara Save & Theme) ---
+# (PEMBATAS VISUAL 1)
 $sepLine1 = New-Object System.Windows.Forms.Panel
-$sepLine1.Width = 1
-$sepLine1.Height = 20
-$sepLine1.BackColor = [System.Drawing.Color]::FromArgb(80, 255, 255, 255) # Sedikit lebih transparan
-$sepLine1.Location = New-Object System.Drawing.Point(220, 32)
-$headInfo.Controls.Add($sepLine1)
+$sepLine1.Width = 1; $sepLine1.Height = 20; $sepLine1.BackColor = [System.Drawing.Color]::FromArgb(80, 255, 255, 255)
+$sepLine1.Location = New-Object System.Drawing.Point(220, 32); $headInfo.Controls.Add($sepLine1)
 
-# 2. THEME SWITCHER (Matahari / Bulan) - Posisi X=235
+# -------------------------------------------------------------------------
+# ELEMEN 2: TOMBOL THEME SWITCHER (Ikon Matahari/Bulan)
+# -------------------------------------------------------------------------
 $btnTheme = New-Object System.Windows.Forms.Label
-$btnTheme.Text = $p.Icon 
+$btnTheme.Text = $p.Icon # Memanggil ikon berdasarkan variabel Tema (Light/Dark)
 $btnTheme.Font = New-Object System.Drawing.Font("Segoe MDL2 Assets", 15)
 $btnTheme.ForeColor = [System.Drawing.Color]::White
 $btnTheme.AutoSize = $true
 $btnTheme.Cursor = "Hand"
 $btnTheme.Location = New-Object System.Drawing.Point(235, 31)
-$btnTheme.Add_Click({ Toggle-Theme })
-$btnTheme.Add_MouseEnter({ $btnTheme.ForeColor = [System.Drawing.Color]::Yellow })
-$btnTheme.Add_MouseLeave({ $btnTheme.ForeColor = [System.Drawing.Color]::White })
+
+# EVENT HANDLER
+$btnTheme.Add_Click({ Toggle-Theme }) # Jika diklik, jalankan fungsi Toggle-Theme
+$btnTheme.Add_MouseEnter({ $btnTheme.ForeColor = [System.Drawing.Color]::Yellow }) # Sorot -> Kuning
+$btnTheme.Add_MouseLeave({ $btnTheme.ForeColor = [System.Drawing.Color]::White })  # Lepas -> Putih
 $headInfo.Controls.Add($btnTheme)
 
-# --- PEMBATAS 2 (Antara Theme & Jam) ---
+# (PEMBATAS VISUAL 2)
 $sepLine2 = New-Object System.Windows.Forms.Panel
-$sepLine2.Width = 1
-$sepLine2.Height = 20
-$sepLine2.BackColor = [System.Drawing.Color]::FromArgb(80, 255, 255, 255)
-$sepLine2.Location = New-Object System.Drawing.Point(270, 32)
-$headInfo.Controls.Add($sepLine2)
+$sepLine2.Width = 1; $sepLine2.Height = 20; $sepLine2.BackColor = [System.Drawing.Color]::FromArgb(80, 255, 255, 255)
+$sepLine2.Location = New-Object System.Drawing.Point(270, 32); $headInfo.Controls.Add($sepLine2)
 
-# 3. CLOCK (JAM) - Posisi X=285
+# -------------------------------------------------------------------------
+# ELEMEN 3: JAM REAL-TIME & TIMER ENGINE
+# -------------------------------------------------------------------------
+# Membuat teks statis "00:00:00" sebagai cetakan (placeholder) awal
 $lblClock = New-Object System.Windows.Forms.Label
 $lblClock.Text = "00:00:00"
 $lblClock.Font = New-Object System.Drawing.Font("Segoe UI", 16)
@@ -236,24 +332,24 @@ $lblClock.AutoSize = $true
 $lblClock.Location = New-Object System.Drawing.Point(285, 27)
 $headInfo.Controls.Add($lblClock)
 
-# --- PEMBATAS 3 (Utama: Antara Jam & User Info) ---
-$sepLine3 = New-Object System.Windows.Forms.Panel
-$sepLine3.Width = 1
-$sepLine3.Height = 40
-$sepLine3.BackColor = [System.Drawing.Color]::FromArgb(100, 255, 255, 255)
-$sepLine3.Location = New-Object System.Drawing.Point(395, 22)
-$headInfo.Controls.Add($sepLine3)
-
-# --- BAGIAN PENTING YANG HILANG KEMARIN (TIMER) ---
+# ENGINE TIMER: Membuat proses yang berjalan di latar belakang (asynchronous)
 $timer = New-Object System.Windows.Forms.Timer
-$timer.Interval = 1000
+$timer.Interval = 1000 # 1000 milidetik = 1 Detik
+# Setiap 1 detik (Tick), perbarui teks pada variabel $lblClock dengan waktu sistem terbaru (Jam:Menit:Detik)
 $timer.Add_Tick({ $lblClock.Text = Get-Date -Format "HH:mm:ss" })
-$timer.Start()
-# --------------------------------------------------
+$timer.Start() # Menyalakan mesin waktu
 
-# 4. USER INFO - Posisi X=415
+# (PEMBATAS VISUAL 3 UTAMA)
+$sepLine3 = New-Object System.Windows.Forms.Panel
+$sepLine3.Width = 1; $sepLine3.Height = 40; $sepLine3.BackColor = [System.Drawing.Color]::FromArgb(100, 255, 255, 255)
+$sepLine3.Location = New-Object System.Drawing.Point(395, 22); $headInfo.Controls.Add($sepLine3)
+
+# -------------------------------------------------------------------------
+# ELEMEN 4: IDENTITAS USER KOMPUTER LOKAL
+# -------------------------------------------------------------------------
 $lblUserInfo = New-Object System.Windows.Forms.Label
-$lblUserInfo.Text = "$($env:USERNAME.ToUpper())"
+# Menarik nama akun Windows yang sedang login dan membuatnya KAPITAL
+$lblUserInfo.Text = "$($env:USERNAME.ToUpper())" 
 $lblUserInfo.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
 $lblUserInfo.ForeColor = [System.Drawing.Color]::White
 $lblUserInfo.AutoSize = $true
@@ -261,6 +357,7 @@ $lblUserInfo.Location = New-Object System.Drawing.Point(415, 24)
 $headInfo.Controls.Add($lblUserInfo)
 
 $lblPCInfo = New-Object System.Windows.Forms.Label
+# Menarik nama perangkat (Hostname) dari sistem Windows
 $lblPCInfo.Text = "$($env:COMPUTERNAME)"
 $lblPCInfo.Font = New-Object System.Drawing.Font("Segoe UI", 8)
 $lblPCInfo.ForeColor = [System.Drawing.Color]::FromArgb(200, 255, 255, 255)
@@ -268,141 +365,180 @@ $lblPCInfo.AutoSize = $true
 $lblPCInfo.Location = New-Object System.Drawing.Point(415, 44)
 $headInfo.Controls.Add($lblPCInfo)
 
-# 5. USER ICON - Posisi X=535
+# ELEMEN 5: IKON FOTO PROFIL (User Icon)
 $lblUserIcon = New-Object System.Windows.Forms.Label
-$lblUserIcon.Text = [char]0xE77B
+$lblUserIcon.Text = [char]0xE77B # Kode Ikon 'Orang/User' dari font bawaan
 $lblUserIcon.Font = New-Object System.Drawing.Font("Segoe MDL2 Assets", 22)
 $lblUserIcon.ForeColor = [System.Drawing.Color]::White
 $lblUserIcon.AutoSize = $true
 $lblUserIcon.Location = New-Object System.Drawing.Point(535, 24)
 $headInfo.Controls.Add($lblUserIcon)
 
-# 6. USER ICON - Posisi X=535
-$lblUserIcon = New-Object System.Windows.Forms.Label
-$lblUserIcon.Text = [char]0xE77B
-$lblUserIcon.Font = New-Object System.Drawing.Font("Segoe MDL2 Assets", 22)
-$lblUserIcon.ForeColor = [System.Drawing.Color]::White
-$lblUserIcon.AutoSize = $true
-$lblUserIcon.Location = New-Object System.Drawing.Point(535, 24)
-$headInfo.Controls.Add($lblUserIcon)
-
-# --- LOGGING ---
+# =========================================================================
+# FASE 9: SISTEM LOGGING (TERMINAL AKTIVITAS)
+# =========================================================================
+# Membuat kotak teks canggih (RichTextBox) yang bertingkah seperti terminal hacker
 $txtLog = New-Object System.Windows.Forms.RichTextBox
-$txtLog.Dock = "Fill"; $txtLog.BackColor = [System.Drawing.Color]::FromArgb(25, 25, 25); $txtLog.ForeColor = [System.Drawing.Color]::LimeGreen; $txtLog.Font = New-Object System.Drawing.Font("Consolas", 9); $txtLog.BorderStyle = "None"; $txtLog.ReadOnly = $true; $txtLog.Text = "System initialized..."
+$txtLog.Dock = "Fill"
+$txtLog.BackColor = [System.Drawing.Color]::FromArgb(25, 25, 25)
+$txtLog.ForeColor = [System.Drawing.Color]::LimeGreen # Warna font Hijau khas Terminal Linux
+$txtLog.Font = New-Object System.Drawing.Font("Consolas", 9) # Font *Monospace* agar lurus dan rapi
+$txtLog.BorderStyle = "None"
+$txtLog.ReadOnly = $true # KUNCI: Mencegah user mengetik manual di dalam kotak log ini
+$txtLog.Text = "System initialized..."
 $logPanel.Controls.Add($txtLog)
 
-# ========================================================
-# FUNGSI LOG
-# ========================================================
+# -------------------------------------------------------------------------
+# FUNGSI PENCATATAN AKTIVITAS (WRITE-LOG)
+# -------------------------------------------------------------------------
 function Write-Log ($Msg) {
+    # Mengambil jam, menit, dan detik saat event terjadi
     $Time = Get-Date -Format "HH:mm:ss"
-    $txtLog.AppendText("`n[$Time] $Msg"); $txtLog.ScrollToCaret()
+    
+    # Menambahkan teks ke baris baru (`n) dengan format: [WAKTU] Pesan Aktivitas
+    $txtLog.AppendText("`n[$Time] $Msg")
+    
+    # Fungsi otomatis menggulir (scroll) layar log ke tulisan paling bawah/terbaru
+    $txtLog.ScrollToCaret()
 }
 
-# ========================================================
-# FUNGSI EXPORT LOG
-# ========================================================
+# -------------------------------------------------------------------------
+# FUNGSI EXPORT LOG (SIMPAN KE .TXT)
+# -------------------------------------------------------------------------
 function Export-Log {
+    # Memunculkan jendela dialog standar Windows untuk menyimpan file
     $saveDialog = New-Object System.Windows.Forms.SaveFileDialog
-    $saveDialog.Filter = "Text Document (*.txt)|*.txt"
+    $saveDialog.Filter = "Text Document (*.txt)|*.txt" # Hanya menerima format .txt
     $saveDialog.Title = "Save Waroeng Tools Log"
+    # Menentukan nama file otomatis berdasarkan tanggal dan waktu ekspor (contoh: WaroengTools_Log_20261109_153022.txt)
     $saveDialog.FileName = "WaroengTools_Log_$(Get-Date -Format 'yyyyMMdd_HHmmss').txt"
     
+    # Jika user menekan tombol "Save/OK" pada jendela dialog
     if ($saveDialog.ShowDialog() -eq "OK") {
-        # Ambil teks dari RichTextBox dan simpan ke file
+        
+        # Mengekstrak seluruh teks yang ada di terminal log, lalu menulisnya ke dalam file yang dipilih user
         $txtLog.Text | Out-File -FilePath $saveDialog.FileName -Encoding UTF8
         
+        # Mencatat aktivitas ekspor ke dalam log itu sendiri
         Write-Log "System log successfully exported to: $($saveDialog.FileName)"
+        
+        # Menampilkan notifikasi sukses berupa *Pop-up MessageBox*
         [System.Windows.Forms.MessageBox]::Show("Log berhasil diekspor!", "Export Success", "OK", "Information")
     }
 }
 
-# ==========================================
-# 1. ENGINE SPECS
-# ==========================================
+# =========================================================================
+# FASE 10: MESIN PEMBACA SPESIFIKASI SISTEM (HARDWARE & SOFTWARE ENGINE)
+# =========================================================================
 function Get-DetailedSpecs {
     try {
-        # --- 1. RAM USAGE (Used/Total) ---
+        # -----------------------------------------------------------------
+        # 1. ANALISIS PENGGUNAAN MEMORI (RAM USAGE)
+        # -----------------------------------------------------------------
+        # Mengambil data OS untuk melihat kapasitas RAM yang terbaca oleh Windows
         $os = Get-CimInstance Win32_OperatingSystem
+        
+        # Kapasitas asli dalam format Kilobytes (KB), kita bagi 1MB agar berubah menjadi Gigabytes (GB)
         $totalVis = $os.TotalVisibleMemorySize / 1MB 
         $freeMem  = $os.FreePhysicalMemory / 1MB
         $usedMem  = $totalVis - $freeMem
         
+        # Membulatkan angka desimal agar rapi (contoh: 7.8 GB, bukan 7.8231 GB)
         $usedGB  = [math]::Round($usedMem, 1)
         $totalGB = [math]::Round($totalVis, 0)
+        
+        # Menghitung persentase beban RAM saat ini
         $perc    = [math]::Round(($usedMem / $totalVis) * 100, 0)
         $ramFinalStr = "$usedGB GB Used / $totalGB GB ($perc%)"
 
-        # --- 2. RAM SLOTS INFO (NEW) ---
-        # Ambil total slot fisik dari Motherboard
+        # -----------------------------------------------------------------
+        # 2. ANALISIS SLOT FISIK RAM (MOTHERBOARD INFO)
+        # -----------------------------------------------------------------
+        # Mengambil informasi jumlah Slot RAM yang ada di Motherboard
         $memArray = Get-CimInstance Win32_PhysicalMemoryArray
         $totalSlots = 0
+        
         if ($memArray) {
-            # Handle jika ada lebih dari 1 array (jarang, tapi mungkin di server)
+            # Menjumlahkan slot (berguna jika PC/Server memiliki lebih dari 1 papan sirkuit)
             foreach ($arr in $memArray) { $totalSlots += $arr.MemoryDevices }
         }
 
-        # Ambil RAM stick yang terpasang
+        # Mengambil data kepingan RAM (Sticks) yang benar-benar terpasang
         $memSticks = Get-CimInstance Win32_PhysicalMemory
         $usedSlotsCount = $memSticks.Count
         
-        # Validasi sederhana (jika pembacaan WMI error di VM)
+        # Validasi (Fail-Safe): Jika dijalankan di Virtual Machine (VM), 
+        # kadang jumlah total slot terbaca 0. Kita paksa samakan dengan jumlah RAM terpasang.
         if ($totalSlots -lt $usedSlotsCount) { $totalSlots = $usedSlotsCount }
         
         $freeSlots = $totalSlots - $usedSlotsCount
         $slotString = "$usedSlotsCount Used / $totalSlots Total ($freeSlots Available)"
         
-        # Kecepatan RAM
+        # Menganalisis Kecepatan (MHz) dan Kapasitas masing-masing keping RAM
         $ramSpeeds = @()
         foreach ($stick in $memSticks) {
-            $cap = [math]::Round($stick.Capacity / 1GB, 0)
-            $ramSpeeds += "${cap}GB-$($stick.Speed)MHz" 
+            $cap = [math]::Round($stick.Capacity / 1GB, 0) # Konversi Byte ke GB
+            $ramSpeeds += "${cap}GB-$($stick.Speed)MHz"    # Output: 8GB-3200MHz
         }
         $ramSpeedStr = $ramSpeeds -join " / "
 
-        # --- 3. HARDWARE LAIN ---
+        # -----------------------------------------------------------------
+        # 3. ANALISIS HARDWARE UTAMA & VERSI OS
+        # -----------------------------------------------------------------
+        # Membaca Registry Windows untuk mendapatkan versi OS yang lebih akurat (misal: 22H2 / 21H1)
         $regPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion"
         $regInfo = Get-ItemProperty -Path $regPath -ErrorAction SilentlyContinue
         $dispVer = if ($regInfo.DisplayVersion) { $regInfo.DisplayVersion } else { $regInfo.ReleaseId }
         $osFinalString = "$($os.Caption) ($dispVer / $($os.Version))"
 
-        $cs = Get-CimInstance Win32_ComputerSystem
-        $cpu = Get-CimInstance Win32_Processor
+        # Mengambil data Model PC, Prosesor (CPU), dan Kartu Grafis (GPU)
+        $cs   = Get-CimInstance Win32_ComputerSystem
+        $cpu  = Get-CimInstance Win32_Processor
         $gpus = Get-CimInstance Win32_VideoController
+        
+        # Jika ada 2 GPU (misal Laptop Intel + Nvidia), gabungkan namanya dengan tanda "+"
         $gpuName = ($gpus | ForEach-Object { $_.Name }) -join " + "
 
+        # -----------------------------------------------------------------
+        # 4. ANALISIS PENYIMPANAN FISIK (DISK STORAGE)
+        # -----------------------------------------------------------------
         $storageList = @()
         try {
+            # Menggunakan Get-PhysicalDisk (fitur modern Windows) untuk mendapat nama asli Harddisk/SSD
             $pDisks = Get-PhysicalDisk | Sort-Object DeviceId
             foreach ($d in $pDisks) {
                 $sizeGB = [math]::Round($d.Size / 1GB, 2)
                 $storageList += "$($d.FriendlyName) ($sizeGB GB)"
             }
-        } catch { $storageList += "Disk Info Unavailable" }
+        } catch { 
+            # Jika gagal (biasanya karena limitasi hak akses), beri nilai default
+            $storageList += "Disk Info Unavailable" 
+        }
 
+        # -----------------------------------------------------------------
+        # 5. DETEKSI STATUS KEAMANAN (ANTIVIRUS ENGINE)
+        # -----------------------------------------------------------------
         try {
             $avStatus = "Unknown"
             
-            # Cek dulu apakah ada AV pihak ketiga via WMI
-            $3rdPartyAV = Get-CimInstance -Namespace root/SecurityCenter2 -ClassName AntiVirusProduct -ErrorAction SilentlyContinue | Where-Object { $_.displayName -notmatch "Windows Defender|Microsoft Defender" }
+            # Cek Level 1: Mencari Antivirus Pihak Ketiga (Avast, McAfee, dll) via Security Center
+            $3rdPartyAV = Get-CimInstance -Namespace root/SecurityCenter2 -ClassName AntiVirusProduct -ErrorAction SilentlyContinue | 
+                          Where-Object { $_.displayName -notmatch "Windows Defender|Microsoft Defender" }
             
             if ($3rdPartyAV) {
-                # Jika ada AV pihak ketiga (misal: Avast, Kaspersky), tampilkan itu
                 $avStatus = "$($3rdPartyAV.displayName) (Active)"
             } else {
-                # Jika tidak ada AV pihak ketiga, berarti pakai Windows Defender. 
-                # Kita cek status Real-Time Protection-nya!
+                # Cek Level 2: Jika tidak ada AV luar, periksa modul Windows Defender bawaan
                 $defenderStatus = Get-MpComputerStatus -ErrorAction SilentlyContinue
                 
                 if ($defenderStatus) {
+                    # Mengecek apakah proteksi Real-Time (pelindung utama) sedang menyala atau dimatikan
                     if ($defenderStatus.RealTimeProtectionEnabled -eq $true) {
                         $avStatus = "Windows Defender (Real-time: ON)"
                     } else {
-                        # Jika RealTimeProtectionEnabled adalah $false, berarti sudah sukses didisable
                         $avStatus = "Windows Defender (Real-time: OFF / Disabled)"
                     }
                 } else {
-                    # Jika modul Get-MpComputerStatus gagal/error (mungkin service-nya mati total)
                     $avStatus = "Windows Defender (Services Offline)"
                 }
             }
@@ -410,6 +546,11 @@ function Get-DetailedSpecs {
             $avStatus = "Detection Failed" 
         }
 
+        # -----------------------------------------------------------------
+        # 6. PENGEMBALIAN DATA (RETURN HASHTABLE)
+        # -----------------------------------------------------------------
+        # Membungkus semua variabel yang sudah diolah ke dalam satu objek 'Hashtable'
+        # agar mudah dipanggil dan ditampilkan di layar antarmuka (GUI)
         return @{
             OSVer     = $osFinalString
             Model     = "$($cs.Model) ($($cs.Manufacturer))"
@@ -418,44 +559,139 @@ function Get-DetailedSpecs {
             GPU       = "$gpuName"
             RAM_Main  = $ramFinalStr
             RAM_Speed = "$ramSpeedStr"
-            RAM_Slots = "$slotString"  # <--- Data Baru
+            RAM_Slots = "$slotString"  
             Storage   = $storageList
             AV        = "$avStatus"
         }
-    } catch { return $null }
+    } catch { 
+        # Fail-safe: Jika seluruh fungsi crash, kembalikan nilai kosong (null) agar aplikasi tidak force-close
+        return $null 
+    }
 }
 
-# ========================================================
-# MULAI RENDER DASHBOARD
-# ========================================================
+# ---------------------------------------------------------------------
+    # 3.5 FUNGSI INTERNAL: MODAL POPUP DETAIL STORAGE 
+    # ---------------------------------------------------------------------
+    function Show-StorageDetails ($StorageList, $ThemeColors) {
+        $dlg = New-Object System.Windows.Forms.Form
+        $dlg.Size = New-Object System.Drawing.Size(420, 320)
+        $dlg.StartPosition = "CenterScreen"
+        $dlg.FormBorderStyle = "None"
+        $dlg.BackColor = $ThemeColors.Card
+        $dlg.TopMost = $true
+
+        $rad = 20
+        $path = New-Object System.Drawing.Drawing2D.GraphicsPath
+        $path.AddArc(0, 0, $rad, $rad, 180, 90)
+        $path.AddArc($dlg.Width - $rad, 0, $rad, $rad, 270, 90)
+        $path.AddArc($dlg.Width - $rad, $dlg.Height - $rad, $rad, $rad, 0, 90)
+        $path.AddArc(0, $dlg.Height - $rad, $rad, $rad, 90, 90)
+        $path.CloseAllFigures()
+        $dlg.Region = New-Object System.Drawing.Region($path)
+
+        $lblTitle = New-Object System.Windows.Forms.Label
+        $lblTitle.Text = "Detail Penyimpanan Fisik"
+        $lblTitle.Font = New-Object System.Drawing.Font("Segoe UI", 13, [System.Drawing.FontStyle]::Bold)
+        $lblTitle.ForeColor = $ThemeColors.Accent
+        $lblTitle.Location = New-Object System.Drawing.Point(25, 22)
+        $lblTitle.AutoSize = $true
+        $dlg.Controls.Add($lblTitle)
+
+        $lblDesc = New-Object System.Windows.Forms.Label
+        $lblDesc.Text = "Daftar hardware storage terdeteksi di sistem:"
+        $lblDesc.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Regular)
+        $lblDesc.ForeColor = [System.Drawing.Color]::Gray
+        $lblDesc.Location = New-Object System.Drawing.Point(26, 52)
+        $lblDesc.AutoSize = $true
+        $dlg.Controls.Add($lblDesc)
+
+        $pnlList = New-Object System.Windows.Forms.FlowLayoutPanel
+        $pnlList.Location = New-Object System.Drawing.Point(25, 85)
+        $pnlList.Size = New-Object System.Drawing.Size(370, 160)
+        $pnlList.AutoScroll = $true
+        $pnlList.FlowDirection = "TopDown"
+        $pnlList.WrapContents = $false
+        
+        $index = 1
+        foreach ($drive in $StorageList) {
+            $lblDrive = New-Object System.Windows.Forms.Label
+            $lblDrive.Text = "$index. $drive"
+            $lblDrive.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
+            $lblDrive.ForeColor = $ThemeColors.Text
+            $lblDrive.Width = 340
+            $lblDrive.AutoSize = $true
+            $lblDrive.Margin = New-Object System.Windows.Forms.Padding(0, 0, 0, 12)
+            $pnlList.Controls.Add($lblDrive)
+            $index++
+        }
+        $dlg.Controls.Add($pnlList)
+
+        $btnClose = New-Object System.Windows.Forms.Button
+        $btnClose.Text = "Tutup"
+        $btnClose.Size = New-Object System.Drawing.Size(110, 36)
+        $btnClose.Location = New-Object System.Drawing.Point(285, 260)
+        $btnClose.BackColor = $ThemeColors.Accent
+        $btnClose.ForeColor = [System.Drawing.Color]::White
+        $btnClose.FlatStyle = "Flat"
+        $btnClose.FlatAppearance.BorderSize = 0
+        $btnClose.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+        $btnClose.Cursor = "Hand"
+        $btnClose.Add_Click({ $dlg.Close() })
+        $dlg.Controls.Add($btnClose)
+
+        $pnlLine = New-Object System.Windows.Forms.Panel
+        $pnlLine.Size = New-Object System.Drawing.Size($dlg.Width, 3)
+        $pnlLine.Location = New-Object System.Drawing.Point(0, ($dlg.Height - 3))
+        $pnlLine.BackColor = $ThemeColors.Accent
+        $dlg.Controls.Add($pnlLine)
+
+        $dlg.ShowDialog() | Out-Null
+    }
+
+# =========================================================================
+# FASE 11: FUNGSI RENDER HALAMAN DASHBOARD (TAMPILAN SPESIFIKASI)
+# =========================================================================
 function Render-Dashboard {
+    # ---------------------------------------------------------------------
+    # 1. PERSIAPAN DATA & TEMA
+    # ---------------------------------------------------------------------
+    # Menarik seluruh data spesifikasi (OS, CPU, RAM) dari fungsi sebelumnya
     $data = Get-DetailedSpecs
+    
+    # Menentukan palet warna yang harus dipakai saat ini (tergantung mode Light/Dark)
     $cP = if ($global:IsDarkMode) { $ThemePalettes.Dark } else { $ThemePalettes.Light }
 
-    # Bersihkan panel utama
+    # KUNCI UTAMA: Membersihkan kanvas (Content Panel) dari elemen halaman sebelumnya
+    # Tanpa perintah ini, jika user berpindah menu, halamannya akan menumpuk!
     $contentPanel.Controls.Clear()
 
+    # Membuat panel penampung khusus untuk halaman Dashboard
     $pnlMain = New-Object System.Windows.Forms.Panel
     $pnlMain.Dock = "Fill"
     $pnlMain.BackColor = $cP.Bg
-    $pnlMain.AutoScroll = $true # SCROLL UTAMA TETAP NYALA
+    $pnlMain.AutoScroll = $true # Memastikan scroll nyala agar kartu di bawah tetap bisa dilihat
 
-    # --- 1. WELCOME BANNER (SPANDUK ATAS) ---
+    # ---------------------------------------------------------------------
+    # 2. PEMBUATAN ELEMEN: SPANDUK SELAMAT DATANG (WELCOME BANNER)
+    # ---------------------------------------------------------------------
     $bannerCard = New-Object System.Windows.Forms.Panel
-    $bannerCard.Size = New-Object System.Drawing.Size(750, 110)
-    $bannerCard.Location = New-Object System.Drawing.Point(30, 30)
+    $bannerCard.Size = New-Object System.Drawing.Size(750, 110) # Lebar 750px, Tinggi 110px
+    $bannerCard.Location = New-Object System.Drawing.Point(30, 30) # Jarak 30px dari kiri dan atas
     $bannerCard.BackColor = $cP.Header 
     
-    # Sudut melengkung untuk Banner
-    $banRadius = 20
+    # --- LOGIKA DESAIN: Membuat Sudut Melengkung (Rounded Corners) ---
+    $banRadius = 20 # Tingkat kelengkungan
     $banPath = New-Object System.Drawing.Drawing2D.GraphicsPath
-    $banPath.AddArc(0, 0, $banRadius, $banRadius, 180, 90)
-    $banPath.AddArc($bannerCard.Width - $banRadius, 0, $banRadius, $banRadius, 270, 90)
-    $banPath.AddArc($bannerCard.Width - $banRadius, $bannerCard.Height - $banRadius, $banRadius, $banRadius, 0, 90)
-    $banPath.AddArc(0, $bannerCard.Height - $banRadius, $banRadius, $banRadius, 90, 90)
-    $banPath.CloseAllFigures()
+    # Menggambar 4 busur (arc) di keempat sudut kotak banner
+    $banPath.AddArc(0, 0, $banRadius, $banRadius, 180, 90) # Kiri Atas
+    $banPath.AddArc($bannerCard.Width - $banRadius, 0, $banRadius, $banRadius, 270, 90) # Kanan Atas
+    $banPath.AddArc($bannerCard.Width - $banRadius, $bannerCard.Height - $banRadius, $banRadius, $banRadius, 0, 90) # Kanan Bawah
+    $banPath.AddArc(0, $bannerCard.Height - $banRadius, $banRadius, $banRadius, 90, 90) # Kiri Bawah
+    $banPath.CloseAllFigures() # Menutup garis agar menyatu menjadi kotak utuh
+    # Menerapkan bentuk hasil potongan tersebut ke panel banner
     $bannerCard.Region = New-Object System.Drawing.Region($banPath)
 
+    # --- Teks Judul Banner ---
     $lblWelcome = New-Object System.Windows.Forms.Label
     $lblWelcome.Text = "Pusat Kendali Waroeng Tools"
     $lblWelcome.Font = New-Object System.Drawing.Font("Segoe UI", 18, [System.Drawing.FontStyle]::Bold)
@@ -464,6 +700,7 @@ function Render-Dashboard {
     $lblWelcome.Location = New-Object System.Drawing.Point(25, 20)
     $bannerCard.Controls.Add($lblWelcome)
 
+    # --- Teks Sub-Judul Banner (Profil User) ---
     $lblSubWelcome = New-Object System.Windows.Forms.Label
     $lblSubWelcome.Text = "Pengguna: $($env:USERNAME) di $($env:COMPUTERNAME)"
     $lblSubWelcome.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Regular)
@@ -474,27 +711,42 @@ function Render-Dashboard {
 
     $pnlMain.Controls.Add($bannerCard)
 
-    # --- 2. GRID UNTUK KARTU SPESIFIKASI ---
+    # ---------------------------------------------------------------------
+    # 3. PEMBUATAN ELEMEN: GRID KONTAINER (TEMPAT KARTU SPESIFIKASI)
+    # ---------------------------------------------------------------------
+    # Menggunakan FlowLayoutPanel: Panel pintar yang otomatis menyusun isinya secara berurutan
     $flpCards = New-Object System.Windows.Forms.FlowLayoutPanel
     $flpCards.Location = New-Object System.Drawing.Point(25, 160)
     
-    # --- PERBAIKAN: Dibatasi lebarnya maksimal 770 agar turun ke bawah (2 kolom) ---
+    # --- LOGIKA RESPONSIVITAS KARTU ---
+    # Membatasi lebar maksimal panel agar 1 baris hanya muat 2 kartu.
+    # Jika ada kartu ke-3, ia akan dipaksa turun ke baris bawah.
+    $flpCards.MaximumSize = New-Object System.Drawing.Size(770, 0)
     $flpCards.Size = New-Object System.Drawing.Size(770, 0)
-    $flpCards.MaximumSize = New-Object System.Drawing.Size(770, 0) # KUNCI AGAR TIDAK KE KANAN
     $flpCards.AutoSize = $true
-    $flpCards.AutoSizeMode = "GrowAndShrink"
+    $flpCards.AutoSizeMode = "GrowAndShrink" # Tinggi panel akan bertambah otomatis mengikuti jumlah kartu
     $flpCards.AutoScroll = $false 
-    $flpCards.WrapContents = $true # Memaksa kartu turun ke baris baru
-    $flpCards.FlowDirection = "LeftToRight"
+    $flpCards.WrapContents = $true # KUNCI: Fitur yang membungkus/memaksa isi turun ke baris baru
+    $flpCards.FlowDirection = "LeftToRight" # Arah penyusunan: dari kiri ke kanan
 
-    # Fungsi internal pembuat Kartu Spesifikasi
-    function Create-SpecCard ($Title, $MainValue, $SubValue) {
+    # ---------------------------------------------------------------------
+    # 4. FUNGSI INTERNAL: TEMPLATE PEMBUAT KARTU SPESIFIKASI (FIXED EVENT BINDING)
+    # ---------------------------------------------------------------------
+    function Create-SpecCard ($Title, $MainValue, $SubValue, $RawData = $null) {
         $card = New-Object System.Windows.Forms.Panel
         $card.Size = New-Object System.Drawing.Size(360, 120) 
         $card.Margin = New-Object System.Windows.Forms.Padding(5, 5, 15, 15)
         $card.BackColor = $cP.Card
+        
+        # Simpan warna tema asli di memori properti 'Tag' milik kartu
+        # Agar saat mouse keluar, kita tahu warna apa yang harus dikembalikan
+        $card.Tag = @{
+            NormalColor = $cP.Card
+            HoverColor  = if ($global:IsDarkMode) { [System.Drawing.Color]::FromArgb(55, 55, 60) } else { [System.Drawing.Color]::FromArgb(240, 245, 255) }
+            DataRaw     = $RawData
+            ThemeColors = $cP
+        }
 
-        # Sudut melengkung kartu
         $rad = 15
         $path = New-Object System.Drawing.Drawing2D.GraphicsPath
         $path.AddArc(0, 0, $rad, $rad, 180, 90)
@@ -518,8 +770,11 @@ function Render-Dashboard {
         $lMain.ForeColor = $cP.Text
         $lMain.Location = New-Object System.Drawing.Point(15, 35)
         $lMain.AutoSize = $false
-        $lMain.AutoEllipsis = $false
         $lMain.Size = New-Object System.Drawing.Size(330, 45)
+        
+        if ($Title -eq "PENYIMPANAN") {
+            $lMain.AutoEllipsis = $true
+        }
         $card.Controls.Add($lMain)
 
         $lSub = New-Object System.Windows.Forms.Label
@@ -531,24 +786,101 @@ function Render-Dashboard {
         $lSub.Size = New-Object System.Drawing.Size(330, 30)
         $card.Controls.Add($lSub)
 
+        # --- LOGIKA INTERAKTIF (TANPA CLOSURE) ---
+        if ($Title -eq "PENYIMPANAN" -and $RawData -and $RawData.Count -gt 2) {
+            $icoExpand = New-Object System.Windows.Forms.Label
+            $icoExpand.Text = [char]0xE710 
+            $icoExpand.Font = New-Object System.Drawing.Font("Segoe MDL2 Assets", 10, [System.Drawing.FontStyle]::Bold)
+            $icoExpand.ForeColor = $cP.Accent
+            $icoExpand.Location = New-Object System.Drawing.Point(330, 13)
+            $icoExpand.AutoSize = $true
+            $card.Controls.Add($icoExpand)
+
+            $card.Cursor = "Hand"
+            $lMain.Cursor = "Hand"
+            $lSub.Cursor = "Hand"
+            $icoExpand.Cursor = "Hand"
+
+            # Event Hover (Ambil kontrol induk dan ubah warnanya berdasarkan data di Tag)
+            $hoverEnter = {
+                $ctrl = $this
+                if ($ctrl -isnot [System.Windows.Forms.Panel]) { $ctrl = $ctrl.Parent }
+                $ctrl.BackColor = $ctrl.Tag.HoverColor
+            }
+            
+            $hoverLeave = {
+                $ctrl = $this
+                if ($ctrl -isnot [System.Windows.Forms.Panel]) { $ctrl = $ctrl.Parent }
+                $ctrl.BackColor = $ctrl.Tag.NormalColor
+            }
+
+            $card.Add_MouseEnter($hoverEnter); $lMain.Add_MouseEnter($hoverEnter); $lSub.Add_MouseEnter($hoverEnter)
+            $card.Add_MouseLeave($hoverLeave); $lMain.Add_MouseLeave($hoverLeave); $lSub.Add_MouseLeave($hoverLeave)
+
+            # Event Click (Ambil data array dari Tag, lalu panggil fungsi Global)
+            $actionClick = {
+                $ctrl = $this
+                if ($ctrl -isnot [System.Windows.Forms.Panel]) { $ctrl = $ctrl.Parent }
+                
+                $dataTarget = $ctrl.Tag.DataRaw
+                $warnaTema  = $ctrl.Tag.ThemeColors
+                
+                # Memanggil fungsi Show-StorageDetails
+                Show-StorageDetails -StorageList $dataTarget -ThemeColors $warnaTema
+            }
+
+            $card.Add_Click($actionClick)
+            $lMain.Add_Click($actionClick)
+            $lSub.Add_Click($actionClick)
+            $icoExpand.Add_Click($actionClick)
+        }
+
         return $card
     }
 
-    # --- 3. MEMASUKKAN DATA ---
+    # ---------------------------------------------------------------------
+    # 5. EKSEKUSI PEMBUATAN KARTU (DATA INJECTION)
+    # ---------------------------------------------------------------------
     if ($data) {
+        # Jika berhasil menarik data dari komputer, masukkan ke template kartu (Create-SpecCard)
+        # Format: (Fungsi "Judul" $DataUtama $DataSub)
         $flpCards.Controls.Add((Create-SpecCard "SISTEM OPERASI" $data.OSVer $data.Model))
         $flpCards.Controls.Add((Create-SpecCard "PROCESSOR (CPU)" $data.CPU ""))
         
+        # Merakit teks Sub-RAM secara manual sebelum dimasukkan ke fungsi
         $ramSub = "$($data.RAM_Speed) | Slots: $($data.RAM_Slots)"
         $flpCards.Controls.Add((Create-SpecCard "MEMORY (RAM)" $data.RAM_Main $ramSub))
         
         $flpCards.Controls.Add((Create-SpecCard "GRAPHICS (GPU)" $data.GPU ""))
         
-        $diskStr = if ($data.Storage) { $data.Storage -join " + " } else { "No Disk Found" }
-        $flpCards.Controls.Add((Create-SpecCard "PENYIMPANAN" $diskStr "Physical Drive"))
+        # --- MODIFIKASI KARTU PENYIMPANAN ---
+        if ($data.Storage) {
+            $jmlDrive = $data.Storage.Count
+            
+            # Jika drive hanya ada 1 ATAU 2, gabungkan teksnya langsung (Tidak ada efek pop-up)
+            if ($jmlDrive -le 2) {
+                # Menggunakan pemisah " | " agar jika ada 2 drive tampilannya lebih rapi
+                $diskStr = $data.Storage -join " | "
+                $diskSub = "Physical Drive"
+                
+                # Kirim parameter data mentah sebagai $null agar kartu tidak bisa diklik
+                $flpCards.Controls.Add((Create-SpecCard "PENYIMPANAN" $diskStr $diskSub $null))
+            } 
+            # Jika drive LEBIH DARI 2 (3, 4, 5, dst), aktifkan mode pop-up interaktif
+            else {
+                $diskStr = "Terdapat $jmlDrive Penyimpanan Fisik"
+                $diskSub = "Klik kartu untuk melihat detail ➜"
+                
+                # Kirim data $data.Storage untuk diproses oleh pop-up
+                $flpCards.Controls.Add((Create-SpecCard "PENYIMPANAN" $diskStr $diskSub $data.Storage))
+            }
+        } else {
+            $flpCards.Controls.Add((Create-SpecCard "PENYIMPANAN" "No Disk Found" "Physical Drive" $null))
+        }
         
         $flpCards.Controls.Add((Create-SpecCard "STATUS KEAMANAN" $data.AV "AntiVirus Product"))
     } else {
+        # Jika sistem gagal membaca data hardware, tampilkan pesan error
         $lblErr = New-Object System.Windows.Forms.Label
         $lblErr.Text = "Gagal mengambil informasi sistem."
         $lblErr.ForeColor = [System.Drawing.Color]::Red
@@ -556,25 +888,33 @@ function Render-Dashboard {
         $flpCards.Controls.Add($lblErr)
     }
 
+    # Merakit semua bagian ke dalam panel utama (Main Panel)
     $pnlMain.Controls.Add($flpCards)
     $contentPanel.Controls.Add($pnlMain)
     
+    # Catatan terminal kecil bahwa proses render grafis telah berhasil
     Write-Host "Render Pusat Kendali Berhasil"
 }
 
+# -------------------------------------------------------------------------
+# FUNGSI PLACEHOLDER (Halaman Sementara)
+# -------------------------------------------------------------------------
+# Fungsi ini digunakan untuk mengisi halaman menu lain (selain Dashboard) yang isinya belum selesai dibuat
 function Render-Placeholder ($Title) {
+    $contentPanel.Controls.Clear()
     $lbl = New-Object System.Windows.Forms.Label
-    $lbl.Text = "$Title - Module"; $lbl.Font = New-Object System.Drawing.Font("Segoe UI", 24); $lbl.ForeColor = [System.Drawing.Color]::Gray; $lbl.AutoSize = $true; $lbl.Location = New-Object System.Drawing.Point(40, 40)
+    $lbl.Text = "$Title - Module Is Under Construction..."
+    $lbl.Font = New-Object System.Drawing.Font("Segoe UI", 24)
+    $lbl.ForeColor = [System.Drawing.Color]::Gray
+    $lbl.AutoSize = $true
+    $lbl.Location = New-Object System.Drawing.Point(40, 40)
     $contentPanel.Controls.Add($lbl)
 }
+# =========================================================================
 
-# ========================================================
-# SELESAI RENDER DASHBOARD
-# ========================================================
-
-# ========================================================
-# MULAI SOFTWARE CENTER
-# ========================================================
+# =========================================================================
+# FASE 12: MODUL SOFTWARE CENTER (PACKAGE MANAGER ENGINE)
+# =========================================================================
 
 # --- DATABASE APLIKASI & FITUR (DIPERLUAS & SUPER LENGKAP) ---
 $global:SoftwareDatabase = @(
@@ -1011,16 +1351,16 @@ $global:SoftwareDatabase = @(
     [PSCustomObject]@{ Tab="ThirdParty"; Category="Runtimes & Dependencies"; Name="Visual C++ 2015-2022 (ARM64)"; Winget="Microsoft.VCRedist.2015+.arm64"; Choco=""; Type="App" }
 )
 
-# --- FUNGSI INISIALISASI PACKAGE MANAGER ---
+# -------------------------------------------------------------------------
+# FUNGSI 1: INISIALISASI & PERBAIKAN PACKAGE MANAGER (WINGET & CHOCO)
+# -------------------------------------------------------------------------
 function Action-InitPackageManagers {
     Write-Log "Action Triggered: User initiated Package Managers Initialization."
     
-    # --- 1. POP-UP KONFIRMASI AWAL ---
+    # 1. Pop-up Konfirmasi: Memastikan user tidak tidak sengaja mengklik tombol
     $confirm = [System.Windows.Forms.MessageBox]::Show(
         "Apakah kamu ingin memeriksa, menginstal, atau memperbarui Package Manager (Chocolatey & Winget)?", 
-        "Konfirmasi Init", 
-        "YesNo", 
-        "Question"
+        "Konfirmasi Init", "YesNo", "Question"
     )
 
     if ($confirm -eq "No") { 
@@ -1030,18 +1370,19 @@ function Action-InitPackageManagers {
 
     Write-Log "Process Started: Launching PowerShell to check and update Winget and Chocolatey..."
 
-    # --- 2. SCRIPT TERMINAL (DENGAN PESAN RESTART DI AKHIR) ---
+    # 2. Pembuatan Skrip Pekerja (Worker Script)
+    # Trik: Kita menulis perintah instalasi ke dalam teks, lalu menyimpannya sebagai file.
+    # Tujuannya agar proses instalasi berjalan di jendela terminal baru, BUKAN di dalam aplikasi GUI kita,
+    # sehingga aplikasi Waroeng Tools tidak mengalami "Not Responding" (Freeze) saat mengunduh.
     $scriptContent = @'
-# Load Assembly agar terminal bisa memunculkan Pop-up sendiri
 Add-Type -AssemblyName System.Windows.Forms
-
 Write-Host "=== PACKAGE MANAGERS INITIALIZATION & UPDATE ===" -ForegroundColor Cyan
 
+# Fungsi me-refresh variabel Environment agar perintah 'choco' langsung dikenali tanpa restart PC
 function Refresh-Path {
     $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
 }
 
-# --- PROSES CHOCO ---
 Write-Host "`n[1] Memeriksa Chocolatey..." -ForegroundColor Yellow
 if (!(Get-Command choco -ErrorAction SilentlyContinue)) {
     Write-Host "Menginstal Chocolatey, mohon tunggu..." -ForegroundColor White
@@ -1054,7 +1395,6 @@ if (!(Get-Command choco -ErrorAction SilentlyContinue)) {
     $status = "Update Chocolatey SELESAI."
 }
 
-# --- PROSES WINGET ---
 Write-Host "`n[2] Memeriksa Winget..." -ForegroundColor Yellow
 if (!(Get-Command winget -ErrorAction SilentlyContinue)) {
     Write-Host "Winget tidak ditemukan! Membuka MS Store..." -ForegroundColor Red
@@ -1065,123 +1405,106 @@ if (!(Get-Command winget -ErrorAction SilentlyContinue)) {
 }
 
 Write-Host "`n=== PROSES SELESAI ===" -ForegroundColor Cyan
-
-# --- 3. POP-UP PERINGATAN RESTART (MUNCUL SAAT FINISH) ---
-[System.Windows.Forms.MessageBox]::Show(
-    "$status`n`nSistem telah mendeteksi perubahan pada Environment Path.`n`nAgar fitur Software Center dapat berfungsi dengan normal menggunakan Chocolatey, Anda WAJIB MENUTUP dan MEMBUKA ULANG aplikasi Waroeng Tools sekarang.", 
-    "Penting: Restart Aplikasi Diperlukan", 
-    "OK", 
-    "Warning"
-)
-
-Write-Host "Anda dapat menutup jendela ini dan membuka ulang Waroeng Tools."
-Read-Host "Tekan ENTER untuk keluar..."
+[System.Windows.Forms.MessageBox]::Show("$status`n`nSistem mendeteksi perubahan Path. Harap RESTART aplikasi Waroeng Tools.", "Penting", "OK", "Warning")
 '@
 
-    # Simpan dan Jalankan
+    # Menyimpan dan mengeksekusi skrip di atas dengan hak Administrator
     $tempScript = "$env:TEMP\InitPackageManagers.ps1"
     $scriptContent | Out-File -FilePath $tempScript -Encoding UTF8
-    
     Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$tempScript`"" -Verb RunAs
 
-    # Info singkat di GUI Utama
-    [System.Windows.Forms.MessageBox]::Show(
-        "Proses sedang berjalan. Silakan cek jendela PowerShell yang muncul dan ikuti instruksi terakhir di sana.", 
-        "Sedang Berjalan", 
-        "OK", 
-        "Information"
-    )
+    [System.Windows.Forms.MessageBox]::Show("Proses sedang berjalan. Silakan cek jendela PowerShell yang muncul.", "Sedang Berjalan", "OK", "Information")
 }
 
-# --- FUNGSI EKSEKUSI SOFTWARE CENTER ---
-
+# -------------------------------------------------------------------------
+# FUNGSI 2: MESIN EKSEKUSI UTAMA (INSTALL / UNINSTALL / UPGRADE)
+# -------------------------------------------------------------------------
 function Execute-SoftwareAction ($ActionType) {
     try {
-        # 1. Tentukan Package Manager
+        # 1. Mendeteksi mesin repositori mana yang dipilih oleh user di radio button
         $pkgManager = if ($global:rbChoco.Checked) { "Chocolatey" } else { "Winget" }
-        
         Write-Log "Action Triggered: User initiated Software '$ActionType' operation via $pkgManager."
         
-        # 2. Ambil Checkbox yang dicentang
+        # 2. Menyisir (Scanning) Seluruh Checkbox yang Dicentang
         $selectedIds = @()
         $allCheckboxes = @()
+        
+        # Mengumpulkan semua objek checkbox dari Tab Windows dan Tab ThirdParty
         if ($null -ne $global:pnlWinList) { $allCheckboxes += $global:pnlWinList.Controls | Where-Object { $_ -is [System.Windows.Forms.CheckBox] -and $_.Checked } }
         if ($null -ne $global:pnlThirdList) { $allCheckboxes += $global:pnlThirdList.Controls | Where-Object { $_ -is [System.Windows.Forms.CheckBox] -and $_.Checked } }
 
+        # Mengekstrak ID Aplikasi (dari properti .Tag) berdasarkan mesin yang dipilih
         foreach ($chk in $allCheckboxes) {
             if ($null -ne $chk.Tag) {
                 if ($pkgManager -eq "Winget" -and $chk.Tag.Winget) {
-                    $selectedIds += $chk.Tag.Winget
+                    $selectedIds += $chk.Tag.Winget       # Contoh ID Winget: Google.Chrome
                 } elseif ($pkgManager -eq "Chocolatey" -and $chk.Tag.Choco) {
-                    $selectedIds += $chk.Tag.Choco
+                    $selectedIds += $chk.Tag.Choco        # Contoh ID Choco: googlechrome
                 }
             }
         }
 
-        # 3. Validasi
+        # 3. Validasi: Cegah proses jika tidak ada aplikasi yang valid untuk diinstal
         if ($selectedIds.Count -eq 0) {
-            Write-Log "Process Aborted: No valid applications selected or compatible with $pkgManager."
-            [System.Windows.Forms.MessageBox]::Show("Silakan centang aplikasi terlebih dahulu, atau pastikan aplikasi yang dicentang mendukung Package Manager ($pkgManager) yang dipilih.", "Peringatan", "OK", "Warning")
+            Write-Log "Process Aborted: No valid applications selected."
+            [System.Windows.Forms.MessageBox]::Show("Silakan centang aplikasi atau pastikan aplikasi mendukung Package Manager ($pkgManager).", "Peringatan", "OK", "Warning")
             return
         }
 
-        # Logging Daftar Aplikasi Terpilih
-        $appNamesForLog = $selectedIds -join ", "
-        Write-Log "-> Selected Application(s) for ${ActionType}: $appNamesForLog"
+        Write-Log "-> Selected Application(s) for ${ActionType}: $($selectedIds -join ', ')"
 
-        # 4. Bangun Perintah
+        # 4. Merakit Sintaks Perintah (Command Builder)
         $command = ""
         $idsString = $selectedIds -join " "
 
         if ($pkgManager -eq "Winget") {
             if ($ActionType -eq "Install") {
+                # Argumen Winget wajib dipisah per baris agar tidak error jika menginstal banyak aplikasi sekaligus
                 $cmdChunks = $selectedIds | ForEach-Object { "winget install --id $_ -e --accept-package-agreements --accept-source-agreements" }
-                $command = $cmdChunks -join "`r`n" # Pakai enter/baris baru agar lebih stabil di PowerShell
+                $command = $cmdChunks -join "`r`n" 
             } elseif ($ActionType -eq "Uninstall") {
                 $cmdChunks = $selectedIds | ForEach-Object { "winget uninstall --id $_ -e" }
                 $command = $cmdChunks -join "`r`n"
             }
         } else {
-            if ($ActionType -eq "Install") {
-                $command = "choco install $idsString -y"
-            } elseif ($ActionType -eq "Uninstall") {
-                $command = "choco uninstall $idsString -y"
-            }
+            # Argumen Chocolatey bisa digabung dalam 1 baris (contoh: choco install vlc chrome firefox -y)
+            if ($ActionType -eq "Install") { $command = "choco install $idsString -y" } 
+            elseif ($ActionType -eq "Uninstall") { $command = "choco uninstall $idsString -y" }
         }
 
-        # 5. Jalankan di PowerShell dengan Akses Administrator (RunAs)
+        # 5. Eksekusi Perintah di Latar Belakang menggunakan Skrip Sementara (Temp Script)
         if ($command) {
-            Write-Log "Process Started: Launching runner script for software operation..."
-            
-            # PERBAIKAN: Menggunakan Array biasa agar tidak rawan error spasi saat dicopy-paste
             $psLines = @(
                 "Write-Host '=== Memulai $ActionType via $pkgManager ===' -ForegroundColor Cyan",
-                "Write-Host 'Mengeksekusi perintah...' -ForegroundColor Yellow",
-                "Write-Host ''",
+                "Write-Host 'Mengeksekusi perintah...' -ForegroundColor Yellow`n",
                 $command,
-                "Write-Host ''",
-                "Write-Host '=== PROSES SELESAI ===' -ForegroundColor Green",
+                "`nWrite-Host '=== PROSES SELESAI ===' -ForegroundColor Green",
                 "Read-Host 'Tekan ENTER untuk menutup jendela ini...'"
             )
             
-            # Buat file script sementara
             $tempActionScript = "$env:TEMP\RunSoftwareAction.ps1"
             $psLines -join "`r`n" | Out-File -FilePath $tempActionScript -Encoding UTF8
-            
-            # Buka PowerShell baru dengan mode Administrator (-Verb RunAs)
             Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$tempActionScript`"" -Verb RunAs
         }
     } catch {
-        # PERBAIKAN: Menangkap error jika user menolak konfirmasi Administrator (UAC) agar aplikasi tidak Force Close
-        Write-Log "Failed: Error inside Execute-SoftwareAction or UAC cancelled. Details: $($_.Exception.Message)"
-        [System.Windows.Forms.MessageBox]::Show("Proses dibatalkan atau terjadi kesalahan sistem.`nPastikan kamu mengizinkan akses Administrator (Yes).", "Info", "OK", "Information")
+        # Tangkap error jika user menekan "NO" saat muncul UAC (User Account Control)
+        Write-Log "Failed: UAC cancelled or system error. Details: $($_.Exception.Message)"
+        [System.Windows.Forms.MessageBox]::Show("Proses dibatalkan atau terjadi kesalahan sistem.", "Info", "OK", "Information")
     }
 }
 
 # --- RENDER UI SOFTWARE CENTER ---
+# =========================================================================
+# FUNGSI 3: PEMBUATAN ANTARMUKA (RENDER UI) SOFTWARE CENTER
+# =========================================================================
 function Render-SoftwareCenter {
     $contentPanel.Controls.Clear()
-    $contentPanel.BackColor = if ($global:IsDarkMode) {[System.Drawing.Color]::FromArgb(30, 30, 35)} else {[System.Drawing.Color]::FromArgb(240, 242, 245)}
+
+    if ($global:IsDarkMode) {
+        $contentPanel.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 35)
+    } else {
+        $contentPanel.BackColor = [System.Drawing.Color]::FromArgb(240, 242, 245)
+    }
     
     $cpWidth = $contentPanel.Width
     $cpHeight = $contentPanel.Height
@@ -1189,7 +1512,10 @@ function Render-SoftwareCenter {
     # --- Helper Rounded ---
     $SetRounded = {
         param($ctrl, $r)
-        if ($ctrl.Width -le 0 -or $ctrl.Height -le 0) { return }
+        if ($ctrl.Width -le 0 -or $ctrl.Height -le 0) { 
+            return 
+        }
+        
         $D = $r * 2
         $p = New-Object System.Drawing.Drawing2D.GraphicsPath
         $p.AddArc(0, 0, $D, $D, 180, 90)
@@ -1200,11 +1526,13 @@ function Render-SoftwareCenter {
         $ctrl.Region = New-Object System.Drawing.Region($p)
     }
 
-    # Warna Tema
+    # --- Warna Tema ---
     $themeBlue   = [System.Drawing.Color]::FromArgb(0, 102, 204)
     $themeRed    = [System.Drawing.Color]::FromArgb(211, 47, 47)
 
+    # ---------------------------------------------------------------------
     # 1. HEADER
+    # ---------------------------------------------------------------------
     $pnlHeader = New-Object System.Windows.Forms.Panel
     $pnlHeader.Bounds = New-Object System.Drawing.Rectangle(15, 10, ($cpWidth - 30), 85)
     $pnlHeader.Anchor = "Top, Left, Right"
@@ -1216,97 +1544,166 @@ function Render-SoftwareCenter {
     $lblTitle.Text = "SOFTWARE CENTER"
     $lblTitle.Font = New-Object System.Drawing.Font("Segoe UI", 16, [System.Drawing.FontStyle]::Bold)
     $lblTitle.ForeColor = [System.Drawing.Color]::White
-    $lblTitle.AutoSize = $true; $lblTitle.Location = New-Object System.Drawing.Point(20, 15)
+    $lblTitle.AutoSize = $true
+    $lblTitle.Location = New-Object System.Drawing.Point(20, 15)
     $pnlHeader.Controls.Add($lblTitle)
 
-    # Package Manager Radio
+    # --- Package Manager Radio ---
     $lblPkg = New-Object System.Windows.Forms.Label
-    $lblPkg.Text = "Package Manager:"; $lblPkg.AutoSize = $true
+    $lblPkg.Text = "Package Manager:"
+    $lblPkg.AutoSize = $true
     $lblPkg.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
-    $lblPkg.ForeColor = [System.Drawing.Color]::White; $lblPkg.Location = New-Object System.Drawing.Point(22, 52)
+    $lblPkg.ForeColor = [System.Drawing.Color]::White
+    $lblPkg.Location = New-Object System.Drawing.Point(22, 52)
     $pnlHeader.Controls.Add($lblPkg)
 
     $global:rbWinget = New-Object System.Windows.Forms.RadioButton
-    $global:rbWinget.Text = "Winget"; $global:rbWinget.Checked = $true; $global:rbWinget.AutoSize = $true
-    $global:rbWinget.ForeColor = [System.Drawing.Color]::White; $global:rbWinget.Location = New-Object System.Drawing.Point(145, 50)
+    $global:rbWinget.Text = "Winget"
+    $global:rbWinget.Checked = $true
+    $global:rbWinget.AutoSize = $true
+    $global:rbWinget.ForeColor = [System.Drawing.Color]::White
+    $global:rbWinget.Location = New-Object System.Drawing.Point(145, 50)
     $pnlHeader.Controls.Add($global:rbWinget)
 
     $global:rbChoco = New-Object System.Windows.Forms.RadioButton
-    $global:rbChoco.Text = "Chocolatey"; $global:rbChoco.AutoSize = $true
-    $global:rbChoco.ForeColor = [System.Drawing.Color]::White; $global:rbChoco.Location = New-Object System.Drawing.Point(230, 50)
+    $global:rbChoco.Text = "Chocolatey"
+    $global:rbChoco.AutoSize = $true
+    $global:rbChoco.ForeColor = [System.Drawing.Color]::White
+    $global:rbChoco.Location = New-Object System.Drawing.Point(230, 50)
     $pnlHeader.Controls.Add($global:rbChoco)
 
     $btnInit = New-Object System.Windows.Forms.Button
     $btnInit.Text = "Fix / Install Package Manager"
     $btnInit.Size = New-Object System.Drawing.Size(210, 30)
-    $btnInit.Location = New-Object System.Drawing.Point(($pnlHeader.Width - 230), 25); $btnInit.Anchor = "Top, Right" 
-    $btnInit.BackColor = [System.Drawing.Color]::White; $btnInit.ForeColor = $themeBlue
-    $btnInit.FlatStyle = "Flat"; $btnInit.FlatAppearance.BorderSize = 0; $btnInit.Font = New-Object System.Drawing.Font("Segoe UI", 8, [System.Drawing.FontStyle]::Bold)
+    $btnInit.Location = New-Object System.Drawing.Point(($pnlHeader.Width - 230), 25)
+    $btnInit.Anchor = "Top, Right" 
+    $btnInit.BackColor = [System.Drawing.Color]::White
+    $btnInit.ForeColor = $themeBlue
+    $btnInit.FlatStyle = "Flat"
+    $btnInit.FlatAppearance.BorderSize = 0
+    $btnInit.Font = New-Object System.Drawing.Font("Segoe UI", 8, [System.Drawing.FontStyle]::Bold)
     $btnInit.Add_Click({ Action-InitPackageManagers })
-    $pnlHeader.Controls.Add($btnInit); &$SetRounded $btnInit 10
+    $pnlHeader.Controls.Add($btnInit)
+    &$SetRounded $btnInit 10
 
-    # 2. FOOTER (FlowLayoutPanel untuk tombol)
+    # ---------------------------------------------------------------------
+    # 2. FOOTER (Panel Aksi)
+    # ---------------------------------------------------------------------
     $pnlFooter = New-Object System.Windows.Forms.Panel
     $pnlFooter.Bounds = New-Object System.Drawing.Rectangle(15, ($cpHeight - 130), ($cpWidth - 30), 115)
     $pnlFooter.Anchor = "Bottom, Left, Right"
-    $pnlFooter.BackColor = if ($global:IsDarkMode) {[System.Drawing.Color]::FromArgb(45, 45, 50)} else {[System.Drawing.Color]::White}
+    
+    if ($global:IsDarkMode) {
+        $pnlFooter.BackColor = [System.Drawing.Color]::FromArgb(45, 45, 50)
+    } else {
+        $pnlFooter.BackColor = [System.Drawing.Color]::White
+    }
+    
     $contentPanel.Controls.Add($pnlFooter)
     &$SetRounded $pnlFooter 15
 
     $pnlActions = New-Object System.Windows.Forms.FlowLayoutPanel
-    $pnlActions.Dock = "Fill"; $pnlActions.Padding = New-Object System.Windows.Forms.Padding(10, 15, 10, 10); $pnlActions.AutoScroll = $true
+    $pnlActions.Dock = "Fill"
+    $pnlActions.Padding = New-Object System.Windows.Forms.Padding(10, 15, 10, 10)
+    $pnlActions.AutoScroll = $true
     $pnlFooter.Controls.Add($pnlActions)
 
+    # --- Fungsi Pembuat Tombol ---
     function Create-StandardButton ($Text, $BgColor, $Action) {
         $btn = New-Object System.Windows.Forms.Button
-        $btn.Text = $Text; $btn.Font = New-Object System.Drawing.Font("Segoe UI", 8.5, [System.Drawing.FontStyle]::Bold)
-        $btn.AutoSize = $true; $btn.Height = 36; $btn.Padding = New-Object System.Windows.Forms.Padding(12, 0, 12, 0)
-        $btn.Margin = New-Object System.Windows.Forms.Padding(5); $btn.FlatStyle = "Flat"
-        $btn.FlatAppearance.BorderSize = 0; $btn.Cursor = "Hand"
-        $btn.BackColor = $BgColor; $btn.ForeColor = [System.Drawing.Color]::White
+        $btn.Text = $Text
+        $btn.Font = New-Object System.Drawing.Font("Segoe UI", 8.5, [System.Drawing.FontStyle]::Bold)
+        $btn.AutoSize = $true
+        $btn.Height = 36
+        $btn.Padding = New-Object System.Windows.Forms.Padding(12, 0, 12, 0)
+        $btn.Margin = New-Object System.Windows.Forms.Padding(5)
+        $btn.FlatStyle = "Flat"
+        $btn.FlatAppearance.BorderSize = 0
+        $btn.Cursor = "Hand"
+        $btn.BackColor = $BgColor
+        $btn.ForeColor = [System.Drawing.Color]::White
         
-        # Kalkulasi manual warna hover (tambah 25 poin agar lebih terang, maksimal 255)
         $r = [math]::Min(255, $BgColor.R + 25)
         $g = [math]::Min(255, $BgColor.G + 25)
         $b = [math]::Min(255, $BgColor.B + 25)
         $hoverColor = [System.Drawing.Color]::FromArgb($BgColor.A, $r, $g, $b)
         $normalColor = $BgColor
         
-        # PERBAIKAN: Gunakan GetNewClosure() agar PowerShell tidak "lupa" warna aslinya
         $btn.Add_MouseEnter({ $this.BackColor = $hoverColor }.GetNewClosure())
         $btn.Add_MouseLeave({ $this.BackColor = $normalColor }.GetNewClosure())
-        
         $btn.Add_Click($Action)
+        
         $pnlActions.Controls.Add($btn)
-        $null = $btn.Handle; &$SetRounded $btn 12
+        
+        # Panggil handle untuk memastikan UI dirender sebelum dilengkungkan
+        $null = $btn.Handle
+        &$SetRounded $btn 12
+        
         return $btn
     }
 
-    # TOMBOL EKSEKUSI
-    Create-StandardButton "Install / Upgrade Selected" $themeBlue { Execute-SoftwareAction "Install" }
-    Create-StandardButton "Uninstall Selected Items" $themeRed { Execute-SoftwareAction "Uninstall" }
+    # --- Koleksi Tombol Eksekusi ---
+    Create-StandardButton "Install / Upgrade Selected" $themeBlue { 
+        Execute-SoftwareAction "Install" 
+    }
+    
+    Create-StandardButton "Uninstall Selected Items" $themeRed { 
+        Execute-SoftwareAction "Uninstall" 
+    }
     
     Create-StandardButton "Upgrade All Items" $themeBlue {
-        $pm = if ($global:rbWinget.Checked) { "Winget" } else { "Chocolatey" }
+        if ($global:rbWinget.Checked) { 
+            $pm = "Winget" 
+        } else { 
+            $pm = "Chocolatey" 
+        }
+        
         Write-Log "Action Triggered: User initiated 'Upgrade All Software' via $pm."
         
-        if ($global:rbWinget.Checked) { Start-Process cmd "/k winget upgrade --all --include-unknown" }
-        else { Start-Process cmd "/k choco upgrade all -y" }
+        if ($global:rbWinget.Checked) { 
+            Start-Process cmd "/k winget upgrade --all --include-unknown" 
+        } else { 
+            Start-Process cmd "/k choco upgrade all -y" 
+        }
     }
     
     Create-StandardButton "Selected Apps" $themeBlue {
         Write-Log "Action Triggered: User viewed the list of selected applications."
         $sel = @()
-        foreach ($c in $global:pnlWinList.Controls) { if ($c -is [System.Windows.Forms.CheckBox] -and $c.Checked) { $sel += "[SYS] $($c.Text)" } }
-        foreach ($c in $global:pnlThirdList.Controls) { if ($c -is [System.Windows.Forms.CheckBox] -and $c.Checked) { $sel += "[APP] $($c.Text)" } }
-        if ($sel.Count -eq 0) { [System.Windows.Forms.MessageBox]::Show("Tidak ada aplikasi dipilih.", "Info") }
-        else { [System.Windows.Forms.MessageBox]::Show(($sel -join "`n"), "Daftar Terpilih") }
+        
+        foreach ($c in $global:pnlWinList.Controls) { 
+            if ($c -is [System.Windows.Forms.CheckBox] -and $c.Checked) { 
+                $sel += "[SYS] $($c.Text)" 
+            } 
+        }
+        
+        foreach ($c in $global:pnlThirdList.Controls) { 
+            if ($c -is [System.Windows.Forms.CheckBox] -and $c.Checked) { 
+                $sel += "[APP] $($c.Text)" 
+            } 
+        }
+        
+        if ($sel.Count -eq 0) { 
+            [System.Windows.Forms.MessageBox]::Show("Tidak ada aplikasi dipilih.", "Info") 
+        } else { 
+            [System.Windows.Forms.MessageBox]::Show(($sel -join "`n"), "Daftar Terpilih") 
+        }
     }
     
     Create-StandardButton "Clear Selection" $themeBlue {
         Write-Log "Action Triggered: User cleared all software checkboxes."
-        foreach ($c in $global:pnlWinList.Controls) { if ($c -is [System.Windows.Forms.CheckBox]) { $c.Checked = $false } }
-        foreach ($c in $global:pnlThirdList.Controls) { if ($c -is [System.Windows.Forms.CheckBox]) { $c.Checked = $false } }
+        
+        foreach ($c in $global:pnlWinList.Controls) { 
+            if ($c -is [System.Windows.Forms.CheckBox]) { 
+                $c.Checked = $false 
+            } 
+        }
+        
+        foreach ($c in $global:pnlThirdList.Controls) { 
+            if ($c -is [System.Windows.Forms.CheckBox]) { 
+                $c.Checked = $false 
+            } 
+        }
     }
     
     Create-StandardButton "Show Installed Items" $themeBlue { 
@@ -1314,83 +1711,135 @@ function Render-SoftwareCenter {
         Start-Process cmd "/k winget list" 
     }
 
-    # 3. TAB CONTROL
+    # ---------------------------------------------------------------------
+    # 3. TAB CONTROL & DAFTAR APLIKASI
+    # ---------------------------------------------------------------------
     $tabControl = New-Object System.Windows.Forms.TabControl
     $tabControl.Location = New-Object System.Drawing.Point(15, 105)
     $tabControl.Size = New-Object System.Drawing.Size(($cpWidth - 30), ($cpHeight - 250))
     $tabControl.Anchor = "Top, Bottom, Left, Right"
 
+    # --- Fungsi Pembangun Daftar Centang Dinamis ---
     function Build-ScrollableList ($TabName) {
         $panel = New-Object System.Windows.Forms.Panel
-        $panel.Dock = "Fill"; $panel.AutoScroll = $true; $panel.BackColor = if ($global:IsDarkMode) {[System.Drawing.Color]::FromArgb(25,25,30)} else {[System.Drawing.Color]::White}
+        $panel.Dock = "Fill"
+        $panel.AutoScroll = $true
+        
+        if ($global:IsDarkMode) {
+            $panel.BackColor = [System.Drawing.Color]::FromArgb(25,25,30)
+        } else {
+            $panel.BackColor = [System.Drawing.Color]::White
+        }
         
         $yPos = 15
         $categories = $global:SoftwareDatabase | Where-Object { $_.Tab -eq $TabName } | Select-Object -ExpandProperty Category -Unique
 
         foreach ($cat in $categories) {
+            # Render Judul Kategori
             $lblHeader = New-Object System.Windows.Forms.Label
-            $lblHeader.Text = "  $cat  "; $lblHeader.AutoSize = $true
+            $lblHeader.Text = "  $cat  "
+            $lblHeader.AutoSize = $true
             $lblHeader.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
-            $lblHeader.ForeColor = [System.Drawing.Color]::White; $lblHeader.BackColor = $themeBlue
+            $lblHeader.ForeColor = [System.Drawing.Color]::White
+            $lblHeader.BackColor = $themeBlue
             $lblHeader.Location = New-Object System.Drawing.Point(15, $yPos)
+            
             $panel.Controls.Add($lblHeader)
-            $null = $lblHeader.Handle; &$SetRounded $lblHeader 6
+            
+            $null = $lblHeader.Handle
+            &$SetRounded $lblHeader 6
             $yPos += 35
 
+            # Render Checkbox Aplikasi
             $items = $global:SoftwareDatabase | Where-Object { $_.Tab -eq $TabName -and $_.Category -eq $cat }
-            $colIndex = 0; $colWidth = 210
+            $colIndex = 0
+            $colWidth = 210
 
             foreach ($item in $items) {
                 $chk = New-Object System.Windows.Forms.CheckBox
-                $chk.Text = $item.Name; $chk.AutoSize = $true; $chk.Cursor = "Hand"
-                $chk.ForeColor = if ($global:IsDarkMode) {[System.Drawing.Color]::White} else {[System.Drawing.Color]::Black}
-                $chk.Location = New-Object System.Drawing.Point((25 + ($colIndex * $colWidth)), $yPos)
+                $chk.Text = $item.Name
+                $chk.AutoSize = $true
+                $chk.Cursor = "Hand"
                 
-                # PERBAIKAN PENTING: Menyimpan ID Winget/Choco ke dalam properti TAG agar bisa dibaca saat tombol di klik
+                if ($global:IsDarkMode) {
+                    $chk.ForeColor = [System.Drawing.Color]::White
+                } else {
+                    $chk.ForeColor = [System.Drawing.Color]::Black
+                }
+                
+                $chk.Location = New-Object System.Drawing.Point((25 + ($colIndex * $colWidth)), $yPos)
                 $chk.Tag = $item 
 
                 $panel.Controls.Add($chk)
-                $colIndex++; if ($colIndex -ge 3) { $colIndex = 0; $yPos += 25 }
+                
+                $colIndex++ 
+                if ($colIndex -ge 3) { 
+                    $colIndex = 0
+                    $yPos += 25 
+                }
             }
-            if ($colIndex -ne 0) { $yPos += 25 }
+            
+            if ($colIndex -ne 0) { 
+                $yPos += 25 
+            }
             $yPos += 15
         }
         return $panel
     }
 
-    # ---------------------------------------------------------
-    # 3. TAB CONTROL & LIST APLIKASI
-    # ---------------------------------------------------------
-    $t1 = New-Object System.Windows.Forms.TabPage; $t1.Text = "System & Features"
-    $global:pnlWinList = Build-ScrollableList "Windows"; $t1.Controls.Add($global:pnlWinList)
+    # ---> SETUP TAB 1: System & Features
+    $t1 = New-Object System.Windows.Forms.TabPage
+    $t1.Text = "System & Features"
+    $global:pnlWinList = Build-ScrollableList "Windows"
+    $t1.Controls.Add($global:pnlWinList)
     
-    $t2 = New-Object System.Windows.Forms.TabPage; $t2.Text = "Third Party Software"
-    $global:pnlThirdList = Build-ScrollableList "ThirdParty"; $t2.Controls.Add($global:pnlThirdList)
+    # ---> SETUP TAB 2: Third Party Software
+    $t2 = New-Object System.Windows.Forms.TabPage
+    $t2.Text = "Third Party Software"
+    $global:pnlThirdList = Build-ScrollableList "ThirdParty"
+    $t2.Controls.Add($global:pnlThirdList)
 
-    # ---> TAB 3: CUSTOM SEARCH & INSTALL <---
-    $t3 = New-Object System.Windows.Forms.TabPage; $t3.Text = "Search & Custom Install"
-    $pnlCustom = New-Object System.Windows.Forms.Panel
-    $pnlCustom.Dock = "Fill"; $pnlCustom.BackColor = if ($global:IsDarkMode) {[System.Drawing.Color]::FromArgb(25,25,30)} else {[System.Drawing.Color]::White}
+    # ---> SETUP TAB 3: Custom Search & Install
+    $t3 = New-Object System.Windows.Forms.TabPage
+    $t3.Text = "Search & Custom Install"
     
-    # Label Edukasi / Info
+    $pnlCustom = New-Object System.Windows.Forms.Panel
+    $pnlCustom.Dock = "Fill"
+    
+    if ($global:IsDarkMode) {
+        $pnlCustom.BackColor = [System.Drawing.Color]::FromArgb(25,25,30)
+    } else {
+        $pnlCustom.BackColor = [System.Drawing.Color]::White
+    }
+    
     $lblInfoCustom = New-Object System.Windows.Forms.Label
-    $lblInfoCustom.Text = "Aplikasi yang kamu cari belum ada di daftar utama? Cari dan install secara manual di sini!`n`nTIPS PENTING: Jika aplikasi tidak ditemukan menggunakan Winget, cobalah ganti Package Manager ke Chocolatey (di bagian atas), dan sebaliknya. Beberapa aplikasi hanya tersedia di salah satu repositori."
+    $lblInfoCustom.Text = "Aplikasi yang kamu cari belum ada di daftar utama? Cari dan install secara manual di sini!`n`nTIPS PENTING: Jika aplikasi tidak ditemukan menggunakan Winget, cobalah ganti Package Manager ke Chocolatey (di bagian atas), dan sebaliknya."
     $lblInfoCustom.Location = New-Object System.Drawing.Point(20, 20)
     $lblInfoCustom.Size = New-Object System.Drawing.Size(($tabControl.Width - 60), 65)
     $lblInfoCustom.Font = New-Object System.Drawing.Font("Segoe UI", 9.5, [System.Drawing.FontStyle]::Regular)
-    $lblInfoCustom.ForeColor = if ($global:IsDarkMode) {[System.Drawing.Color]::LightSkyBlue} else {[System.Drawing.Color]::DarkBlue}
+    
+    if ($global:IsDarkMode) {
+        $lblInfoCustom.ForeColor = [System.Drawing.Color]::LightSkyBlue
+    } else {
+        $lblInfoCustom.ForeColor = [System.Drawing.Color]::DarkBlue
+    }
+    
     $pnlCustom.Controls.Add($lblInfoCustom)
 
-    # Label Textbox Input
     $lblInput = New-Object System.Windows.Forms.Label
     $lblInput.Text = "Masukkan Nama atau ID Aplikasi (Cth: VLC, Google.Chrome, telegram):"
     $lblInput.Location = New-Object System.Drawing.Point(20, 100)
     $lblInput.AutoSize = $true
     $lblInput.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
-    $lblInput.ForeColor = if ($global:IsDarkMode) {[System.Drawing.Color]::White} else {[System.Drawing.Color]::Black}
+    
+    if ($global:IsDarkMode) {
+        $lblInput.ForeColor = [System.Drawing.Color]::White
+    } else {
+        $lblInput.ForeColor = [System.Drawing.Color]::Black
+    }
+    
     $pnlCustom.Controls.Add($lblInput)
 
-    # Textbox Input (PERBAIKAN: Gunakan $global: agar terbaca oleh tombol saat diklik)
     $global:txtCustomApp = New-Object System.Windows.Forms.TextBox
     $global:txtCustomApp.Location = New-Object System.Drawing.Point(20, 125)
     $global:txtCustomApp.Size = New-Object System.Drawing.Size(350, 30)
@@ -1402,9 +1851,13 @@ function Render-SoftwareCenter {
     $btnSearchCustom.Text = "Cari Software"
     $btnSearchCustom.Location = New-Object System.Drawing.Point(20, 170)
     $btnSearchCustom.Size = New-Object System.Drawing.Size(150, 35)
-    $btnSearchCustom.BackColor = $themeBlue; $btnSearchCustom.ForeColor = [System.Drawing.Color]::White
-    $btnSearchCustom.FlatStyle = "Flat"; $btnSearchCustom.FlatAppearance.BorderSize = 0; $btnSearchCustom.Cursor = "Hand"
+    $btnSearchCustom.BackColor = $themeBlue
+    $btnSearchCustom.ForeColor = [System.Drawing.Color]::White
+    $btnSearchCustom.FlatStyle = "Flat"
+    $btnSearchCustom.FlatAppearance.BorderSize = 0
+    $btnSearchCustom.Cursor = "Hand"
     $btnSearchCustom.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+    
     $btnSearchCustom.Add_Click({
         $query = $global:txtCustomApp.Text.Trim()
         if ([string]::IsNullOrWhiteSpace($query)) {
@@ -1413,35 +1866,51 @@ function Render-SoftwareCenter {
             return
         }
         
-        $pm = if ($global:rbChoco.Checked) { "Chocolatey" } else { "Winget" }
+        if ($global:rbChoco.Checked) {
+            $pm = "Chocolatey"
+        } else {
+            $pm = "Winget"
+        }
+        
         Write-Log "Action Triggered: User searched for custom app '$query' via $pm."
 
         if ($global:rbChoco.Checked) {
-            Start-Process cmd -ArgumentList "/k title Mencari $query di Chocolatey &&  Memeriksa di Chocolatey... && . && choco search `"$query`""
+            Start-Process cmd -ArgumentList "/k title Mencari $query di Chocolatey && Memeriksa di Chocolatey... && . && choco search `"$query`""
         } else {
-            Start-Process cmd -ArgumentList "/k title Mencari $query di Winget &&  Memeriksa di Winget... && . && winget search `"$query`""
+            Start-Process cmd -ArgumentList "/k title Mencari $query di Winget && Memeriksa di Winget... && . && winget search `"$query`""
         }
     })
+    
     $pnlCustom.Controls.Add($btnSearchCustom)
-    $null = $btnSearchCustom.Handle; &$SetRounded $btnSearchCustom 8
+    $null = $btnSearchCustom.Handle
+    &$SetRounded $btnSearchCustom 8
 
     # Tombol Install Manual
     $btnInstallCustom = New-Object System.Windows.Forms.Button
     $btnInstallCustom.Text = "Install Software"
     $btnInstallCustom.Location = New-Object System.Drawing.Point(180, 170)
     $btnInstallCustom.Size = New-Object System.Drawing.Size(150, 35)
-    $btnInstallCustom.BackColor = [System.Drawing.Color]::MediumSeaGreen; $btnInstallCustom.ForeColor = [System.Drawing.Color]::White
-    $btnInstallCustom.FlatStyle = "Flat"; $btnInstallCustom.FlatAppearance.BorderSize = 0; $btnInstallCustom.Cursor = "Hand"
+    $btnInstallCustom.BackColor = [System.Drawing.Color]::MediumSeaGreen
+    $btnInstallCustom.ForeColor = [System.Drawing.Color]::White
+    $btnInstallCustom.FlatStyle = "Flat"
+    $btnInstallCustom.FlatAppearance.BorderSize = 0
+    $btnInstallCustom.Cursor = "Hand"
     $btnInstallCustom.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+    
     $btnInstallCustom.Add_Click({
         $query = $global:txtCustomApp.Text.Trim()
+        
         if ([string]::IsNullOrWhiteSpace($query)) {
             Write-Log "Process Aborted: Custom install query is empty."
             [System.Windows.Forms.MessageBox]::Show("Masukkan nama atau ID software terlebih dahulu di kotak teks!", "Peringatan", "OK", "Warning")
             return
         }
         
-        $pkgMngr = if ($global:rbChoco.Checked) { "Chocolatey" } else { "Winget" }
+        if ($global:rbChoco.Checked) {
+            $pkgMngr = "Chocolatey"
+        } else {
+            $pkgMngr = "Winget"
+        }
         
         $msg = "Pastikan kamu sudah menemukan ID yang tepat dari tombol pencarian.`nIngin menginstal '$query' menggunakan $pkgMngr?"
         $confirm = [System.Windows.Forms.MessageBox]::Show($msg, "Konfirmasi Install", "YesNo", "Question")
@@ -1450,22 +1919,303 @@ function Render-SoftwareCenter {
             Write-Log "Action Triggered: User initiated custom installation for '$query' via $pkgMngr."
             
             if ($global:rbChoco.Checked) {
-                Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Command `"Write-Host 'Menginstal $query via Chocolatey...' -ForegroundColor Cyan; choco install '$query' -y; Write-Host '`nSelesai!' -ForegroundColor Green; Read-Host 'Tekan ENTER untuk menutup...'`"" -Verb RunAs
+                $cmd = "Write-Host 'Menginstal $query via Chocolatey...' -ForegroundColor Cyan; choco install '$query' -y; Write-Host '`nSelesai!' -ForegroundColor Green; Read-Host 'Tekan ENTER untuk menutup...'"
             } else {
-                Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Command `"Write-Host 'Menginstal $query via Winget...' -ForegroundColor Cyan; winget install --id '$query' -e --accept-package-agreements --accept-source-agreements; Write-Host '`nSelesai!' -ForegroundColor Green; Read-Host 'Tekan ENTER untuk menutup...'`"" -Verb RunAs
+                $cmd = "Write-Host 'Menginstal $query via Winget...' -ForegroundColor Cyan; winget install --id '$query' -e --accept-package-agreements --accept-source-agreements; Write-Host '`nSelesai!' -ForegroundColor Green; Read-Host 'Tekan ENTER untuk menutup...'"
             }
+            
+            Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Command `"$cmd`"" -Verb RunAs
         } else {
             Write-Log "Process Cancelled: User aborted custom installation for '$query'."
         }
     })
+    
     $pnlCustom.Controls.Add($btnInstallCustom)
-    $null = $btnInstallCustom.Handle; &$SetRounded $btnInstallCustom 8
+    $null = $btnInstallCustom.Handle
+    &$SetRounded $btnInstallCustom 8
 
     $t3.Controls.Add($pnlCustom)
-    # ---> AKHIR TAB 3 <---
 
-    # Pastikan t3 dimasukkan ke dalam AddRange
+    # --- Memasukkan Semua Tab ke TabControl Utama ---
     $tabControl.TabPages.AddRange(@($t1, $t2, $t3))
+    $contentPanel.Controls.Add($tabControl)
+
+    # ---------------------------------------------------------------------
+    # FUNGSI PEMBANGUN DAFTAR APLIKASI OTOMATIS (DYNAMIC GRID LIST)
+    # ---------------------------------------------------------------------
+    function Build-ScrollableList ($TabName) {
+        $panel = New-Object System.Windows.Forms.Panel
+        $panel.Dock = "Fill"
+        $panel.AutoScroll = $true
+        
+        # Menyesuaikan warna latar belakang panel daftar aplikasi
+        if ($global:IsDarkMode) {
+            $panel.BackColor = [System.Drawing.Color]::FromArgb(25, 25, 30)
+        } else {
+            $panel.BackColor = [System.Drawing.Color]::White
+        }
+        
+        $yPos = 15
+        
+        # Menyaring (Filter) nama kategori unik dari Database sesuai nama Tab
+        $categories = $global:SoftwareDatabase | Where-Object { $_.Tab -eq $TabName } | Select-Object -ExpandProperty Category -Unique
+
+        foreach ($cat in $categories) {
+            # --- Membuat Label Judul Kategori (Contoh: "WEB BROWSER") ---
+            $lblHeader = New-Object System.Windows.Forms.Label
+            $lblHeader.Text = "  $cat  "
+            $lblHeader.AutoSize = $true
+            $lblHeader.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
+            $lblHeader.ForeColor = [System.Drawing.Color]::White
+            $lblHeader.BackColor = $themeBlue
+            $lblHeader.Location = New-Object System.Drawing.Point(15, $yPos)
+            
+            $panel.Controls.Add($lblHeader)
+            
+            # Memanggil handle agar elemen dirender di memori sebelum dilengkungkan sudutnya
+            $null = $lblHeader.Handle
+            &$SetRounded $lblHeader 6
+            
+            # Menambah jarak (Y) ke bawah untuk posisi checkbox aplikasi
+            $yPos += 35
+
+            # Mengambil daftar aplikasi spesifik untuk kategori ini
+            $items = $global:SoftwareDatabase | Where-Object { $_.Tab -eq $TabName -and $_.Category -eq $cat }
+            
+            # Variabel untuk mengatur sistem Grid (3 Kolom)
+            $colIndex = 0
+            $colWidth = 210
+
+            foreach ($item in $items) {
+                # --- Membuat Checkbox Aplikasi ---
+                $chk = New-Object System.Windows.Forms.CheckBox
+                $chk.Text = $item.Name
+                $chk.AutoSize = $true
+                $chk.Cursor = "Hand"
+                
+                if ($global:IsDarkMode) {
+                    $chk.ForeColor = [System.Drawing.Color]::White
+                } else {
+                    $chk.ForeColor = [System.Drawing.Color]::Black
+                }
+                
+                # Perhitungan Kordinat X: Titik awal 25 + (indeks kolom * jarak lebar antar kolom)
+                $xPos = 25 + ($colIndex * $colWidth)
+                $chk.Location = New-Object System.Drawing.Point($xPos, $yPos)
+                
+                # INJEKSI DATA PENTING:
+                # Memasukkan seluruh data aplikasi (termasuk ID Winget/Choco) ke dalam objek Checkbox
+                $chk.Tag = $item 
+
+                $panel.Controls.Add($chk)
+                
+                # Logika Baris Baru:
+                # Geser ke kolom berikutnya. Jika sudah kolom ke-3 (indeks 3), kembalikan ke kolom 0 dan turunkan Y.
+                $colIndex++ 
+                if ($colIndex -ge 3) { 
+                    $colIndex = 0
+                    $yPos += 25 
+                }
+            }
+            
+            # Jika baris terakhir tidak genap 3 (misal hanya 1 atau 2 aplikasi),
+            # kita tetap harus menambahkan jarak Y agar kategori berikutnya tidak menumpuk
+            if ($colIndex -ne 0) { 
+                $yPos += 25 
+            }
+            
+            # Jarak ekstra antar blok kategori
+            $yPos += 15
+        }
+        
+        return $panel
+    }
+
+    # ---------------------------------------------------------------------
+    # PERAKITAN TAB CONTROL
+    # ---------------------------------------------------------------------
+    # === TAB 1: SYSTEM & FEATURES ===
+    $t1 = New-Object System.Windows.Forms.TabPage
+    $t1.Text = "System & Features"
+    $global:pnlWinList = Build-ScrollableList "Windows"
+    $t1.Controls.Add($global:pnlWinList)
+    
+    # === TAB 2: THIRD PARTY SOFTWARE ===
+    $t2 = New-Object System.Windows.Forms.TabPage
+    $t2.Text = "Third Party Software"
+    $global:pnlThirdList = Build-ScrollableList "ThirdParty"
+    $t2.Controls.Add($global:pnlThirdList)
+
+    # === TAB 3: CUSTOM SEARCH & INSTALL ===
+    $t3 = New-Object System.Windows.Forms.TabPage
+    $t3.Text = "Search & Custom Install"
+    
+    $pnlCustom = New-Object System.Windows.Forms.Panel
+    $pnlCustom.Dock = "Fill"
+    
+    if ($global:IsDarkMode) {
+        $pnlCustom.BackColor = [System.Drawing.Color]::FromArgb(25, 25, 30)
+    } else {
+        $pnlCustom.BackColor = [System.Drawing.Color]::White
+    }
+    
+    # -- Teks Informasi/Edukasi --
+    $lblInfoCustom = New-Object System.Windows.Forms.Label
+    $lblInfoCustom.Text = "Aplikasi yang kamu cari belum ada di daftar utama? Cari dan install secara manual di sini!`n`nTIPS PENTING: Jika aplikasi tidak ditemukan menggunakan Winget, cobalah ganti Package Manager ke Chocolatey (di bagian atas), dan sebaliknya. Beberapa aplikasi hanya tersedia di salah satu repositori."
+    $lblInfoCustom.Location = New-Object System.Drawing.Point(20, 20)
+    $lblInfoCustom.Size = New-Object System.Drawing.Size(($tabControl.Width - 60), 65)
+    $lblInfoCustom.Font = New-Object System.Drawing.Font("Segoe UI", 9.5, [System.Drawing.FontStyle]::Regular)
+    
+    if ($global:IsDarkMode) {
+        $lblInfoCustom.ForeColor = [System.Drawing.Color]::LightSkyBlue
+    } else {
+        $lblInfoCustom.ForeColor = [System.Drawing.Color]::DarkBlue
+    }
+    
+    $pnlCustom.Controls.Add($lblInfoCustom)
+
+    # -- Teks Judul Input --
+    $lblInput = New-Object System.Windows.Forms.Label
+    $lblInput.Text = "Masukkan Nama atau ID Aplikasi (Cth: VLC, Google.Chrome, telegram):"
+    $lblInput.Location = New-Object System.Drawing.Point(20, 100)
+    $lblInput.AutoSize = $true
+    $lblInput.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+    
+    if ($global:IsDarkMode) {
+        $lblInput.ForeColor = [System.Drawing.Color]::White
+    } else {
+        $lblInput.ForeColor = [System.Drawing.Color]::Black
+    }
+    
+    $pnlCustom.Controls.Add($lblInput)
+
+    # -- Kotak Input Teks (Textbox) --
+    $global:txtCustomApp = New-Object System.Windows.Forms.TextBox
+    $global:txtCustomApp.Location = New-Object System.Drawing.Point(20, 125)
+    $global:txtCustomApp.Size = New-Object System.Drawing.Size(350, 30)
+    $global:txtCustomApp.Font = New-Object System.Drawing.Font("Segoe UI", 10)
+    $pnlCustom.Controls.Add($global:txtCustomApp)
+
+    # ---------------------------------------------------------------------
+    # TOMBOL AKSI: CARI SOFTWARE (SEARCH)
+    # ---------------------------------------------------------------------
+    $btnSearchCustom = New-Object System.Windows.Forms.Button
+    $btnSearchCustom.Text = "Cari Software"
+    $btnSearchCustom.Location = New-Object System.Drawing.Point(20, 170)
+    $btnSearchCustom.Size = New-Object System.Drawing.Size(150, 35)
+    $btnSearchCustom.BackColor = $themeBlue
+    $btnSearchCustom.ForeColor = [System.Drawing.Color]::White
+    $btnSearchCustom.FlatStyle = "Flat"
+    $btnSearchCustom.FlatAppearance.BorderSize = 0
+    $btnSearchCustom.Cursor = "Hand"
+    $btnSearchCustom.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+    
+    $btnSearchCustom.Add_Click({
+        $query = $global:txtCustomApp.Text.Trim()
+        
+        if ([string]::IsNullOrWhiteSpace($query)) {
+            Write-Log "Process Aborted: Custom search query is empty."
+            [System.Windows.Forms.MessageBox]::Show("Masukkan nama software terlebih dahulu di kotak teks!", "Peringatan", "OK", "Warning")
+            return
+        }
+        
+        if ($global:rbChoco.Checked) {
+            $pm = "Chocolatey"
+        } else {
+            $pm = "Winget"
+        }
+        
+        Write-Log "Action Triggered: User searched for custom app '$query' via $pm."
+
+        # Menjalankan CMD di background dan membiarkan jendelanya tetap terbuka (/k)
+        # Sintaks && digunakan khusus untuk CMD (Command Prompt), bukan PowerShell
+        if ($global:rbChoco.Checked) {
+            $cmdArgs = "/k title Mencari $query di Chocolatey && Memeriksa di Chocolatey... && choco search `"$query`""
+            Start-Process cmd -ArgumentList $cmdArgs
+        } else {
+            $cmdArgs = "/k title Mencari $query di Winget && Memeriksa di Winget... && winget search `"$query`""
+            Start-Process cmd -ArgumentList $cmdArgs
+        }
+    })
+    
+    $pnlCustom.Controls.Add($btnSearchCustom)
+    $null = $btnSearchCustom.Handle
+    &$SetRounded $btnSearchCustom 8
+
+    # ---------------------------------------------------------------------
+    # TOMBOL AKSI: INSTALL MANUAL
+    # ---------------------------------------------------------------------
+    $btnInstallCustom = New-Object System.Windows.Forms.Button
+    $btnInstallCustom.Text = "Install Software"
+    $btnInstallCustom.Location = New-Object System.Drawing.Point(180, 170)
+    $btnInstallCustom.Size = New-Object System.Drawing.Size(150, 35)
+    $btnInstallCustom.BackColor = [System.Drawing.Color]::MediumSeaGreen
+    $btnInstallCustom.ForeColor = [System.Drawing.Color]::White
+    $btnInstallCustom.FlatStyle = "Flat"
+    $btnInstallCustom.FlatAppearance.BorderSize = 0
+    $btnInstallCustom.Cursor = "Hand"
+    $btnInstallCustom.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+    
+    $btnInstallCustom.Add_Click({
+        $query = $global:txtCustomApp.Text.Trim()
+        
+        if ([string]::IsNullOrWhiteSpace($query)) {
+            Write-Log "Process Aborted: Custom install query is empty."
+            [System.Windows.Forms.MessageBox]::Show("Masukkan nama atau ID software terlebih dahulu di kotak teks!", "Peringatan", "OK", "Warning")
+            return
+        }
+        
+        if ($global:rbChoco.Checked) {
+            $pkgMngr = "Chocolatey"
+        } else {
+            $pkgMngr = "Winget"
+        }
+        
+        $msg = "Pastikan kamu sudah menemukan ID yang tepat dari tombol pencarian.`nIngin menginstal '$query' menggunakan $pkgMngr?"
+        $confirm = [System.Windows.Forms.MessageBox]::Show($msg, "Konfirmasi Install", "YesNo", "Question")
+        
+        if ($confirm -eq "Yes") {
+            Write-Log "Action Triggered: User initiated custom installation for '$query' via $pkgMngr."
+            
+            # Merakit perintah PowerShell menggunakan Array agar rapi (menghindari penggunaan titik koma manual)
+            if ($global:rbChoco.Checked) {
+                $cmdLines = @(
+                    "Write-Host 'Menginstal $query via Chocolatey...' -ForegroundColor Cyan"
+                    "choco install '$query' -y"
+                    "Write-Host '`nSelesai!' -ForegroundColor Green"
+                    "Read-Host 'Tekan ENTER untuk menutup...'"
+                )
+            } else {
+                $cmdLines = @(
+                    "Write-Host 'Menginstal $query via Winget...' -ForegroundColor Cyan"
+                    "winget install --id '$query' -e --accept-package-agreements --accept-source-agreements"
+                    "Write-Host '`nSelesai!' -ForegroundColor Green"
+                    "Read-Host 'Tekan ENTER untuk menutup...'"
+                )
+            }
+            
+            # Menggabungkan array menjadi satu string komando yang bisa dibaca PowerShell (-Command)
+            $finalCmd = $cmdLines -join "; "
+            
+            Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Command `"$finalCmd`"" -Verb RunAs
+        } else {
+            Write-Log "Process Cancelled: User aborted custom installation for '$query'."
+        }
+    })
+    
+    $pnlCustom.Controls.Add($btnInstallCustom)
+    $null = $btnInstallCustom.Handle
+    &$SetRounded $btnInstallCustom 8
+
+    $t3.Controls.Add($pnlCustom)
+
+    # ---------------------------------------------------------------------
+    # PENYUSUNAN AKHIR
+    # ---------------------------------------------------------------------
+    # Memasukkan semua Tab (System, Third Party, Custom) ke dalam TabControl
+    $tabControl.TabPages.AddRange(@($t1, $t2, $t3))
+    
+    # Memasukkan TabControl ke dalam Panel Konten Utama aplikasi
     $contentPanel.Controls.Add($tabControl)
 }
 
@@ -1473,32 +2223,56 @@ function Render-SoftwareCenter {
 # SELESAI BAGIAN SOFTWARE CENTER
 # ========================================================
 
-# ========================================================
-# MULAI RENDER WINDOWS DEFENDER
-# ========================================================
+# =========================================================================
+# FASE 13: MODUL MANAJEMEN WINDOWS DEFENDER & KEAMANAN SISTEM
+# =========================================================================
+
+# -------------------------------------------------------------------------
+# FUNGSI 1: RESET IT POLICIES (UNLOCK SETTINGS)
+# -------------------------------------------------------------------------
+# Fungsi ini berguna jika PC terkunci oleh pengaturan organisasi (Managed by your organization)
+# yang menyebabkan user tidak bisa mengubah pengaturan Windows.
 function Action-DefEnableIT {
     Write-Log "Starting IT Limit Fix (Reset Policies)..."
+    
+    # Daftar panjang lokasi Registry tempat Windows menyimpan batasan (Policies)
     $keys = @(
         "HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies",
-        "HKCU:\Software\Microsoft\WindowsSelfHost", "HKCU:\Software\Policies",
-        "HKLM:\Software\Microsoft\Policies", "HKLM:\Software\Microsoft\Windows\CurrentVersion\Policies",
+        "HKCU:\Software\Microsoft\WindowsSelfHost", 
+        "HKCU:\Software\Policies",
+        "HKLM:\Software\Microsoft\Policies", 
+        "HKLM:\Software\Microsoft\Windows\CurrentVersion\Policies",
         "HKLM:\Software\Microsoft\Windows\CurrentVersion\WindowsStore\WindowsUpdate",
-        "HKLM:\Software\Microsoft\WindowsSelfHost", "HKLM:\Software\Policies",
+        "HKLM:\Software\Microsoft\WindowsSelfHost", 
+        "HKLM:\Software\Policies",
         "HKLM:\Software\WOW6432Node\Microsoft\Policies",
         "HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Policies"
     )
-    foreach ($k in $keys) { if (Test-Path $k) { Remove-Item -Path $k -Recurse -Force -ErrorAction SilentlyContinue } }
+    
+    # Melakukan perulangan untuk mengecek setiap lokasi di atas
+    foreach ($k in $keys) { 
+        # Jika folder (Path) tersebut ada di sistem, maka hapus paksa beserta isinya
+        if (Test-Path $k) { 
+            Remove-Item -Path $k -Recurse -Force -ErrorAction SilentlyContinue 
+        } 
+    }
+    
     [System.Windows.Forms.MessageBox]::Show("IT Limit Policies have been reset!", "Success", "OK", "Information")
 }
 
+# -------------------------------------------------------------------------
+# FUNGSI 2: MEMATIKAN WINDOWS DEFENDER (DISABLE)
+# -------------------------------------------------------------------------
 function Action-DefDisable {
+    # Peringatan wajib: Tamper Protection harus mati secara manual dari dalam Windows Security,
+    # karena Microsoft melindunginya agar tidak bisa dimatikan lewat script.
     $msg = "PENTING: Fitur ini HANYA BEKERJA jika 'Tamper Protection' di Windows Security sudah dimatikan secara manual.`n`nApakah Anda sudah mematikannya?"
     $ask = [System.Windows.Forms.MessageBox]::Show($msg, "Cek Tamper Protection", "YesNo", "Warning")
     
     if ($ask -eq "Yes") {
         Write-Log "Disabling Windows Defender..."
         try {
-            # --- 1. Disabling Windows Defender entirely ---
+            # --- 1. Mematikan fitur inti AntiSpyware dan AntiVirus ---
             $basePath = "HKLM\SOFTWARE\Policies\Microsoft\Windows Defender"
             cmd.exe /c "reg add `"$basePath`" /v `"DisableAntiSpyware`" /t REG_DWORD /d 1 /f" | Out-Null
             cmd.exe /c "reg add `"$basePath`" /v `"DisableRealtimeMonitoring`" /t REG_DWORD /d 1 /f" | Out-Null
@@ -1507,20 +2281,21 @@ function Action-DefDisable {
             cmd.exe /c "reg add `"$basePath`" /v `"DisableRoutinelyTakingAction`" /t REG_DWORD /d 1 /f" | Out-Null
             cmd.exe /c "reg add `"$basePath`" /v `"ServiceKeepAlive`" /t REG_DWORD /d 0 /f" | Out-Null
 
-            # --- 2. Disable real-time protection ---
+            # --- 2. Mematikan modul Real-Time Protection (Pemindaian Otomatis) ---
             $rtPath = "HKLM\SOFTWARE\Policies\Microsoft\Windows Defender\Real-Time Protection"
             cmd.exe /c "reg add `"$rtPath`" /v `"DisableBehaviorMonitoring`" /t REG_DWORD /d 1 /f" | Out-Null
             cmd.exe /c "reg add `"$rtPath`" /v `"DisableOnAccessProtection`" /t REG_DWORD /d 1 /f" | Out-Null
             cmd.exe /c "reg add `"$rtPath`" /v `"DisableScanOnRealtimeEnable`" /t REG_DWORD /d 1 /f" | Out-Null
             cmd.exe /c "reg add `"$rtPath`" /v `"DisableRealtimeMonitoring`" /t REG_DWORD /d 1 /f" | Out-Null
 
-            # --- 3. Disable automatic signature updates ---
+            # --- 3. Mematikan Auto-Update Signature (Database Virus) ---
             $sigPath = "HKLM\SOFTWARE\Policies\Microsoft\Windows Defender\Signature Updates"
             cmd.exe /c "reg add `"$sigPath`" /v `"ForceUpdateFromMU`" /t REG_DWORD /d 0 /f" | Out-Null
 
-            # --- 4. Disable block feature & Other Policies ---
+            # --- 4. Mematikan Telemetri (Pengiriman Sample Data ke Microsoft) ---
             $spyPath = "HKLM\SOFTWARE\Policies\Microsoft\Windows Defender\Spynet"
             cmd.exe /c "reg add `"$spyPath`" /v `"DisableBlockAtFirstSeen`" /t REG_DWORD /d 1 /f" | Out-Null
+            # SubmitSamplesConsent bernilai 2 berarti "Jangan Pernah Kirim Data" (Never Send)
             cmd.exe /c "reg add `"$spyPath`" /v `"SubmitSamplesConsent`" /t REG_DWORD /d 2 /f" | Out-Null
             
             $mpPath = "HKLM\SOFTWARE\Policies\Microsoft\Windows Defender\MpEngine"
@@ -1530,7 +2305,7 @@ function Action-DefDisable {
             $repPath = "HKLM\SOFTWARE\Policies\Microsoft\Windows Defender\Reporting"
             cmd.exe /c "reg add `"$repPath`" /v `"DisableEnhancedNotifications`" /t REG_DWORD /d 1 /f" | Out-Null
 
-            # --- 5. Stop and Disable Services ---
+            # --- 5. Mematikan Service secara Paksa via SC (Service Controller) ---
             cmd.exe /c "sc stop WinDefend" | Out-Null
             cmd.exe /c "sc stop Sense" | Out-Null
             cmd.exe /c "sc config WinDefend start= disabled" | Out-Null
@@ -1543,14 +2318,18 @@ function Action-DefDisable {
     }
 }
 
+# -------------------------------------------------------------------------
+# FUNGSI 3: MENGHIDUPKAN WINDOWS DEFENDER KEMBALI (ENABLE)
+# -------------------------------------------------------------------------
 function Action-DefEnable {
     Write-Log "Enabling Windows Defender..."
     try {
-        # Menghapus seluruh folder Windows Defender di Policies Registry (Kembali ke Default)
+        # Mengembalikan fitur dengan cara menghapus seluruh Policy buatan kita di atas.
+        # Jika folder Registry ini dihapus, Windows akan kembali menggunakan pengaturan standar pabrik.
         $basePath = "HKLM\SOFTWARE\Policies\Microsoft\Windows Defender"
         cmd.exe /c "reg delete `"$basePath`" /f" | Out-Null
         
-        # Mengembalikan service ke Automatic dan mencoba menyalakannya
+        # Menyalakan ulang Service dan mengubah startup type menjadi Otomatis
         cmd.exe /c "sc config WinDefend start= auto" | Out-Null
         cmd.exe /c "sc config Sense start= auto" | Out-Null
         cmd.exe /c "sc start WinDefend" | Out-Null
@@ -1562,9 +2341,17 @@ function Action-DefEnable {
     }
 }
 
+# -------------------------------------------------------------------------
+# FUNGSI 4: PEMBUATAN ANTARMUKA (RENDER UI) WINDOWS DEFENDER
+# -------------------------------------------------------------------------
 function Render-WindowsDefender {
     $contentPanel.Controls.Clear()
-    $cP = if ($global:IsDarkMode) { $ThemePalettes.Dark } else { $ThemePalettes.Light }
+    
+    if ($global:IsDarkMode) { 
+        $cP = $ThemePalettes.Dark 
+    } else { 
+        $cP = $ThemePalettes.Light 
+    }
 
     $pnlMain = New-Object System.Windows.Forms.Panel
     $pnlMain.Dock = "Fill"
@@ -1577,6 +2364,7 @@ function Render-WindowsDefender {
     $bannerCard.Location = New-Object System.Drawing.Point(30, 30)
     $bannerCard.BackColor = $cP.Header 
     
+    # Efek sudut melengkung pada banner
     $banRadius = 20
     $banPath = New-Object System.Drawing.Drawing2D.GraphicsPath
     $banPath.AddArc(0, 0, $banRadius, $banRadius, 180, 90)
@@ -1604,17 +2392,17 @@ function Render-WindowsDefender {
 
     $pnlMain.Controls.Add($bannerCard)
 
-    # --- 2. GRID UNTUK ACTION CARDS ---
+    # --- 2. GRID UNTUK ACTION CARDS (TOMBOL MENU) ---
     $flpCards = New-Object System.Windows.Forms.FlowLayoutPanel
     $flpCards.Location = New-Object System.Drawing.Point(25, 160)
     $flpCards.Size = New-Object System.Drawing.Size(770, 0)
     $flpCards.AutoSize = $true
     $flpCards.AutoSizeMode = "GrowAndShrink"
-    $flpCards.AutoScroll = $false # DIMATIKAN AGAR TIDAK ADA DOUBLE SCROLL
+    $flpCards.AutoScroll = $false 
     $flpCards.FlowDirection = "TopDown"
     $flpCards.WrapContents = $false
 
-    # --- HELPER FUNCTION UNTUK KARTU TOMBOL (FIXED) ---
+    # --- FUNGSI INTERNAL: TEMPLATE PEMBUAT KARTU TOMBOL ---
     function Create-ActionCard ($Title, $Desc, $IconCode, $ColorName, $ActionScript) {
         $card = New-Object System.Windows.Forms.Panel
         $card.Size = New-Object System.Drawing.Size(735, 90)
@@ -1622,6 +2410,7 @@ function Render-WindowsDefender {
         $card.BackColor = $cP.Card
         $card.Cursor = [System.Windows.Forms.Cursors]::Hand
 
+        # Sudut melengkung untuk setiap kartu
         $rad = 15
         $path = New-Object System.Drawing.Drawing2D.GraphicsPath
         $path.AddArc(0, 0, $rad, $rad, 180, 90)
@@ -1631,14 +2420,22 @@ function Render-WindowsDefender {
         $path.CloseAllFigures()
         $card.Region = New-Object System.Drawing.Region($path)
 
+        # Ikon Kartu
         $ico = New-Object System.Windows.Forms.Label
         $ico.Text = [char]$IconCode
         $ico.Font = New-Object System.Drawing.Font("Segoe MDL2 Assets", 24)
         $ico.AutoSize = $true
         $ico.Location = New-Object System.Drawing.Point(20, 25)
-        try { $ico.ForeColor = [System.Drawing.Color]::FromName($ColorName) } catch { $ico.ForeColor = $cP.Accent }
+        
+        try { 
+            $ico.ForeColor = [System.Drawing.Color]::FromName($ColorName) 
+        } catch { 
+            $ico.ForeColor = $cP.Accent 
+        }
+        
         $card.Controls.Add($ico)
 
+        # Judul Kartu
         $lTitle = New-Object System.Windows.Forms.Label
         $lTitle.Text = $Title
         $lTitle.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
@@ -1647,6 +2444,7 @@ function Render-WindowsDefender {
         $lTitle.AutoSize = $true
         $card.Controls.Add($lTitle)
 
+        # Deskripsi Kartu
         $lSub = New-Object System.Windows.Forms.Label
         $lSub.Text = $Desc
         $lSub.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Regular)
@@ -1657,19 +2455,58 @@ function Render-WindowsDefender {
         $lSub.AutoEllipsis = $true
         $card.Controls.Add($lSub)
 
-        # --- PERBAIKAN FINAL: Evaluasi warna langsung di dalam kurung kurawal ---
-        $card.Add_MouseEnter({ $this.BackColor = if ($global:IsDarkMode) { [System.Drawing.Color]::FromArgb(45, 45, 55) } else { [System.Drawing.Color]::FromArgb(235, 235, 235) } })
-        $card.Add_MouseLeave({ $this.BackColor = if ($global:IsDarkMode) { [System.Drawing.Color]::FromArgb(30, 30, 35) } else { [System.Drawing.Color]::White } })
+        # --- LOGIKA HOVER (SOROT MOUSE) ---
+        # Setiap elemen di dalam kartu ditambahkan sensor (Event Listener).
+        # Logika dipecah ke bawah tanpa menggunakan titik koma.
+        
+        $hoverAction = {
+            if ($global:IsDarkMode) {
+                $this.BackColor = [System.Drawing.Color]::FromArgb(45, 45, 55)
+            } else {
+                $this.BackColor = [System.Drawing.Color]::FromArgb(235, 235, 235)
+            }
+        }.GetNewClosure()
 
-        $ico.Add_MouseEnter({ $this.Parent.BackColor = if ($global:IsDarkMode) { [System.Drawing.Color]::FromArgb(45, 45, 55) } else { [System.Drawing.Color]::FromArgb(235, 235, 235) } })
-        $ico.Add_MouseLeave({ $this.Parent.BackColor = if ($global:IsDarkMode) { [System.Drawing.Color]::FromArgb(30, 30, 35) } else { [System.Drawing.Color]::White } })
+        $leaveAction = {
+            if ($global:IsDarkMode) {
+                $this.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 35)
+            } else {
+                $this.BackColor = [System.Drawing.Color]::White
+            }
+        }.GetNewClosure()
+        
+        $childHoverAction = {
+            if ($global:IsDarkMode) {
+                $this.Parent.BackColor = [System.Drawing.Color]::FromArgb(45, 45, 55)
+            } else {
+                $this.Parent.BackColor = [System.Drawing.Color]::FromArgb(235, 235, 235)
+            }
+        }.GetNewClosure()
 
-        $lTitle.Add_MouseEnter({ $this.Parent.BackColor = if ($global:IsDarkMode) { [System.Drawing.Color]::FromArgb(45, 45, 55) } else { [System.Drawing.Color]::FromArgb(235, 235, 235) } })
-        $lTitle.Add_MouseLeave({ $this.Parent.BackColor = if ($global:IsDarkMode) { [System.Drawing.Color]::FromArgb(30, 30, 35) } else { [System.Drawing.Color]::White } })
+        $childLeaveAction = {
+            if ($global:IsDarkMode) {
+                $this.Parent.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 35)
+            } else {
+                $this.Parent.BackColor = [System.Drawing.Color]::White
+            }
+        }.GetNewClosure()
 
-        $lSub.Add_MouseEnter({ $this.Parent.BackColor = if ($global:IsDarkMode) { [System.Drawing.Color]::FromArgb(45, 45, 55) } else { [System.Drawing.Color]::FromArgb(235, 235, 235) } })
-        $lSub.Add_MouseLeave({ $this.Parent.BackColor = if ($global:IsDarkMode) { [System.Drawing.Color]::FromArgb(30, 30, 35) } else { [System.Drawing.Color]::White } })
+        # Memasang sensor Hover ke panel utama (Kartu)
+        $card.Add_MouseEnter($hoverAction)
+        $card.Add_MouseLeave($leaveAction)
 
+        # Memasang sensor Hover ke elemen di dalam Kartu (Ikon, Judul, Deskripsi)
+        $ico.Add_MouseEnter($childHoverAction)
+        $ico.Add_MouseLeave($childLeaveAction)
+        
+        $lTitle.Add_MouseEnter($childHoverAction)
+        $lTitle.Add_MouseLeave($childLeaveAction)
+        
+        $lSub.Add_MouseEnter($childHoverAction)
+        $lSub.Add_MouseLeave($childLeaveAction)
+
+        # --- LOGIKA KLIK (EKSEKUSI FUNGSI) ---
+        # Menambahkan aksi klik pada semua elemen, sehingga user bisa mengeklik di area mana saja dari kartu.
         $card.Add_Click($ActionScript)
         $ico.Add_Click($ActionScript)
         $lTitle.Add_Click($ActionScript)
@@ -1678,7 +2515,7 @@ function Render-WindowsDefender {
         return $card
     }
 
-    # Action Cards
+    # --- Pemasangan Action Cards ---
     $flpCards.Controls.Add((Create-ActionCard "Reset IT Policies (Unlock Settings)" "Hapus semua batasan/policy lokal Windows. Berguna jika Defender terkunci 'Managed by your organization'." 0xE90F "Orange" { Action-DefEnableIT }))
     $flpCards.Controls.Add((Create-ActionCard "Disable Windows Defender" "Matikan perlindungan Real-time, AntiVirus, dan Spyware secara paksa lewat Registry." 0xE711 "Red" { Action-DefDisable }))
     $flpCards.Controls.Add((Create-ActionCard "Enable Windows Defender" "Pulihkan pengaturan Default perlindungan Windows dan nyalakan ulang servis." 0xE8FB "LimeGreen" { Action-DefEnable }))
@@ -1687,49 +2524,66 @@ function Render-WindowsDefender {
     $contentPanel.Controls.Add($pnlMain)
 }
 
-# ========================================================
-# SELESAI RENDER WINDOWS DEFENDER
-# ========================================================
+# ==========================================
+# SELESAI RENDER WINDOWS UPDATES
+# ==========================================
 
-# ==========================================
-# MULAI RENDER WINDOWS UPDATES
-# ==========================================
-# --- 1. Fungsi Disable Update (Pause hingga 2075) ---
+# =========================================================================
+# FASE 14: MODUL MANAJEMEN WINDOWS UPDATE (LOGIC ENGINE)
+# =========================================================================
+
+# -------------------------------------------------------------------------
+# FUNGSI 1: MEMATIKAN WINDOWS UPDATE (PAUSE HINGGA TAHUN 2075)
+# -------------------------------------------------------------------------
 function Action-UpdateDisable {
     Write-Log "Process Started: Disabling Windows Update..."
     try {
+        # Mengubah kursor panah menjadi ikon "Loading/Wait"
         [System.Windows.Forms.Cursor]::Current = [System.Windows.Forms.Cursors]::WaitCursor
 
-        # Matikan & Disable semua Services
+        # 1. Matikan dan Nonaktifkan (Disable) semua servis terkait Windows Update
         $services = @("wuauserv", "bits", "dosvc", "UsoSvc", "WaaSMedicSvc")
         foreach ($svc in $services) {
             Stop-Service -Name $svc -Force -ErrorAction SilentlyContinue
             Set-Service -Name $svc -StartupType Disabled -ErrorAction SilentlyContinue
         }
 
-        # Atur Tanggal Pause mentok sampai 2075
+        # 2. Atur Waktu Jeda (Pause) di Registry
+        # Format waktu wajib mengikuti standar ISO 8601 (Tahun-Bulan-Hari T Jam:Menit:Detik Z)
         $now = "2025-01-01T00:00:00Z"
-        $future = "2075-01-01T00:00:00Z"
+        $future = "2075-01-01T00:00:00Z" # Update ditahan sampai tahun 2075
         
-        # Eksekusi Registry UX Settings
+        # Eksekusi Registry UX Settings (Tampilan di menu Settings Windows)
         $uxPath = "HKLM:\SOFTWARE\Microsoft\WindowsUpdate\UX\Settings"
-        if (-not (Test-Path $uxPath)) { New-Item -Path $uxPath -Force | Out-Null }
+        
+        if (-not (Test-Path $uxPath)) { 
+            New-Item -Path $uxPath -Force | Out-Null 
+        }
+        
         Set-ItemProperty -Path $uxPath -Name "PauseUpdatesStartTime" -Value $now -Force
         Set-ItemProperty -Path $uxPath -Name "PauseFeatureUpdatesStartTime" -Value $now -Force
         Set-ItemProperty -Path $uxPath -Name "PauseQualityUpdatesStartTime" -Value $now -Force
+        
         Set-ItemProperty -Path $uxPath -Name "PauseUpdatesExpiryTime" -Value $future -Force
         Set-ItemProperty -Path $uxPath -Name "PauseFeatureUpdatesEndTime" -Value $future -Force
         Set-ItemProperty -Path $uxPath -Name "PauseQualityUpdatesEndTime" -Value $future -Force
 
-        # Eksekusi Registry UpdatePolicy
+        # Eksekusi Registry UpdatePolicy (Kebijakan sistem)
         $upPath = "HKLM:\SOFTWARE\Microsoft\WindowsUpdate\UpdatePolicy\Settings"
-        if (-not (Test-Path $upPath)) { New-Item -Path $upPath -Force | Out-Null }
+        
+        if (-not (Test-Path $upPath)) { 
+            New-Item -Path $upPath -Force | Out-Null 
+        }
+        
+        # Angka 1 (DWord) berarti "Aktifkan status Pause"
         Set-ItemProperty -Path $upPath -Name "PausedFeatureStatus" -Value 1 -Type DWord -Force
         Set-ItemProperty -Path $upPath -Name "PausedQualityStatus" -Value 1 -Type DWord -Force
         Set-ItemProperty -Path $upPath -Name "PausedFeatureDate" -Value $now -Force
         Set-ItemProperty -Path $upPath -Name "PausedQualityDate" -Value $now -Force
 
+        # Kembalikan kursor ke bentuk semula (Panah)
         [System.Windows.Forms.Cursor]::Current = [System.Windows.Forms.Cursors]::Default
+        
         Write-Log "Success: Windows Update and its services have been forcibly disabled until 2075."
         [System.Windows.Forms.MessageBox]::Show("Windows Update beserta layanannya berhasil dimatikan secara paksa hingga tahun 2075!", "Sukses", "OK", "Information")
     } catch {
@@ -1739,34 +2593,51 @@ function Action-UpdateDisable {
     }
 }
 
+# -------------------------------------------------------------------------
+# FUNGSI 2: MENGHIDUPKAN KEMBALI WINDOWS UPDATE (ENABLE TO DEFAULT)
+# -------------------------------------------------------------------------
 function Action-UpdateEnable {
     Write-Log "Process Started: Enabling Windows Update..."
     try {
         [System.Windows.Forms.Cursor]::Current = [System.Windows.Forms.Cursors]::WaitCursor
 
-        # Aktifkan & Start Services ke Default
+        # 1. Aktifkan dan Start ulang semua servis ke pengaturan Automatic
         $autoServices = @("wuauserv", "bits", "dosvc", "UsoSvc")
         foreach ($svc in $autoServices) {
             Set-Service -Name $svc -StartupType Automatic -ErrorAction SilentlyContinue
             Start-Service -Name $svc -ErrorAction SilentlyContinue
         }
+        
+        # WaaSMedicSvc harus diatur ke Manual sesuai standar pabrik Windows
         Set-Service -Name "WaaSMedicSvc" -StartupType Manual -ErrorAction SilentlyContinue
         Start-Service -Name "WaaSMedicSvc" -ErrorAction SilentlyContinue
 
-        # Hapus Kunci Pause
+        # 2. Hapus Kunci Jeda (Pause) dari Registry UX Settings
         $uxPath = "HKLM:\SOFTWARE\Microsoft\WindowsUpdate\UX\Settings"
+        
         if (Test-Path $uxPath) {
-            $props = @("PauseUpdatesStartTime", "PauseFeatureUpdatesStartTime", "PauseQualityUpdatesStartTime", "PauseUpdatesExpiryTime", "PauseFeatureUpdatesEndTime", "PauseQualityUpdatesEndTime")
-            foreach ($prop in $props) { Remove-ItemProperty -Path $uxPath -Name $prop -ErrorAction SilentlyContinue }
+            $props = @(
+                "PauseUpdatesStartTime", "PauseFeatureUpdatesStartTime", "PauseQualityUpdatesStartTime", 
+                "PauseUpdatesExpiryTime", "PauseFeatureUpdatesEndTime", "PauseQualityUpdatesEndTime"
+            )
+            foreach ($prop in $props) { 
+                Remove-ItemProperty -Path $uxPath -Name $prop -ErrorAction SilentlyContinue 
+            }
         }
 
-        # Hapus Registry Tweak
+        # 3. Hapus Folder Registry Policy (Kembali ke bawaan Windows)
         $polAU = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU"
-        if (Test-Path $polAU) { Remove-Item -Path $polAU -Recurse -Force -ErrorAction SilentlyContinue }
+        if (Test-Path $polAU) { 
+            Remove-Item -Path $polAU -Recurse -Force -ErrorAction SilentlyContinue 
+        }
+        
         $upPath = "HKLM:\SOFTWARE\Microsoft\WindowsUpdate\UpdatePolicy\Settings"
-        if (Test-Path $upPath) { Remove-Item -Path $upPath -Recurse -Force -ErrorAction SilentlyContinue }
+        if (Test-Path $upPath) { 
+            Remove-Item -Path $upPath -Recurse -Force -ErrorAction SilentlyContinue 
+        }
 
         [System.Windows.Forms.Cursor]::Current = [System.Windows.Forms.Cursors]::Default
+        
         Write-Log "Success: Windows Update has been successfully restored to factory defaults."
         [System.Windows.Forms.MessageBox]::Show("Windows Update berhasil diaktifkan kembali ke standar pabrik.", "Sukses", "OK", "Information")
     } catch {
@@ -1776,11 +2647,13 @@ function Action-UpdateEnable {
     }
 }
 
-# --- 3. Fungsi Reset Komponen (Hapus Cache & Restart Service) ---
+# -------------------------------------------------------------------------
+# FUNGSI 3: MEMPERBAIKI WINDOWS UPDATE ERROR (RESET COMPONENTS)
+# -------------------------------------------------------------------------
 function Action-UpdateReset {
     Write-Log "Action Triggered: Opening Reset Mode dialog..."
     
-    # --- Membuat Jendela Dialog Pilihan Reset ---
+    # --- A. PEMBUATAN JENDELA POP-UP PILIHAN RESET ---
     $frmReset = New-Object System.Windows.Forms.Form
     $frmReset.Text = "Pilih Mode Reset"
     $frmReset.Size = New-Object System.Drawing.Size(400, 260)
@@ -1796,7 +2669,7 @@ function Action-UpdateReset {
     $lblInfo.Location = New-Object System.Drawing.Point(20, 20)
     $frmReset.Controls.Add($lblInfo)
 
-    # Tombol 1: Standard Reset
+    # 1. Tombol: Standard Reset
     $btnStd = New-Object System.Windows.Forms.Button
     $btnStd.Text = "Standard Reset (Disarankan)"
     $btnStd.Location = New-Object System.Drawing.Point(20, 60)
@@ -1806,6 +2679,7 @@ function Action-UpdateReset {
     $btnStd.FlatStyle = "Flat"
     $btnStd.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
     $btnStd.Cursor = "Hand"
+    
     $btnStd.Add_Click({
         $frmReset.Tag = "Standard"
         $frmReset.DialogResult = "OK"
@@ -1820,7 +2694,7 @@ function Action-UpdateReset {
     $lblStd.Location = New-Object System.Drawing.Point(20, 105)
     $frmReset.Controls.Add($lblStd)
 
-    # Tombol 2: Deep Reset
+    # 2. Tombol: Deep Reset
     $btnDeep = New-Object System.Windows.Forms.Button
     $btnDeep.Text = "Deep Reset (Tingkat Lanjut)"
     $btnDeep.Location = New-Object System.Drawing.Point(20, 140)
@@ -1830,8 +2704,10 @@ function Action-UpdateReset {
     $btnDeep.FlatStyle = "Flat"
     $btnDeep.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
     $btnDeep.Cursor = "Hand"
+    
     $btnDeep.Add_Click({
         $confirm = [System.Windows.Forms.MessageBox]::Show("Mode ini akan mendaftarkan ulang seluruh DLL inti Windows.`n`nEfek samping: Pengaturan UAC Anda mungkin akan ter-reset ke Default (Always Notify).`n`nGunakan hanya jika Standard Reset gagal.`nLanjutkan?", "Peringatan Deep Reset", 4, 48)
+        
         if ($confirm -eq 'Yes') {
             $frmReset.Tag = "Deep"
             $frmReset.DialogResult = "OK"
@@ -1847,40 +2723,50 @@ function Action-UpdateReset {
     $lblDeep.Location = New-Object System.Drawing.Point(20, 185)
     $frmReset.Controls.Add($lblDeep)
 
-    # --- Logika Eksekusi Berdasarkan Pilihan ---
+    # --- B. LOGIKA EKSEKUSI (Berdasarkan pilihan user di pop-up tadi) ---
     if ($frmReset.ShowDialog() -eq "OK") {
         $mode = $frmReset.Tag
         Write-Log "Process Started: Resetting Windows Update Components (Mode: $mode)..."
+        
         try {
             [System.Windows.Forms.Cursor]::Current = [System.Windows.Forms.Cursors]::WaitCursor
             
-            # 1. Matikan services terkait Windows Update (Berlaku untuk kedua mode)
+            # Langkah 1: Matikan services terkait (wajib)
             $services = @("wuauserv", "cryptSvc", "bits", "msiserver")
             foreach ($svc in $services) {
                 Stop-Service -Name $svc -Force -ErrorAction SilentlyContinue
             }
 
-            # 2. Hapus file qmgr*.dat (Berlaku untuk kedua mode)
+            # Langkah 2: Hapus data antrean unduhan (qmgr)
             $qmgrPath = "$env:ALLUSERSPROFILE\Application Data\Microsoft\Network\Downloader\qmgr*.dat"
             Remove-Item -Path $qmgrPath -Force -ErrorAction SilentlyContinue
 
-            # 3. Rename folder Cache SoftwareDistribution & catroot2 (Berlaku untuk kedua mode)
+            # Langkah 3: Mengamankan Cache lama (SoftwareDistribution & catroot2) dengan merename menjadi .old
             $sdPath = "$env:windir\SoftwareDistribution"
-            if (Test-Path "$sdPath.old") { Remove-Item -Path "$sdPath.old" -Recurse -Force -ErrorAction SilentlyContinue }
-            if (Test-Path $sdPath) { Rename-Item -Path $sdPath -NewName "SoftwareDistribution.old" -ErrorAction SilentlyContinue }
+            if (Test-Path "$sdPath.old") { 
+                Remove-Item -Path "$sdPath.old" -Recurse -Force -ErrorAction SilentlyContinue 
+            }
+            if (Test-Path $sdPath) { 
+                Rename-Item -Path $sdPath -NewName "SoftwareDistribution.old" -ErrorAction SilentlyContinue 
+            }
 
             $crPath = "$env:windir\System32\catroot2"
-            if (Test-Path "$crPath.old") { Remove-Item -Path "$crPath.old" -Recurse -Force -ErrorAction SilentlyContinue }
-            if (Test-Path $crPath) { Rename-Item -Path $crPath -NewName "catroot2.old" -ErrorAction SilentlyContinue }
+            if (Test-Path "$crPath.old") { 
+                Remove-Item -Path "$crPath.old" -Recurse -Force -ErrorAction SilentlyContinue 
+            }
+            if (Test-Path $crPath) { 
+                Rename-Item -Path $crPath -NewName "catroot2.old" -ErrorAction SilentlyContinue 
+            }
 
             # --- EKSEKUSI KHUSUS MODE DEEP RESET ---
             if ($mode -eq "Deep") {
                 Write-Log "Deep Reset: Re-registering System DLLs and Security Descriptors..."
-                # 4. Reset Security Descriptor BITS & WUAUSERV
+                
+                # Menggunakan Command Prompt (& sc.exe) agar terhindar dari Error parsing PowerShell
                 & sc.exe sdset bits "D:(A;;CCLCSWRPWPDTLOCRRC;;;SY)(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;BA)" | Out-Null
                 & sc.exe sdset wuauserv "D:(A;;CCLCSWRPWPDTLOCRRC;;;SY)(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;BA)" | Out-Null
 
-                # 5. Re-register Windows Update DLLs
+                # Mendaftarkan ulang seluruh Pustaka Dynamic Link Library (DLL) milik Windows
                 $dlls = @(
                     "atl.dll", "urlmon.dll", "mshtml.dll", "shdocvw.dll", "browseui.dll", "jscript.dll", "vbscript.dll", 
                     "scrrun.dll", "msxml.dll", "msxml3.dll", "msxml6.dll", "actxprxy.dll", "softpub.dll", "wintrust.dll", 
@@ -1891,17 +2777,19 @@ function Action-UpdateReset {
                 
                 $currentLocation = Get-Location
                 Set-Location "$env:windir\System32"
+                
+                # Menjalankan pendaftaran DLL satu per satu tanpa memunculkan jendela pop-up (Silently)
                 foreach ($dll in $dlls) {
                     Start-Process -FilePath "regsvr32.exe" -ArgumentList "/s $dll" -Wait -WindowStyle Hidden -ErrorAction SilentlyContinue
                 }
                 Set-Location $currentLocation
             }
 
-            # 6. Reset Network Winsock & WinHTTP Proxy (Berlaku untuk kedua mode)
+            # Langkah 4: Reset koneksi jaringan inti (Winsock & WinHTTP Proxy)
             & netsh winsock reset | Out-Null
             & netsh winhttp reset proxy | Out-Null
 
-            # 7. Nyalakan kembali services (Berlaku untuk kedua mode)
+            # Langkah 5: Nyalakan kembali semua services yang dimatikan di awal
             foreach ($svc in $services) {
                 Start-Service -Name $svc -ErrorAction SilentlyContinue
             }
@@ -1919,9 +2807,13 @@ function Action-UpdateReset {
     }
 }
 
+# -------------------------------------------------------------------------
+# FUNGSI 4: MENUNDA UPDATE SAMPAI TANGGAL TERTENTU (CUSTOM PAUSE)
+# -------------------------------------------------------------------------
 function Action-UpdatePauseCustom {
     Write-Log "Action Triggered: Opening Custom Date Picker dialog..."
-    # --- Membuat Jendela Kalender (Date Picker) ---
+    
+    # --- Membuat Jendela Kalender (Date Picker UI) ---
     $formDate = New-Object System.Windows.Forms.Form
     $formDate.Text = "Pilih Tanggal Pause"
     $formDate.Size = New-Object System.Drawing.Size(350, 200)
@@ -1937,16 +2829,17 @@ function Action-UpdatePauseCustom {
     $lblInfo.Location = New-Object System.Drawing.Point(20, 20)
     $formDate.Controls.Add($lblInfo)
 
-    # Alat Pemilih Tanggal
+    # Memanggil elemen kalender bawaan Windows
     $dtPicker = New-Object System.Windows.Forms.DateTimePicker
     $dtPicker.Location = New-Object System.Drawing.Point(20, 55)
     $dtPicker.Size = New-Object System.Drawing.Size(290, 30)
     $dtPicker.Font = New-Object System.Drawing.Font("Segoe UI", 10)
     $dtPicker.Format = [System.Windows.Forms.DateTimePickerFormat]::Long
-    $dtPicker.MinDate = [DateTime]::Now # Tidak bisa pilih tanggal mundur
+    
+    # Mencegah user memilih tanggal di masa lalu
+    $dtPicker.MinDate = [DateTime]::Now 
     $formDate.Controls.Add($dtPicker)
 
-    # Tombol Simpan
     $btnSave = New-Object System.Windows.Forms.Button
     $btnSave.Text = "Simpan"
     $btnSave.Location = New-Object System.Drawing.Point(235, 110)
@@ -1958,20 +2851,24 @@ function Action-UpdatePauseCustom {
     $btnSave.DialogResult = "OK"
     $formDate.Controls.Add($btnSave)
 
+    # Agar user bisa langsung menekan tombol 'Enter' di keyboard untuk menyimpan
     $formDate.AcceptButton = $btnSave
 
-    # --- Logika Registry Jika Tombol Simpan Ditekan ---
+    # --- Logika Eksekusi Jika Tombol Simpan Ditekan ---
     if ($formDate.ShowDialog() -eq "OK") {
         try {
             Write-Log "Applying custom pause update date..."
-            # Format waktu wajib menggunakan ISO 8601 (UTC) untuk Registry Windows Update
+            
+            # Format waktu diubah ke UTC (Standar GMT 0) karena Registry Windows menolak zona waktu lokal
             $selectedDate = $dtPicker.Value.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
             $now = [DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
             
             $regPath = "HKLM:\SOFTWARE\Microsoft\WindowsUpdate\UX\Settings"
-            if (-not (Test-Path $regPath)) { New-Item -Path $regPath -Force | Out-Null }
+            
+            if (-not (Test-Path $regPath)) { 
+                New-Item -Path $regPath -Force | Out-Null 
+            }
 
-            # Memasukkan data pause ke Registry
             Set-ItemProperty -Path $regPath -Name "PauseUpdatesStartTime" -Value $now -Force
             Set-ItemProperty -Path $regPath -Name "PauseFeatureUpdatesStartTime" -Value $now -Force
             Set-ItemProperty -Path $regPath -Name "PauseQualityUpdatesStartTime" -Value $now -Force
@@ -1980,7 +2877,7 @@ function Action-UpdatePauseCustom {
             Set-ItemProperty -Path $regPath -Name "PauseFeatureUpdatesEndTime" -Value $selectedDate -Force
             Set-ItemProperty -Path $regPath -Name "PauseQualityUpdatesEndTime" -Value $selectedDate -Force
 
-            # Restart Service Windows Update agar langsung berefek
+            # Merestart layanan Update agar perubahan tanggal langsung muncul di aplikasi Settings Windows
             Restart-Service -Name wuauserv -Force -ErrorAction SilentlyContinue
 
             $tglIndo = $dtPicker.Value.ToString("dd MMMM yyyy")
@@ -1995,29 +2892,31 @@ function Action-UpdatePauseCustom {
     }
 }
 
+# -------------------------------------------------------------------------
+# FUNGSI 5: MENYEMBUNYIKAN UPDATE BERMASALAH (HIDE SPECIFIC UPDATE)
+# -------------------------------------------------------------------------
 function Action-UpdateHide {
     Write-Log "Process Started: Downloading Windows Update Hide Tool (wushowhide.diagcab)..."
-    # URL resmi Microsoft untuk tool wushowhide.diagcab
+    
+    # URL resmi dari Server Pusat Microsoft untuk mendownload perangkat diagnostik
     $url = "http://download.microsoft.com/download/f/2/2/f22d5fdb-59cd-4275-8c95-1be17bf70b21/wushowhide.diagcab"
     $dest = "$env:TEMP\wushowhide.diagcab"
 
     try {
-        # Mengubah kursor menjadi loading
         [System.Windows.Forms.Cursor]::Current = [System.Windows.Forms.Cursors]::WaitCursor
 
-        # Mengunduh file ke folder Temp
+        # Mengunduh file dari internet dan menyimpannya ke folder Temp
         Invoke-WebRequest -Uri $url -OutFile $dest -UseBasicParsing -ErrorAction Stop
         
-        # Kembalikan kursor ke normal
         [System.Windows.Forms.Cursor]::Current = [System.Windows.Forms.Cursors]::Default
 
+        # Memastikan file berhasil diunduh, lalu mengeksekusinya
         if (Test-Path $dest) {
-            Write-Log "Success: Successfully launched."
-            # Membuka tool troubleshooter Microsoft
+            Write-Log "Success: Successfully launched wushowhide.diagcab."
             Start-Process -FilePath $dest
         } else {
-            Write-Log "Failed: The file  was not found."
-            [System.Windows.Forms.MessageBox]::Show("File gagal ditemukan setelah diunduh.", "Error", "OK", "Error")
+            Write-Log "Failed: The file was not found after downloading."
+            [System.Windows.Forms.MessageBox]::Show("File wushowhide.diagcab gagal ditemukan setelah diunduh.", "Error", "OK", "Error")
         }
     } catch {
         [System.Windows.Forms.Cursor]::Current = [System.Windows.Forms.Cursors]::Default
@@ -2026,31 +2925,53 @@ function Action-UpdateHide {
     }
 }
 
+# =========================================================================
+# FASE 15: RENDER ANTARMUKA (UI) WINDOWS UPDATE MANAGER
+# =========================================================================
+
 function Render-WindowsUpdates {
+    # Bersihkan panel utama sebelum me-render elemen baru
     $contentPanel.Controls.Clear()
+    
+    # Deteksi tema aktif (Dark Mode / Light Mode)
     $cP = if ($global:IsDarkMode) { $ThemePalettes.Dark } else { $ThemePalettes.Light }
 
-    # --- HELPER: PELENGKUNG SUDUT CARD ---
+    # ---------------------------------------------------------------------
+    # HELPER: FUNGSI PEMBUAT SUDUT MELENGKUNG (ROUNDED CORNERS)
+    # ---------------------------------------------------------------------
     $SetRounded = {
         param($ctrl, $r)
-        if ($ctrl.Width -le 0 -or $ctrl.Height -le 0) { return }
+        
+        # Cegah error jika elemen belum memiliki dimensi
+        if ($ctrl.Width -le 0 -or $ctrl.Height -le 0) { 
+            return 
+        }
+        
         $D = $r * 2
         $p = New-Object System.Drawing.Drawing2D.GraphicsPath
+        
+        # Menggambar 4 sudut melengkung
         $p.AddArc(0, 0, $D, $D, 180, 90)
         $p.AddArc($ctrl.Width - $D, 0, $D, $D, 270, 90)
         $p.AddArc($ctrl.Width - $D, $ctrl.Height - $D, $D, $D, 0, 90)
         $p.AddArc(0, $ctrl.Height - $D, $D, $D, 90, 90)
         $p.CloseAllFigures()
+        
+        # Terapkan region/bentuk baru ke kontrol UI
         $ctrl.Region = New-Object System.Drawing.Region($p)
     }
 
-    # PANEL UTAMA (Wadah Scroll Utama)
+    # ---------------------------------------------------------------------
+    # WADAH UTAMA (MAIN SCROLL PANEL)
+    # ---------------------------------------------------------------------
     $pnlMain = New-Object System.Windows.Forms.Panel
     $pnlMain.Dock = "Fill"
     $pnlMain.BackColor = $cP.Bg
     $pnlMain.AutoScroll = $true
 
-    # --- 1. HEADER BANNER ---
+    # ---------------------------------------------------------------------
+    # 1. HEADER BANNER (KARTU JUDUL)
+    # ---------------------------------------------------------------------
     $bannerCard = New-Object System.Windows.Forms.Panel
     $bannerCard.Size = New-Object System.Drawing.Size(735, 110)
     $bannerCard.Location = New-Object System.Drawing.Point(30, 30)
@@ -2073,38 +2994,52 @@ function Render-WindowsUpdates {
     $bannerCard.Controls.Add($lblSubTitle)
 
     $pnlMain.Controls.Add($bannerCard)
-    $null = $bannerCard.Handle; &$SetRounded $bannerCard 20
+    
+    # Force pembuatan Handle UI (wajib di WinForms sebelum manipulasi Region), lalu eksekusi border melengkung
+    $null = $bannerCard.Handle
+    &$SetRounded $bannerCard 20
 
-    # --- 2. CONTAINER FLOW (DIUBAH: KUNCI LEBAR MAKSIMAL) ---
+    # ---------------------------------------------------------------------
+    # 2. FLOW LAYOUT PANEL (GRID SISTEM UNTUK KARTU MENU)
+    # ---------------------------------------------------------------------
     $flowGrid = New-Object System.Windows.Forms.FlowLayoutPanel
     $flowGrid.Location = New-Object System.Drawing.Point(30, 150)
-    $flowGrid.Width = 735 # Set lebar fix sama dengan banner
+    $flowGrid.Width = 735 # Set lebar konstan agar sama dengan banner
     $flowGrid.AutoSize = $true
     $flowGrid.AutoSizeMode = "GrowAndShrink"
-    # Ini kuncinya: Paksa tinggi bertambah, tapi lebar mentok di 735 agar turun ke baris baru!
+    
+    # Memaksa elemen di dalamnya turun ke baris baru jika melebihi lebar 735
     $flowGrid.MaximumSize = New-Object System.Drawing.Size(735, 0) 
     $flowGrid.WrapContents = $true
     $flowGrid.AutoScroll = $false 
     $flowGrid.Padding = New-Object System.Windows.Forms.Padding(0, 0, 0, 40)
     $pnlMain.Controls.Add($flowGrid)
 
-    # --- HELPER FUNCTION UNTUK KARTU TOMBOL (2 KOLOM) ---
+    # ---------------------------------------------------------------------
+    # HELPER FUNGSI: PEMBUAT KARTU TOMBOL (ACTION CARDS)
+    # ---------------------------------------------------------------------
     function Add-UpdateCard ($Title, $Desc, $IconCode, $IconColor, $ActionScript) {
         $card = New-Object System.Windows.Forms.Panel
-        # Hitungan presisi: (735 - 15 margin kanan) / 2 = 360. Kita paskan di 352 agar aman.
         $card.Size = New-Object System.Drawing.Size(352, 105)
         $card.Margin = New-Object System.Windows.Forms.Padding(0, 10, 15, 10)
         $card.BackColor = if ($global:IsDarkMode) {[System.Drawing.Color]::FromArgb(45, 45, 50)} else {[System.Drawing.Color]::White}
         $card.Cursor = "Hand"
 
+        # Ikon Kartu
         $ico = New-Object System.Windows.Forms.Label
         $ico.Text = [char]$IconCode
         $ico.Font = New-Object System.Drawing.Font("Segoe MDL2 Assets", 24)
         $ico.AutoSize = $true
         $ico.Location = New-Object System.Drawing.Point(15, 30)
-        try { $ico.ForeColor = [System.Drawing.Color]::FromName($IconColor) } catch { $ico.ForeColor = [System.Drawing.Color]::FromArgb(0, 102, 204) }
+        
+        try { 
+            $ico.ForeColor = [System.Drawing.Color]::FromName($IconColor) 
+        } catch { 
+            $ico.ForeColor = [System.Drawing.Color]::FromArgb(0, 102, 204) 
+        }
         $card.Controls.Add($ico)
 
+        # Judul Kartu
         $lTitle = New-Object System.Windows.Forms.Label
         $lTitle.Text = $Title
         $lTitle.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
@@ -2113,6 +3048,7 @@ function Render-WindowsUpdates {
         $lTitle.Width = $card.Width - 80
         $card.Controls.Add($lTitle)
 
+        # Deskripsi Kartu
         $lSub = New-Object System.Windows.Forms.Label
         $lSub.Text = $Desc
         $lSub.Font = New-Object System.Drawing.Font("Segoe UI", 9)
@@ -2121,24 +3057,40 @@ function Render-WindowsUpdates {
         $lSub.Size = New-Object System.Drawing.Size(($card.Width - 85), 45)
         $card.Controls.Add($lSub)
 
-        $card.Add_Click($ActionScript); $ico.Add_Click($ActionScript); $lTitle.Add_Click($ActionScript); $lSub.Add_Click($ActionScript)
-        $card.Add_MouseEnter({ $this.BackColor = if ($global:IsDarkMode) {[System.Drawing.Color]::FromArgb(60, 60, 65)} else {[System.Drawing.Color]::FromArgb(235, 245, 255)} })
-        $card.Add_MouseLeave({ $this.BackColor = if ($global:IsDarkMode) {[System.Drawing.Color]::FromArgb(45, 45, 50)} else {[System.Drawing.Color]::White} })
+        # Mendaftarkan event Click ke seluruh area kartu (Background, Ikon, Judul, dan Deskripsi)
+        $card.Add_Click($ActionScript)
+        $ico.Add_Click($ActionScript)
+        $lTitle.Add_Click($ActionScript)
+        $lSub.Add_Click($ActionScript)
+        
+        # Animasi Hover (Berubah warna saat mouse di atas kartu)
+        $card.Add_MouseEnter({ 
+            $this.BackColor = if ($global:IsDarkMode) {[System.Drawing.Color]::FromArgb(60, 60, 65)} else {[System.Drawing.Color]::FromArgb(235, 245, 255)} 
+        })
+        $card.Add_MouseLeave({ 
+            $this.BackColor = if ($global:IsDarkMode) {[System.Drawing.Color]::FromArgb(45, 45, 50)} else {[System.Drawing.Color]::White} 
+        })
 
         $flowGrid.Controls.Add($card)
-        $null = $card.Handle; &$SetRounded $card 12
+        
+        $null = $card.Handle
+        &$SetRounded $card 12
     }
 
-    # --- MENAMBAHKAN ACTION CARDS ---
+    # ---------------------------------------------------------------------
+    # 3. MENYUSUN DAFTAR KARTU KE DALAM GRID
+    # ---------------------------------------------------------------------
     Add-UpdateCard "Disable Windows Update" "Hentikan paksa pembaruan otomatis hingga tahun 2075." 0xE71A "Red" { Action-UpdateDisable }
     Add-UpdateCard "Custom Pause Date" "Pilih sendiri tanggal kapan Windows Update akan dilanjutkan." 0xE787 "MediumPurple" { Action-UpdatePauseCustom }
     Add-UpdateCard "Enable Windows Update" "Kembalikan pengaturan pembaruan otomatis ke standar pabrik." 0xE898 "LimeGreen" { Action-UpdateEnable }
     Add-UpdateCard "Reset Update Components" "Perbaiki error download dengan mereset servis & folder cache." 0xE823 "Orange" { Action-UpdateReset }
     Add-UpdateCard "Hide/Show Updates" "Alat resmi Microsoft untuk sembunyikan update bermasalah." 0xE890 "DeepSkyBlue" { Action-UpdateHide }
 
-    # --- SPECIAL CARD: LOCK TARGET VERSION (FULL WIDTH DENGAN UI KERENMU) ---
+    # ---------------------------------------------------------------------
+    # 4. KARTU SPESIAL (FULL WIDTH): LOCK TARGET VERSION
+    # ---------------------------------------------------------------------
     $lockCard = New-Object System.Windows.Forms.Panel
-    $lockCard.Size = New-Object System.Drawing.Size(719, 105)
+    $lockCard.Size = New-Object System.Drawing.Size(719, 105) # Memakan 2 kolom penuh
     $lockCard.Margin = New-Object System.Windows.Forms.Padding(0, 10, 15, 10)
     $lockCard.BackColor = if ($global:IsDarkMode) {[System.Drawing.Color]::FromArgb(45, 45, 50)} else {[System.Drawing.Color]::White}
     
@@ -2166,6 +3118,7 @@ function Render-WindowsUpdates {
     $lSubLock.Size = New-Object System.Drawing.Size(300, 40)
     $lockCard.Controls.Add($lSubLock)
 
+    # --- Dropdown Menu Pilihan OS ---
     $cbOS = New-Object System.Windows.Forms.ComboBox
     $cbOS.Name = "ComboOS"
     $cbOS.Items.AddRange(@("Windows 10", "Windows 11"))
@@ -2175,6 +3128,7 @@ function Render-WindowsUpdates {
     $cbOS.DropDownStyle = "DropDownList"
     $lockCard.Controls.Add($cbOS)
 
+    # --- Dropdown Menu Pilihan Versi Rilis ---
     $cbVer = New-Object System.Windows.Forms.ComboBox
     $cbVer.Name = "ComboVer"
     $cbVer.Size = New-Object System.Drawing.Size(65, 30)
@@ -2184,20 +3138,26 @@ function Render-WindowsUpdates {
     $cbVer.SelectedIndex = 2 
     $lockCard.Controls.Add($cbVer)
 
+    # Logika Cerdas: Ubah daftar versi otomatis berdasarkan OS yang dipilih
     $cbOS.Add_SelectedIndexChanged({
         $cVer = $this.Parent.Controls["ComboVer"]
+        
         if ($cVer) {
             $cVer.Items.Clear()
+            
             if ($this.SelectedItem.ToString() -eq "Windows 10") {
+                # Windows 10 secara resmi hanya rilis mentok sampai 22H2
                 $cVer.Items.AddRange(@("21H2", "22H2"))
                 $cVer.SelectedIndex = 1 
             } else {
+                # Windows 11 lanjut terus ke 23H2, 24H2, dst.
                 $cVer.Items.AddRange(@("21H2", "22H2", "23H2", "24H2", "25H2"))
                 $cVer.SelectedIndex = 2 
             }
         }
     })
     
+    # --- Tombol Eksekusi: LOCK ---
     $btnLock = New-Object System.Windows.Forms.Button
     $btnLock.Text = "Lock"
     $btnLock.BackColor = $cP.Header
@@ -2206,20 +3166,25 @@ function Render-WindowsUpdates {
     $btnLock.Size = New-Object System.Drawing.Size(60, 28)
     $btnLock.Location = New-Object System.Drawing.Point(565, 37)
     $btnLock.Cursor = "Hand"
+    
     $btnLock.Add_Click({
         $cOS = $this.Parent.Controls["ComboOS"]
         $cVer = $this.Parent.Controls["ComboVer"]
         
-        # Format tulisan harus "Windows10" atau "Windows11" tanpa spasi
+        # Format string kunci Registry tidak boleh ada spasi (ex: "Windows10")
         $prod = $cOS.SelectedItem.ToString().Replace(" ", "")
         $ver = $cVer.SelectedItem.ToString()
         
         try {
             $Path = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate"
-            if (-not (Test-Path $Path)) { New-Item -Path $Path -Force | Out-Null }
+            if (-not (Test-Path $Path)) { 
+                New-Item -Path $Path -Force | Out-Null 
+            }
+            
             Set-ItemProperty -Path $Path -Name "ProductVersion" -Value $prod -Force
             Set-ItemProperty -Path $Path -Name "TargetReleaseVersion" -Value 1 -Type DWord -Force
             Set-ItemProperty -Path $Path -Name "TargetReleaseVersionInfo" -Value $ver -Force
+            
             [System.Windows.Forms.MessageBox]::Show("Berhasil dikunci!`nSistem tidak akan melewati versi $prod $ver.`nSilakan Restart PC untuk menerapkan.", "Success", "OK", "Information")
         } catch {
             [System.Windows.Forms.MessageBox]::Show("Gagal mengunci versi. Pastikan Anda menjalankan aplikasi sebagai Administrator.", "Error", "OK", "Error")
@@ -2227,6 +3192,7 @@ function Render-WindowsUpdates {
     })
     $lockCard.Controls.Add($btnLock)
 
+    # --- Tombol Eksekusi: CLEAR ---
     $btnClear = New-Object System.Windows.Forms.Button
     $btnClear.Text = "Clear"
     $btnClear.BackColor = [System.Drawing.Color]::Crimson
@@ -2235,12 +3201,14 @@ function Render-WindowsUpdates {
     $btnClear.Size = New-Object System.Drawing.Size(60, 28)
     $btnClear.Location = New-Object System.Drawing.Point(635, 37)
     $btnClear.Cursor = "Hand"
+    
     $btnClear.Add_Click({
         try {
             $Path = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate"
             Remove-ItemProperty -Path $Path -Name "ProductVersion" -ErrorAction SilentlyContinue
             Remove-ItemProperty -Path $Path -Name "TargetReleaseVersion" -ErrorAction SilentlyContinue
             Remove-ItemProperty -Path $Path -Name "TargetReleaseVersionInfo" -ErrorAction SilentlyContinue
+            
             [System.Windows.Forms.MessageBox]::Show("Kunci Versi OS berhasil dihapus! Sistem akan menerima update otomatis kembali.", "Success", "OK", "Information")
         } catch {
             [System.Windows.Forms.MessageBox]::Show("Gagal menghapus kunci versi.", "Error", "OK", "Error")
@@ -2249,8 +3217,11 @@ function Render-WindowsUpdates {
     $lockCard.Controls.Add($btnClear)
 
     $flowGrid.Controls.Add($lockCard)
-    $null = $lockCard.Handle; &$SetRounded $lockCard 12
+    
+    $null = $lockCard.Handle
+    &$SetRounded $lockCard 12
 
+    # Memasukkan semua konstruksi panel utama ke antarmuka aplikasi
     $contentPanel.Controls.Add($pnlMain)
 }
 
@@ -2258,12 +3229,17 @@ function Render-WindowsUpdates {
 # SELESAI RENDER WINDOWS UPDATES
 # ========================================================
 
-# ========================================================
-# MULAI RENDER UPGRADE LICENSE
-# ========================================================
+# =========================================================================
+# FASE 16: MODUL UPGRADE LISENSI & AKTIVASI
+# =========================================================================
+
+# -------------------------------------------------------------------------
+# FUNGSI AKSI: UPGRADE & HAPUS LISENSI
+# -------------------------------------------------------------------------
 function Action-LicHome {
     Write-Log "Action Triggered: Changing Windows edition to Home..."
     $result = [System.Windows.Forms.MessageBox]::Show("Ganti ke Windows Home?", "Konfirmasi", "YesNo", "Question")
+    
     if ($result -eq "Yes") { 
         Write-Log "Executing: changepk.exe /productkey YTMG3-N6DKC-DKB77-7M9GH-8HVX7"
         Start-Process "changepk.exe" -ArgumentList "/productkey YTMG3-N6DKC-DKB77-7M9GH-8HVX7" 
@@ -2275,6 +3251,7 @@ function Action-LicHome {
 function Action-LicPro {
     Write-Log "Action Triggered: Changing Windows edition to Pro..."
     $result = [System.Windows.Forms.MessageBox]::Show("Ganti ke Windows Pro?", "Konfirmasi", "YesNo", "Question")
+    
     if ($result -eq "Yes") { 
         Write-Log "Executing: changepk.exe /productkey VK7JG-NPHTM-C97JM-9MPGT-3V66T"
         Start-Process "changepk.exe" -ArgumentList "/productkey VK7JG-NPHTM-C97JM-9MPGT-3V66T" 
@@ -2286,6 +3263,7 @@ function Action-LicPro {
 function Action-LicEnt {
     Write-Log "Action Triggered: Changing Windows edition to Enterprise..."
     $result = [System.Windows.Forms.MessageBox]::Show("Ganti ke Windows Enterprise?", "Konfirmasi", "YesNo", "Question")
+    
     if ($result -eq "Yes") { 
         Write-Log "Executing: changepk.exe /productkey NPPR9-FWDCX-D2C8J-H872K-2YT43"
         Start-Process "changepk.exe" -ArgumentList "/productkey NPPR9-FWDCX-D2C8J-H872K-2YT43" 
@@ -2297,15 +3275,18 @@ function Action-LicEnt {
 function Action-LicRemove {
     Write-Log "Action Triggered: Removing Windows Product Key..."
     $confirm = [System.Windows.Forms.MessageBox]::Show("Ini akan menghapus Product Key dari sistem. Yakin?", "Warning", "YesNo", "Warning")
+    
     if ($confirm -eq "Yes") {
         try {
-            # Hapus kursor menjadi loading
+            # Ubah kursor menjadi mode loading
             [System.Windows.Forms.Cursor]::Current = [System.Windows.Forms.Cursors]::WaitCursor
             
+            # Eksekusi penghapusan lisensi secara *silent* (tanpa popup)
             cscript //B "$env:SystemRoot\System32\slmgr.vbs" /upk | Out-Null
             cscript //B "$env:SystemRoot\System32\slmgr.vbs" /cpky | Out-Null
             cscript //B "$env:SystemRoot\System32\slmgr.vbs" /ckms | Out-Null
             
+            # Kembalikan kursor ke normal
             [System.Windows.Forms.Cursor]::Current = [System.Windows.Forms.Cursors]::Default
             Write-Log "Success: Windows Product Key and KMS configurations have been successfully removed."
             [System.Windows.Forms.MessageBox]::Show("Lisensi berhasil dihapus!", "Sukses", "OK", "Information")
@@ -2319,9 +3300,9 @@ function Action-LicRemove {
     }
 }
 
-# =========================================================================
-# ACTIONS: MAS ACTIVATION & STATUS
-# =========================================================================
+# -------------------------------------------------------------------------
+# FUNGSI AKSI: MAS ACTIVATION & CEK STATUS
+# -------------------------------------------------------------------------
 function Action-RunMAS {
     $confirm = [System.Windows.Forms.MessageBox]::Show("Buka Microsoft Activation Scripts (MAS)?`nPastikan Anda terhubung ke Internet.", "Konfirmasi Aktivasi", "YesNo", "Information")
     if ($confirm -eq "Yes") {
@@ -2334,7 +3315,7 @@ function Action-RunMAS {
 function Action-CheckStatus {
     Write-Log "Process Started: Launching Activation Status Checker (Windows & Office)..."
     
-    # Cek status langsung di terminal PowerShell baru tanpa buat file temp
+    # Cek status langsung di terminal PowerShell baru tanpa membuat file .bat sementara
     $psCommand = @"
 Write-Host '=================================================' -ForegroundColor Cyan
 Write-Host '          CEK STATUS AKTIVASI WINDOWS            ' -ForegroundColor Cyan
@@ -2365,6 +3346,7 @@ Write-Host ''
 Write-Host '=================================================' -ForegroundColor Cyan
 Read-Host 'Tekan ENTER untuk menutup jendela ini...'
 "@
+    
     try {
         Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Command `"$psCommand`""
         Write-Log "Success: Activation Status Checker terminal successfully launched."
@@ -2374,14 +3356,18 @@ Read-Host 'Tekan ENTER untuk menutup jendela ini...'
     }
 }
 
+# -------------------------------------------------------------------------
+# FUNGSI RENDER UI: LISENSI & AKTIVASI
+# -------------------------------------------------------------------------
 function Render-UpgradeLicense {
     $contentPanel.Controls.Clear()
     $cP = if ($global:IsDarkMode) { $ThemePalettes.Dark } else { $ThemePalettes.Light }
 
-    # --- HELPER: PELENGKUNG SUDUT CARD ---
+    # --- HELPER: PEMBUAT SUDUT KARTU MELENGKUNG ---
     $SetRounded = {
         param($ctrl, $r)
         if ($ctrl.Width -le 0 -or $ctrl.Height -le 0) { return }
+        
         $D = $r * 2
         $p = New-Object System.Drawing.Drawing2D.GraphicsPath
         $p.AddArc(0, 0, $D, $D, 180, 90)
@@ -2389,10 +3375,11 @@ function Render-UpgradeLicense {
         $p.AddArc($ctrl.Width - $D, $ctrl.Height - $D, $D, $D, 0, 90)
         $p.AddArc(0, $ctrl.Height - $D, $D, $D, 90, 90)
         $p.CloseAllFigures()
+        
         $ctrl.Region = New-Object System.Drawing.Region($p)
     }
 
-    # PANEL UTAMA (Sebagai wadah scroll)
+    # --- WADAH UTAMA (SCROLL PANEL) ---
     $pnlMain = New-Object System.Windows.Forms.Panel
     $pnlMain.Dock = "Fill"
     $pnlMain.BackColor = $cP.Bg
@@ -2410,6 +3397,7 @@ function Render-UpgradeLicense {
     $lblT1.ForeColor = [System.Drawing.Color]::White
     $lblT1.AutoSize = $true
     $lblT1.Location = New-Object System.Drawing.Point(25, 20)
+    $banner1.Controls.Add($lblT1)
     
     $lblS1 = New-Object System.Windows.Forms.Label
     $lblS1.Text = "Ganti edisi Windows Anda dengan Generic Key resmi."
@@ -2417,15 +3405,16 @@ function Render-UpgradeLicense {
     $lblS1.ForeColor = [System.Drawing.Color]::LightGray
     $lblS1.AutoSize = $true
     $lblS1.Location = New-Object System.Drawing.Point(28, 52)
+    $banner1.Controls.Add($lblS1)
     
-    $banner1.Controls.Add($lblT1); $banner1.Controls.Add($lblS1)
-    $null = $banner1.Handle; &$SetRounded $banner1 20
+    $null = $banner1.Handle
+    &$SetRounded $banner1 20
     $pnlMain.Controls.Add($banner1)
 
-    # --- 2. GRID 1: UNTUK ACTION CARDS UPGRADE ---
+    # --- 2. GRID 1: ACTION CARDS UPGRADE ---
     $flowGrid1 = New-Object System.Windows.Forms.FlowLayoutPanel
     $flowGrid1.Location = New-Object System.Drawing.Point(30, 140)
-    $flowGrid1.Size = New-Object System.Drawing.Size(735, 230) # Tinggi untuk 2 baris card
+    $flowGrid1.Size = New-Object System.Drawing.Size(735, 230) # Tinggi cukup untuk 2 baris
     $flowGrid1.Padding = New-Object System.Windows.Forms.Padding(0)
     $pnlMain.Controls.Add($flowGrid1)
 
@@ -2441,6 +3430,7 @@ function Render-UpgradeLicense {
     $lblT2.ForeColor = [System.Drawing.Color]::White
     $lblT2.AutoSize = $true
     $lblT2.Location = New-Object System.Drawing.Point(25, 20)
+    $banner2.Controls.Add($lblT2)
     
     $lblS2 = New-Object System.Windows.Forms.Label
     $lblS2.Text = "Aktivasi permanen untuk sistem Windows dan Microsoft Office Anda."
@@ -2448,38 +3438,43 @@ function Render-UpgradeLicense {
     $lblS2.ForeColor = [System.Drawing.Color]::LightGreen
     $lblS2.AutoSize = $true
     $lblS2.Location = New-Object System.Drawing.Point(28, 52)
+    $banner2.Controls.Add($lblS2)
     
-    $banner2.Controls.Add($lblT2); $banner2.Controls.Add($lblS2)
-    $null = $banner2.Handle; &$SetRounded $banner2 20
+    $null = $banner2.Handle
+    &$SetRounded $banner2 20
     $pnlMain.Controls.Add($banner2)
 
-    # --- 4. GRID 2: UNTUK ACTION CARDS ACTIVATION ---
+    # --- 4. GRID 2: ACTION CARDS ACTIVATION ---
     $flowGrid2 = New-Object System.Windows.Forms.FlowLayoutPanel
     $flowGrid2.Location = New-Object System.Drawing.Point(30, 490)
-    $flowGrid2.Size = New-Object System.Drawing.Size(735, 130) # Tinggi untuk 1 baris card
+    $flowGrid2.Size = New-Object System.Drawing.Size(735, 130) # Tinggi cukup untuk 1 baris
     $flowGrid2.Padding = New-Object System.Windows.Forms.Padding(0)
     $pnlMain.Controls.Add($flowGrid2)
 
-    # --- HELPER FUNCTION: CREATE CARD KE DALAM GRID ---
+    # --- HELPER FUNGSI: PEMBUAT KARTU KE DALAM GRID ---
     function Add-LicenseCard ($GridTarget, $Title, $Desc, $IconCode, $IconColor, $ActionScript) {
         $card = New-Object System.Windows.Forms.Panel
-        # Dikurangi 35 agar aman menjadi 2 kolom
+        # Menghitung lebar presisi agar pas menjadi 2 kolom dikurangi margin
         $cardWidth = [math]::Floor($GridTarget.Width / 2) - 35
         $card.Size = New-Object System.Drawing.Size($cardWidth, 95)
         $card.Margin = New-Object System.Windows.Forms.Padding(10)
         $card.BackColor = if ($global:IsDarkMode) {[System.Drawing.Color]::FromArgb(45, 45, 50)} else {[System.Drawing.Color]::White}
         $card.Cursor = "Hand"
 
-        # Icon Label
+        # Ikon Kartu
         $ico = New-Object System.Windows.Forms.Label
         $ico.Text = [char]$IconCode
         $ico.Font = New-Object System.Drawing.Font("Segoe MDL2 Assets", 24)
         $ico.AutoSize = $true
         $ico.Location = New-Object System.Drawing.Point(15, 25)
-        try { $ico.ForeColor = [System.Drawing.Color]::FromName($IconColor) } catch { $ico.ForeColor = [System.Drawing.Color]::DodgerBlue }
+        try { 
+            $ico.ForeColor = [System.Drawing.Color]::FromName($IconColor) 
+        } catch { 
+            $ico.ForeColor = [System.Drawing.Color]::DodgerBlue 
+        }
         $card.Controls.Add($ico)
 
-        # Title Label
+        # Judul Kartu
         $lTitle = New-Object System.Windows.Forms.Label
         $lTitle.Text = $Title
         $lTitle.Font = New-Object System.Drawing.Font("Segoe UI", 11, [System.Drawing.FontStyle]::Bold)
@@ -2489,7 +3484,7 @@ function Render-UpgradeLicense {
         $lTitle.AutoEllipsis = $true
         $card.Controls.Add($lTitle)
 
-        # Description Label
+        # Deskripsi Kartu
         $lSub = New-Object System.Windows.Forms.Label
         $lSub.Text = $Desc
         $lSub.Font = New-Object System.Drawing.Font("Segoe UI", 9)
@@ -2498,26 +3493,38 @@ function Render-UpgradeLicense {
         $lSub.Size = New-Object System.Drawing.Size(($card.Width - 85), 45)
         $card.Controls.Add($lSub)
 
-        # Click Event & Hover Effect
-        $card.Add_Click($ActionScript); $ico.Add_Click($ActionScript); $lTitle.Add_Click($ActionScript); $lSub.Add_Click($ActionScript)
-        $card.Add_MouseEnter({ $this.BackColor = if ($global:IsDarkMode) {[System.Drawing.Color]::FromArgb(60, 60, 65)} else {[System.Drawing.Color]::FromArgb(235, 245, 255)} })
-        $card.Add_MouseLeave({ $this.BackColor = if ($global:IsDarkMode) {[System.Drawing.Color]::FromArgb(45, 45, 50)} else {[System.Drawing.Color]::White} })
+        # Registrasi Event Handler (Click)
+        $card.Add_Click($ActionScript)
+        $ico.Add_Click($ActionScript)
+        $lTitle.Add_Click($ActionScript)
+        $lSub.Add_Click($ActionScript)
+        
+        # Registrasi Animasi Hover (Warna latar berubah)
+        $card.Add_MouseEnter({ 
+            $this.BackColor = if ($global:IsDarkMode) { [System.Drawing.Color]::FromArgb(60, 60, 65) } else { [System.Drawing.Color]::FromArgb(235, 245, 255) } 
+        })
+        $card.Add_MouseLeave({ 
+            $this.BackColor = if ($global:IsDarkMode) { [System.Drawing.Color]::FromArgb(45, 45, 50) } else { [System.Drawing.Color]::White } 
+        })
 
         $GridTarget.Controls.Add($card)
-        $null = $card.Handle; &$SetRounded $card 12
+        
+        $null = $card.Handle
+        &$SetRounded $card 12
     }
 
-    # --- MENAMBAHKAN CARDS KE GRID 1 (UPGRADE) ---
+    # --- MENGISI KARTU KE GRID 1 (UPGRADE EDITION) ---
     Add-LicenseCard $flowGrid1 "Switch to Windows Home" "Downgrade atau pindah edisi ke Windows Home." 0xE80F "DeepSkyBlue" { Action-LicHome }
     Add-LicenseCard $flowGrid1 "Switch to Windows Pro" "Upgrade edisi Windows ke versi Professional." 0xE7F4 "MediumOrchid" { Action-LicPro }
     Add-LicenseCard $flowGrid1 "Switch to Enterprise" "Upgrade edisi Windows ke versi Enterprise." 0xE719 "Gold" { Action-LicEnt }
     Add-LicenseCard $flowGrid1 "Remove License" "Hapus Product Key dari sistem (Un-activate)." 0xE74D "Crimson" { Action-LicRemove }
 
-    # --- MENAMBAHKAN CARDS KE GRID 2 (ACTIVATION) ---
+    # --- MENGISI KARTU KE GRID 2 (ACTIVATION TOOLS) ---
     Add-LicenseCard $flowGrid2 "Run MAS Activation" "Buka tool aktivasi AIO (HWID, KMS) dari internet." 0xE73E "LimeGreen" { Action-RunMAS }
     Add-LicenseCard $flowGrid2 "Check Status" "Periksa status lisensi & aktivasi saat ini (slmgr)." 0xE9F5 "DodgerBlue" { Action-CheckStatus }
 
-    # Tambahkan ruang kosong di paling bawah agar enak di-scroll
+    # --- RUANG KOSONG DI BAWAH (BOTTOM SPACER) ---
+    # Memastikan pengguna bisa men-scroll konten hingga ke bagian paling ujung
     $spacer = New-Object System.Windows.Forms.Panel
     $spacer.Size = New-Object System.Drawing.Size(10, 40)
     $spacer.Location = New-Object System.Drawing.Point(30, 630)
@@ -2530,14 +3537,13 @@ function Render-UpgradeLicense {
 # SELESAI RENDER WINDOWS DEFENDER
 # ========================================================
 
-
-# ========================================================
-# MULAI RENDER DOWNLOAD ISO
-# ========================================================
-
 # =========================================================================
-# ACTIONS: OPEN DOWNLOAD URL
+# FASE 17: MODUL DOWNLOAD WINDOWS ISO & OFFICE
 # =========================================================================
+
+# -------------------------------------------------------------------------
+# FUNGSI AKSI: MEMBUKA URL KE BROWSER
+# -------------------------------------------------------------------------
 function Action-OpenUrl ($Url) {
     if ($Url -match "^http") {
         Start-Process $Url
@@ -2546,23 +3552,24 @@ function Action-OpenUrl ($Url) {
     }
 }
 
-# =========================================================================
-# FUNGSI RENDER HALAMAN DOWNLOAD WINDOWS & OFFICE
-# =========================================================================
+# -------------------------------------------------------------------------
+# FUNGSI RENDER UI: HALAMAN DOWNLOAD WINDOWS & OFFICE
+# -------------------------------------------------------------------------
 function Render-DownloadOS { 
     $contentPanel.Controls.Clear() 
     $cP = if ($global:IsDarkMode) { $ThemePalettes.Dark } else { $ThemePalettes.Light } 
 
+    # --- WADAH UTAMA (FLOW LAYOUT PANEL) ---
     $pnlMain = New-Object System.Windows.Forms.FlowLayoutPanel 
     $pnlMain.Dock = "Fill" 
     $pnlMain.BackColor = $cP.Bg 
     $pnlMain.AutoScroll = $true 
-     
-    # Alur Kiri ke Kanan dan izinkan elemen turun baris (Wrap) untuk bentuk Grid 
+    
+    # Alur Kiri ke Kanan dan izinkan elemen turun baris (Wrap) untuk bentuk Grid
     $pnlMain.FlowDirection = "LeftToRight" 
     $pnlMain.WrapContents = $true 
 
-    # --- HELPER FUNCTION UNTUK KARTU TOMBOL --- 
+    # --- HELPER FUNGSI: MEMBUAT KARTU TOMBOL DOWNLOAD ---
     function Create-DownloadCard ($Title, $Desc, $IconCode, $ColorName, $ActionScript) { 
         $card = New-Object System.Windows.Forms.Panel 
         $card.Size = New-Object System.Drawing.Size(345, 140)  
@@ -2570,111 +3577,225 @@ function Render-DownloadOS {
         $card.BackColor = $cP.Card 
         $card.Cursor = [System.Windows.Forms.Cursors]::Hand 
 
-        $rad = 15; $path = New-Object System.Drawing.Drawing2D.GraphicsPath 
-        $path.AddArc(0, 0, $rad, $rad, 180, 90); $path.AddArc($card.Width - $rad, 0, $rad, $rad, 270, 90) 
-        $path.AddArc($card.Width - $rad, $card.Height - $rad, $rad, $rad, 0, 90); $path.AddArc(0, $card.Height - $rad, $rad, $rad, 90, 90) 
-        $path.CloseAllFigures(); $card.Region = New-Object System.Drawing.Region($path) 
+        # Membuat sudut melengkung pada kartu
+        $rad = 15
+        $path = New-Object System.Drawing.Drawing2D.GraphicsPath 
+        $path.AddArc(0, 0, $rad, $rad, 180, 90)
+        $path.AddArc($card.Width - $rad, 0, $rad, $rad, 270, 90) 
+        $path.AddArc($card.Width - $rad, $card.Height - $rad, $rad, $rad, 0, 90)
+        $path.AddArc(0, $card.Height - $rad, $rad, $rad, 90, 90) 
+        $path.CloseAllFigures()
+        $card.Region = New-Object System.Drawing.Region($path) 
 
+        # Ikon Kartu
         $ico = New-Object System.Windows.Forms.Label 
-        $ico.Text = [char]$IconCode; $ico.Font = New-Object System.Drawing.Font("Segoe MDL2 Assets", 24) 
-        $ico.AutoSize = $true; $ico.Location = New-Object System.Drawing.Point(15, 45) 
-        try { $ico.ForeColor = [System.Drawing.Color]::FromName($ColorName) } catch { $ico.ForeColor = $cP.Accent } 
-         
+        $ico.Text = [char]$IconCode
+        $ico.Font = New-Object System.Drawing.Font("Segoe MDL2 Assets", 24) 
+        $ico.AutoSize = $true
+        $ico.Location = New-Object System.Drawing.Point(15, 45) 
+        try { 
+            $ico.ForeColor = [System.Drawing.Color]::FromName($ColorName) 
+        } catch { 
+            $ico.ForeColor = $cP.Accent 
+        } 
+        
+        # Judul Kartu
         $lTitle = New-Object System.Windows.Forms.Label 
-        $lTitle.Text = $Title; $lTitle.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold) 
-        $lTitle.ForeColor = $cP.Text; $lTitle.Location = New-Object System.Drawing.Point(75, 15); $lTitle.AutoSize = $true 
-         
+        $lTitle.Text = $Title
+        $lTitle.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold) 
+        $lTitle.ForeColor = $cP.Text
+        $lTitle.Location = New-Object System.Drawing.Point(75, 15)
+        $lTitle.AutoSize = $true 
+        
+        # Deskripsi Kartu
         $lSub = New-Object System.Windows.Forms.Label 
-        $lSub.Text = $Desc; $lSub.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Regular) 
-        $lSub.ForeColor = [System.Drawing.Color]::Gray; $lSub.Location = New-Object System.Drawing.Point(75, 42) 
+        $lSub.Text = $Desc
+        $lSub.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Regular) 
+        $lSub.ForeColor = [System.Drawing.Color]::Gray
+        $lSub.Location = New-Object System.Drawing.Point(75, 42) 
         $lSub.Size = New-Object System.Drawing.Size(250, 85)  
-        $lSub.AutoSize = $false; $lSub.AutoEllipsis = $true 
+        $lSub.AutoSize = $false
+        $lSub.AutoEllipsis = $true 
 
+        # Warna animasi Hover
         $hover = if ($global:IsDarkMode) { [System.Drawing.Color]::FromArgb(45, 45, 55) } else { [System.Drawing.Color]::FromArgb(235, 235, 235) } 
         $normal = if ($global:IsDarkMode) { [System.Drawing.Color]::FromArgb(30, 30, 35) } else { [System.Drawing.Color]::White } 
 
-        $card.Add_MouseEnter({ $this.BackColor = $hover }.GetNewClosure()); $card.Add_MouseLeave({ $this.BackColor = $normal }.GetNewClosure()) 
-        $ico.Add_MouseEnter({ $this.Parent.BackColor = $hover }.GetNewClosure()); $ico.Add_MouseLeave({ $this.Parent.BackColor = $normal }.GetNewClosure()) 
-        $lTitle.Add_MouseEnter({ $this.Parent.BackColor = $hover }.GetNewClosure()); $lTitle.Add_MouseLeave({ $this.Parent.BackColor = $normal }.GetNewClosure()) 
-        $lSub.Add_MouseEnter({ $this.Parent.BackColor = $hover }.GetNewClosure()); $lSub.Add_MouseLeave({ $this.Parent.BackColor = $normal }.GetNewClosure()) 
+        # Event Handler untuk animasi Hover
+        $card.Add_MouseEnter({ $this.BackColor = $hover }.GetNewClosure())
+        $card.Add_MouseLeave({ $this.BackColor = $normal }.GetNewClosure()) 
+        $ico.Add_MouseEnter({ $this.Parent.BackColor = $hover }.GetNewClosure())
+        $ico.Add_MouseLeave({ $this.Parent.BackColor = $normal }.GetNewClosure()) 
+        $lTitle.Add_MouseEnter({ $this.Parent.BackColor = $hover }.GetNewClosure())
+        $lTitle.Add_MouseLeave({ $this.Parent.BackColor = $normal }.GetNewClosure()) 
+        $lSub.Add_MouseEnter({ $this.Parent.BackColor = $hover }.GetNewClosure())
+        $lSub.Add_MouseLeave({ $this.Parent.BackColor = $normal }.GetNewClosure()) 
 
-        $card.Controls.Add($ico); $card.Controls.Add($lTitle); $card.Controls.Add($lSub) 
-        $card.Add_Click($ActionScript); $ico.Add_Click($ActionScript); $lTitle.Add_Click($ActionScript); $lSub.Add_Click($ActionScript) 
+        # Menambahkan komponen dan aksi klik
+        $card.Controls.Add($ico)
+        $card.Controls.Add($lTitle)
+        $card.Controls.Add($lSub) 
+        
+        $card.Add_Click($ActionScript)
+        $ico.Add_Click($ActionScript)
+        $lTitle.Add_Click($ActionScript)
+        $lSub.Add_Click($ActionScript) 
+        
         return $card 
     } 
 
     $radBanner = 20 
 
     # ========================================================= 
-    # BANNER 1: WINDOWS DOWNLOAD 
+    # 1. BANNER 1: WINDOWS DOWNLOAD 
     # ========================================================= 
     $banner1 = New-Object System.Windows.Forms.Panel 
-    $banner1.Size = New-Object System.Drawing.Size(715, 90); $banner1.Margin = New-Object System.Windows.Forms.Padding(15, 25, 15, 15) 
+    $banner1.Size = New-Object System.Drawing.Size(715, 90)
+    $banner1.Margin = New-Object System.Windows.Forms.Padding(15, 25, 15, 15) 
     $banner1.BackColor = $cP.Header  
+    
     $pathB1 = New-Object System.Drawing.Drawing2D.GraphicsPath 
-    $pathB1.AddArc(0,0,$radBanner,$radBanner,180,90); $pathB1.AddArc($banner1.Width-$radBanner,0,$radBanner,$radBanner,270,90) 
-    $pathB1.AddArc($banner1.Width-$radBanner,$banner1.Height-$radBanner,$radBanner,$radBanner,0,90); $pathB1.AddArc(0,$banner1.Height-$radBanner,$radBanner,$radBanner,90,90) 
-    $pathB1.CloseAllFigures(); $banner1.Region = New-Object System.Drawing.Region($pathB1) 
+    $pathB1.AddArc(0, 0, $radBanner, $radBanner, 180, 90)
+    $pathB1.AddArc($banner1.Width - $radBanner, 0, $radBanner, $radBanner, 270, 90) 
+    $pathB1.AddArc($banner1.Width - $radBanner, $banner1.Height - $radBanner, $radBanner, $radBanner, 0, 90)
+    $pathB1.AddArc(0, $banner1.Height - $radBanner, $radBanner, $radBanner, 90, 90) 
+    $pathB1.CloseAllFigures()
+    $banner1.Region = New-Object System.Drawing.Region($pathB1) 
 
-    $lblT1 = New-Object System.Windows.Forms.Label; $lblT1.Text = "Download Windows ISO"; $lblT1.Font = New-Object System.Drawing.Font("Segoe UI", 16, [System.Drawing.FontStyle]::Bold) 
-    $lblT1.ForeColor = [System.Drawing.Color]::White; $lblT1.AutoSize = $true; $lblT1.Location = New-Object System.Drawing.Point(25, 20) 
-    $lblS1 = New-Object System.Windows.Forms.Label; $lblS1.Text = "Unduh file instalasi resmi Windows 10, Windows 11, dan versi ARM."; $lblS1.Font = New-Object System.Drawing.Font("Segoe UI", 10) 
-    $lblS1.ForeColor = [System.Drawing.Color]::LightGray; $lblS1.AutoSize = $true; $lblS1.Location = New-Object System.Drawing.Point(28, 52) 
-    $banner1.Controls.Add($lblT1); $banner1.Controls.Add($lblS1); $pnlMain.Controls.Add($banner1) 
+    $lblT1 = New-Object System.Windows.Forms.Label
+    $lblT1.Text = "Download Windows ISO"
+    $lblT1.Font = New-Object System.Drawing.Font("Segoe UI", 16, [System.Drawing.FontStyle]::Bold) 
+    $lblT1.ForeColor = [System.Drawing.Color]::White
+    $lblT1.AutoSize = $true
+    $lblT1.Location = New-Object System.Drawing.Point(25, 20) 
+    
+    $lblS1 = New-Object System.Windows.Forms.Label
+    $lblS1.Text = "Unduh file instalasi resmi Windows 10, Windows 11, dan versi ARM."
+    $lblS1.Font = New-Object System.Drawing.Font("Segoe UI", 10) 
+    $lblS1.ForeColor = [System.Drawing.Color]::LightGray
+    $lblS1.AutoSize = $true
+    $lblS1.Location = New-Object System.Drawing.Point(28, 52) 
+    
+    $banner1.Controls.Add($lblT1)
+    $banner1.Controls.Add($lblS1)
+    $pnlMain.Controls.Add($banner1) 
 
-    # ACTION CARDS WINDOWS 
+    # --- ACTION CARDS WINDOWS ---
     $pnlMain.Controls.Add((Create-DownloadCard "Windows 10" "Unduh file ISO Windows 10 (Multi-edition)." 0xE8A4 "DeepSkyBlue" { Action-OpenUrl "https://www.microsoft.com/en-us/software-download/windows10" })) 
     $pnlMain.Controls.Add((Create-DownloadCard "Windows 11" "Unduh file ISO Windows 11 terbaru." 0xE8A4 "MediumSlateBlue" { Action-OpenUrl "https://www.microsoft.com/en-us/software-download/windows11" })) 
     $pnlMain.Controls.Add((Create-DownloadCard "Windows ARM" "Unduh file instalasi Windows untuk perangkat berarsitektur ARM (Snapdragon, dll)." 0xE8A4 "Orange" { Action-OpenUrl "https://www.microsoft.com/en-us/software-download/windows11arm64" })) 
 
     # ========================================================= 
-    # BANNER 2: OFFICE DOWNLOAD 
+    # 2. BANNER 2: OFFICE DOWNLOAD 
     # ========================================================= 
     $banner2 = New-Object System.Windows.Forms.Panel 
-    $banner2.Size = New-Object System.Drawing.Size(715, 90); $banner2.Margin = New-Object System.Windows.Forms.Padding(15, 10, 15, 15) 
+    $banner2.Size = New-Object System.Drawing.Size(715, 90)
+    $banner2.Margin = New-Object System.Windows.Forms.Padding(15, 10, 15, 15) 
     $banner2.BackColor = [System.Drawing.Color]::Tomato 
+    
     $pathB2 = New-Object System.Drawing.Drawing2D.GraphicsPath 
-    $pathB2.AddArc(0,0,$radBanner,$radBanner,180,90); $pathB2.AddArc($banner2.Width-$radBanner,0,$radBanner,$radBanner,270,90) 
-    $pathB2.AddArc($banner2.Width-$radBanner,$banner2.Height-$radBanner,$radBanner,$radBanner,0,90); $pathB2.AddArc(0,$banner2.Height-$radBanner,$radBanner,$radBanner,90,90) 
-    $pathB2.CloseAllFigures(); $banner2.Region = New-Object System.Drawing.Region($pathB2) 
+    $pathB2.AddArc(0, 0, $radBanner, $radBanner, 180, 90)
+    $pathB2.AddArc($banner2.Width - $radBanner, 0, $radBanner, $radBanner, 270, 90) 
+    $pathB2.AddArc($banner2.Width - $radBanner, $banner2.Height - $radBanner, $radBanner, $radBanner, 0, 90)
+    $pathB2.AddArc(0, $banner2.Height - $radBanner, $radBanner, $radBanner, 90, 90) 
+    $pathB2.CloseAllFigures()
+    $banner2.Region = New-Object System.Drawing.Region($pathB2) 
 
-    $lblT2 = New-Object System.Windows.Forms.Label; $lblT2.Text = "Download Microsoft Office"; $lblT2.Font = New-Object System.Drawing.Font("Segoe UI", 16, [System.Drawing.FontStyle]::Bold) 
-    $lblT2.ForeColor = [System.Drawing.Color]::White; $lblT2.AutoSize = $true; $lblT2.Location = New-Object System.Drawing.Point(25, 20) 
-    $lblS2 = New-Object System.Windows.Forms.Label; $lblS2.Text = "Pilih versi Office Anda (Mendukung Online & Offline Installer)."; $lblS2.Font = New-Object System.Drawing.Font("Segoe UI", 10) 
-    $lblS2.ForeColor = [System.Drawing.Color]::MistyRose; $lblS2.AutoSize = $true; $lblS2.Location = New-Object System.Drawing.Point(28, 52) 
-    $banner2.Controls.Add($lblT2); $banner2.Controls.Add($lblS2); $pnlMain.Controls.Add($banner2) 
+    $lblT2 = New-Object System.Windows.Forms.Label
+    $lblT2.Text = "Download Microsoft Office"
+    $lblT2.Font = New-Object System.Drawing.Font("Segoe UI", 16, [System.Drawing.FontStyle]::Bold) 
+    $lblT2.ForeColor = [System.Drawing.Color]::White
+    $lblT2.AutoSize = $true
+    $lblT2.Location = New-Object System.Drawing.Point(25, 20) 
+    
+    $lblS2 = New-Object System.Windows.Forms.Label
+    $lblS2.Text = "Pilih versi Office Anda (Mendukung Online & Offline Installer)."
+    $lblS2.Font = New-Object System.Drawing.Font("Segoe UI", 10) 
+    $lblS2.ForeColor = [System.Drawing.Color]::MistyRose
+    $lblS2.AutoSize = $true
+    $lblS2.Location = New-Object System.Drawing.Point(28, 52) 
+    
+    $banner2.Controls.Add($lblT2)
+    $banner2.Controls.Add($lblS2)
+    $pnlMain.Controls.Add($banner2) 
 
     # --- MENU POP-UP: M365 --- 
-    $global:menuM365 = New-Object System.Windows.Forms.ContextMenuStrip; $global:menuM365.Cursor = [System.Windows.Forms.Cursors]::Hand 
-    $global:menuM365.Items.Add("[Online] Installer - English").Add_Click({ Write-Log "Executing URL: Microsoft 365 [Online] Installer (EN)"; Action-OpenUrl "https://c2rsetup.officeapps.live.com/c2r/download.aspx?ProductreleaseID=O365ProPlusRetail&platform=x64&language=en-us&version=O16GA" }) 
-    $global:menuM365.Items.Add("[Online] Installer - Indonesia").Add_Click({ Write-Log "Executing URL: Microsoft 365 [Online] Installer (ID)"; Action-OpenUrl "https://c2rsetup.officeapps.live.com/c2r/download.aspx?ProductreleaseID=O365ProPlusRetail&platform=x64&language=id-id&version=O16GA" }) 
+    $global:menuM365 = New-Object System.Windows.Forms.ContextMenuStrip
+    $global:menuM365.Cursor = [System.Windows.Forms.Cursors]::Hand 
+    $global:menuM365.Items.Add("[Online] Installer - English").Add_Click({ 
+        Write-Log "Executing URL: Microsoft 365 [Online] Installer (EN)"
+        Action-OpenUrl "https://c2rsetup.officeapps.live.com/c2r/download.aspx?ProductreleaseID=O365ProPlusRetail&platform=x64&language=en-us&version=O16GA" 
+    }) 
+    $global:menuM365.Items.Add("[Online] Installer - Indonesia").Add_Click({ 
+        Write-Log "Executing URL: Microsoft 365 [Online] Installer (ID)"
+        Action-OpenUrl "https://c2rsetup.officeapps.live.com/c2r/download.aspx?ProductreleaseID=O365ProPlusRetail&platform=x64&language=id-id&version=O16GA" 
+    }) 
     $global:menuM365.Items.Add("-") # Separator 
-    $global:menuM365.Items.Add("[Offline] Installer (IMG/ISO) - English").Add_Click({ Write-Log "Executing URL: Microsoft 365 [Offline/IMG] Installer (EN)"; Action-OpenUrl "https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/O365ProPlusRetail.img" }) 
-    $global:menuM365.Items.Add("[Offline] Installer (IMG/ISO) - Indonesia").Add_Click({ Write-Log "Executing URL: Microsoft 365 [Offline/IMG] Installer (ID)"; Action-OpenUrl "https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/id-id/O365ProPlusRetail.img" }) 
+    $global:menuM365.Items.Add("[Offline] Installer (IMG/ISO) - English").Add_Click({ 
+        Write-Log "Executing URL: Microsoft 365 [Offline/IMG] Installer (EN)"
+        Action-OpenUrl "https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/O365ProPlusRetail.img" 
+    }) 
+    $global:menuM365.Items.Add("[Offline] Installer (IMG/ISO) - Indonesia").Add_Click({ 
+        Write-Log "Executing URL: Microsoft 365 [Offline/IMG] Installer (ID)"
+        Action-OpenUrl "https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/id-id/O365ProPlusRetail.img" 
+    }) 
 
     # --- MENU POP-UP: OFFICE 2024 HOME --- 
-    $global:menu24Home = New-Object System.Windows.Forms.ContextMenuStrip; $global:menu24Home.Cursor = [System.Windows.Forms.Cursors]::Hand 
-    $global:menu24Home.Items.Add("[Online] Installer - English").Add_Click({ Write-Log "Executing URL: Office 2024 Home [Online] Installer (EN)"; Action-OpenUrl "https://c2rsetup.officeapps.live.com/c2r/download.aspx?ProductreleaseID=Home2024Retail&platform=x64&language=en-us&version=O16GA" }) 
-    $global:menu24Home.Items.Add("[Online] Installer - Indonesia").Add_Click({ Write-Log "Executing URL: Office 2024 Home [Online] Installer (ID)"; Action-OpenUrl "https://c2rsetup.officeapps.live.com/c2r/download.aspx?ProductreleaseID=Home2024Retail&platform=x64&language=id-id&version=O16GA" }) 
+    $global:menu24Home = New-Object System.Windows.Forms.ContextMenuStrip
+    $global:menu24Home.Cursor = [System.Windows.Forms.Cursors]::Hand 
+    $global:menu24Home.Items.Add("[Online] Installer - English").Add_Click({ 
+        Write-Log "Executing URL: Office 2024 Home [Online] Installer (EN)"
+        Action-OpenUrl "https://c2rsetup.officeapps.live.com/c2r/download.aspx?ProductreleaseID=Home2024Retail&platform=x64&language=en-us&version=O16GA" 
+    }) 
+    $global:menu24Home.Items.Add("[Online] Installer - Indonesia").Add_Click({ 
+        Write-Log "Executing URL: Office 2024 Home [Online] Installer (ID)"
+        Action-OpenUrl "https://c2rsetup.officeapps.live.com/c2r/download.aspx?ProductreleaseID=Home2024Retail&platform=x64&language=id-id&version=O16GA" 
+    }) 
     $global:menu24Home.Items.Add("-") # Separator 
-    $global:menu24Home.Items.Add("[Offline] Installer (IMG/ISO) - English").Add_Click({ Write-Log "Executing URL: Office 2024 Home [Offline/IMG] Installer (EN)"; Action-OpenUrl "https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/Home2024Retail.img" }) 
-    $global:menu24Home.Items.Add("[Offline] Installer (IMG/ISO) - Indonesia").Add_Click({ Write-Log "Executing URL: Office 2024 Home [Offline/IMG] Installer (ID)"; Action-OpenUrl "https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/id-id/Home2024Retail.img" }) 
+    $global:menu24Home.Items.Add("[Offline] Installer (IMG/ISO) - English").Add_Click({ 
+        Write-Log "Executing URL: Office 2024 Home [Offline/IMG] Installer (EN)"
+        Action-OpenUrl "https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/Home2024Retail.img" 
+    }) 
+    $global:menu24Home.Items.Add("[Offline] Installer (IMG/ISO) - Indonesia").Add_Click({ 
+        Write-Log "Executing URL: Office 2024 Home [Offline/IMG] Installer (ID)"
+        Action-OpenUrl "https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/id-id/Home2024Retail.img" 
+    }) 
 
     # --- MENU POP-UP: OFFICE 2024 PROPLUS --- 
-    $global:menu24Pro = New-Object System.Windows.Forms.ContextMenuStrip; $global:menu24Pro.Cursor = [System.Windows.Forms.Cursors]::Hand 
-    $global:menu24Pro.Items.Add("[Online] Installer - English").Add_Click({ Write-Log "Executing URL: Office 2024 ProPlus [Online] Installer (EN)"; Action-OpenUrl "https://c2rsetup.officeapps.live.com/c2r/download.aspx?ProductreleaseID=ProPlus2024Retail&platform=x64&language=en-us&version=O16GA" }) 
-    $global:menu24Pro.Items.Add("[Online] Installer - Indonesia").Add_Click({ Write-Log "Executing URL: Office 2024 ProPlus [Online] Installer (ID)"; Action-OpenUrl "https://c2rsetup.officeapps.live.com/c2r/download.aspx?ProductreleaseID=ProPlus2024Retail&platform=x64&language=id-id&version=O16GA" }) 
+    $global:menu24Pro = New-Object System.Windows.Forms.ContextMenuStrip
+    $global:menu24Pro.Cursor = [System.Windows.Forms.Cursors]::Hand 
+    $global:menu24Pro.Items.Add("[Online] Installer - English").Add_Click({ 
+        Write-Log "Executing URL: Office 2024 ProPlus [Online] Installer (EN)"
+        Action-OpenUrl "https://c2rsetup.officeapps.live.com/c2r/download.aspx?ProductreleaseID=ProPlus2024Retail&platform=x64&language=en-us&version=O16GA" 
+    }) 
+    $global:menu24Pro.Items.Add("[Online] Installer - Indonesia").Add_Click({ 
+        Write-Log "Executing URL: Office 2024 ProPlus [Online] Installer (ID)"
+        Action-OpenUrl "https://c2rsetup.officeapps.live.com/c2r/download.aspx?ProductreleaseID=ProPlus2024Retail&platform=x64&language=id-id&version=O16GA" 
+    }) 
     $global:menu24Pro.Items.Add("-") # Separator 
-    $global:menu24Pro.Items.Add("[Offline] Installer (IMG/ISO) - English").Add_Click({ Write-Log "Executing URL: Office 2024 ProPlus [Offline/IMG] Installer (EN)"; Action-OpenUrl "https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/ProPlus2024Retail.img" }) 
-    $global:menu24Pro.Items.Add("[Offline] Installer (IMG/ISO) - Indonesia").Add_Click({ Write-Log "Executing URL: Office 2024 ProPlus [Offline/IMG] Installer (ID)"; Action-OpenUrl "https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/id-id/ProPlus2024Retail.img" }) 
+    $global:menu24Pro.Items.Add("[Offline] Installer (IMG/ISO) - English").Add_Click({ 
+        Write-Log "Executing URL: Office 2024 ProPlus [Offline/IMG] Installer (EN)"
+        Action-OpenUrl "https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/ProPlus2024Retail.img" 
+    }) 
+    $global:menu24Pro.Items.Add("[Offline] Installer (IMG/ISO) - Indonesia").Add_Click({ 
+        Write-Log "Executing URL: Office 2024 ProPlus [Offline/IMG] Installer (ID)"
+        Action-OpenUrl "https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/id-id/ProPlus2024Retail.img" 
+    }) 
 
     # --- MENU POP-UP: VISIO PRO --- 
-    $global:menuVisioPro = New-Object System.Windows.Forms.ContextMenuStrip; $global:menuVisioPro.Cursor = [System.Windows.Forms.Cursors]::Hand 
-    $global:menuVisioPro.Items.Add("[Online] Installer - English").Add_Click({ Write-Log "Executing URL: Visio Pro 2024 [Online] Installer (EN)"; Action-OpenUrl "https://c2rsetup.officeapps.live.com/c2r/download.aspx?ProductreleaseID=VisioPro2024Retail&platform=x64&language=en-us&version=O16GA" }) 
+    $global:menuVisioPro = New-Object System.Windows.Forms.ContextMenuStrip
+    $global:menuVisioPro.Cursor = [System.Windows.Forms.Cursors]::Hand 
+    $global:menuVisioPro.Items.Add("[Online] Installer - English").Add_Click({ 
+        Write-Log "Executing URL: Visio Pro 2024 [Online] Installer (EN)"
+        Action-OpenUrl "https://c2rsetup.officeapps.live.com/c2r/download.aspx?ProductreleaseID=VisioPro2024Retail&platform=x64&language=en-us&version=O16GA" 
+    }) 
     $global:menuVisioPro.Items.Add("-") # Separator 
-    $global:menuVisioPro.Items.Add("[Offline] Installer (IMG/ISO) - English").Add_Click({ Write-Log "Executing URL: Visio Pro 2024 [Offline/IMG] Installer (EN)"; Action-OpenUrl "https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/VisioPro2024Retail.img" }) 
+    $global:menuVisioPro.Items.Add("[Offline] Installer (IMG/ISO) - English").Add_Click({ 
+        Write-Log "Executing URL: Visio Pro 2024 [Offline/IMG] Installer (EN)"
+        Action-OpenUrl "https://officecdn.microsoft.com/db/492350f6-3a01-4f97-b9c0-c7c6ddf67d60/media/en-us/VisioPro2024Retail.img" 
+    }) 
 
-    # ACTION CARDS OFFICE DENGAN TEKS FULL ASLI 
+    # --- ACTION CARDS OFFICE --- 
     $btnM365 = Create-DownloadCard "Microsoft 365 ProPlus" "Apps: Access, Excel, Lync, OneNote, Outlook, PowerPoint, Publisher, Word, OneDrive.`nKlik untuk memilih mode download (Online/Offline) dan Bahasa." 0xEB41 "Crimson" {  
         Write-Log "Action Triggered: User opened Microsoft 365 ProPlus download menu."
         $global:menuM365.Show([System.Windows.Forms.Cursor]::Position)  
@@ -2700,27 +3821,49 @@ function Render-DownloadOS {
     $pnlMain.Controls.Add($btnVisioPro) 
 
     # ========================================================= 
-    # BANNER 3: OFFICE UNINSTALLER (SELECTIVE EXTRACTION)
+    # 3. BANNER 3: OFFICE UNINSTALLER (SELECTIVE EXTRACTION)
     # ========================================================= 
     $banner3 = New-Object System.Windows.Forms.Panel
-    $banner3.Size = New-Object System.Drawing.Size(715, 90); $banner3.Margin = New-Object System.Windows.Forms.Padding(15, 10, 15, 15)
+    $banner3.Size = New-Object System.Drawing.Size(715, 90)
+    $banner3.Margin = New-Object System.Windows.Forms.Padding(15, 10, 15, 15)
     $banner3.BackColor = [System.Drawing.Color]::MediumVioletRed
+    
     $pathB3 = New-Object System.Drawing.Drawing2D.GraphicsPath
-    $pathB3.AddArc(0,0,$radBanner,$radBanner,180,90); $pathB3.AddArc($banner3.Width-$radBanner,0,$radBanner,$radBanner,270,90)
-    $pathB3.AddArc($banner3.Width-$radBanner,$banner3.Height-$radBanner,$radBanner,$radBanner,0,90); $pathB3.AddArc(0,$banner3.Height-$radBanner,$radBanner,$radBanner,90,90)
-    $pathB3.CloseAllFigures(); $banner3.Region = New-Object System.Drawing.Region($pathB3)
+    $pathB3.AddArc(0, 0, $radBanner, $radBanner, 180, 90)
+    $pathB3.AddArc($banner3.Width - $radBanner, 0, $radBanner, $radBanner, 270, 90)
+    $pathB3.AddArc($banner3.Width - $radBanner, $banner3.Height - $radBanner, $radBanner, $radBanner, 0, 90)
+    $pathB3.AddArc(0, $banner3.Height - $radBanner, $radBanner, $radBanner, 90, 90)
+    $pathB3.CloseAllFigures()
+    $banner3.Region = New-Object System.Drawing.Region($pathB3)
 
-    $lblT3 = New-Object System.Windows.Forms.Label; $lblT3.Text = "Office Uninstaller Tool"; $lblT3.Font = New-Object System.Drawing.Font("Segoe UI", 16, [System.Drawing.FontStyle]::Bold)
-    $lblT3.ForeColor = [System.Drawing.Color]::White; $lblT3.AutoSize = $true; $lblT3.Location = New-Object System.Drawing.Point(25, 20)
-    $lblS3 = New-Object System.Windows.Forms.Label; $lblS3.Text = "Hapus bersih instalasi Microsoft Office hingga ke registry (Cloud-Fetched)."; $lblS3.Font = New-Object System.Drawing.Font("Segoe UI", 10)
-    $lblS3.ForeColor = [System.Drawing.Color]::LavenderBlush; $lblS3.AutoSize = $true; $lblS3.Location = New-Object System.Drawing.Point(28, 52)
-    $banner3.Controls.Add($lblT3); $banner3.Controls.Add($lblS3); $pnlMain.Controls.Add($banner3)
+    $lblT3 = New-Object System.Windows.Forms.Label
+    $lblT3.Text = "Office Uninstaller Tool"
+    $lblT3.Font = New-Object System.Drawing.Font("Segoe UI", 16, [System.Drawing.FontStyle]::Bold)
+    $lblT3.ForeColor = [System.Drawing.Color]::White
+    $lblT3.AutoSize = $true
+    $lblT3.Location = New-Object System.Drawing.Point(25, 20)
+    
+    $lblS3 = New-Object System.Windows.Forms.Label
+    $lblS3.Text = "Hapus bersih instalasi Microsoft Office hingga ke registry (Cloud-Fetched)."
+    $lblS3.Font = New-Object System.Drawing.Font("Segoe UI", 10)
+    $lblS3.ForeColor = [System.Drawing.Color]::LavenderBlush
+    $lblS3.AutoSize = $true
+    $lblS3.Location = New-Object System.Drawing.Point(28, 52)
+    
+    $banner3.Controls.Add($lblT3)
+    $banner3.Controls.Add($lblS3)
+    $pnlMain.Controls.Add($banner3)
 
-    # ACTION CARD UNINSTALL OFFICE (DENGAN KONFIRMASI)
+    # --- ACTION CARD: UNINSTALL OFFICE ---
     $btnUninstall = Create-DownloadCard "Uninstall Office" "Otomatis memuat dan menjalankan Office Scrubber." 0xE74D "Crimson" {
-        
         Write-Log "Action Triggered: Office Uninstaller Tool card clicked."
-        $confirm = [System.Windows.Forms.MessageBox]::Show("Waroeng Tools akan memuat Office Scrubber.`n`nPastikan koneksi internet Anda stabil. Lanjutkan?", "Konfirmasi Unduhan", 4, 64)
+        
+        $confirm = [System.Windows.Forms.MessageBox]::Show(
+            "Waroeng Tools akan memuat Office Scrubber.`n`nPastikan koneksi internet Anda stabil. Lanjutkan?", 
+            "Konfirmasi Unduhan", 
+            [System.Windows.Forms.MessageBoxButtons]::YesNo, 
+            [System.Windows.Forms.MessageBoxIcon]::Information
+        )
         
         if ($confirm -eq 'Yes') {
             Write-Log "Process Started: User confirmed Office Uninstaller operation."
@@ -2733,8 +3876,10 @@ function Render-DownloadOS {
                 $scrubDir = Join-Path $tempDir "Waroeng_OfficeScrubber"
                 $scrubCmd = Join-Path $scrubDir "OfficeScrubber.cmd"
 
-                # Hapus folder penampungan jika sebelumnya ada
-                if (Test-Path $scrubDir) { Remove-Item -Path $scrubDir -Recurse -Force -ErrorAction SilentlyContinue }
+                # Hapus folder penampungan jika sebelumnya ada (Clean Slate)
+                if (Test-Path $scrubDir) { 
+                    Remove-Item -Path $scrubDir -Recurse -Force -ErrorAction SilentlyContinue 
+                }
                 New-Item -ItemType Directory -Path $scrubDir -Force | Out-Null
 
                 # Unduh ZIP utama dari repositori GitHub
@@ -2753,15 +3898,24 @@ function Render-DownloadOS {
                         $relativePath = $matches[1]
                         $targetPath = Join-Path $scrubDir $relativePath
                         
+                        # Jika entry adalah Folder
                         if ($entry.FullName.EndsWith("/")) {
-                            if (-not (Test-Path $targetPath)) { New-Item -ItemType Directory -Path $targetPath -Force | Out-Null }
-                        } else {
+                            if (-not (Test-Path $targetPath)) { 
+                                New-Item -ItemType Directory -Path $targetPath -Force | Out-Null 
+                            }
+                        } 
+                        # Jika entry adalah File
+                        else {
                             $parentDir = Split-Path $targetPath -Parent
-                            if (-not (Test-Path $parentDir)) { New-Item -ItemType Directory -Path $parentDir -Force | Out-Null }
+                            if (-not (Test-Path $parentDir)) { 
+                                New-Item -ItemType Directory -Path $parentDir -Force | Out-Null 
+                            }
                             [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $targetPath, $true)
                         }
                     }
                 }
+                
+                # Bebaskan resource ZIP dari memori
                 $zip.Dispose()
                 
                 # Langsung HAPUS file ZIP master-nya
@@ -2774,32 +3928,35 @@ function Render-DownloadOS {
                 # Jalankan skrip OfficeScrubber
                 if (Test-Path $scrubCmd) {
                     Write-Log "Executing: Launching OfficeScrubber.cmd via cmd.exe..."
-                    # Buka terminal CMD dan tunggu pengguna selesai menggunakannya
+                    # Buka terminal CMD dan tunggu pengguna selesai menggunakannya (-Wait)
                     Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"$scrubCmd`"" -Wait
                     
                     # PROSES PEMBERSIHAN OTOMATIS (ZERO-FOOTPRINT)
                     Write-Log "Process Completed: OfficeScrubber session ended. Executing zero-footprint cleanup..."
                     Remove-Item -Path $scrubDir -Recurse -Force -ErrorAction SilentlyContinue
                     Write-Log "Success: All temporary OfficeScrubber files have been cleanly removed."
-                    
                 } else {
                     Write-Log "Failed: OfficeScrubber.cmd could not be found after extraction."
-                    [System.Windows.Forms.MessageBox]::Show("Gagal menemukan file OfficeScrubber.cmd setelah ekstraksi.", "Error", 0, 16)
+                    [System.Windows.Forms.MessageBox]::Show("Gagal menemukan file OfficeScrubber.cmd setelah ekstraksi.", "Error", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
                 }
 
             } catch {
                 [System.Windows.Forms.Cursor]::Current = [System.Windows.Forms.Cursors]::Default
                 Write-Log "Failed: An error occurred during Office Uninstaller process. Error Details: $($_.Exception.Message)"
-                [System.Windows.Forms.MessageBox]::Show("Terjadi kesalahan teknis saat memuat:`n$($_.Exception.Message)", "Gagal", 0, 16)
+                [System.Windows.Forms.MessageBox]::Show("Terjadi kesalahan teknis saat memuat:`n$($_.Exception.Message)", "Gagal", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
             }
         } else {
             Write-Log "Process Cancelled: User aborted Office Uninstaller operation."
         }
     }
+    
     $pnlMain.Controls.Add($btnUninstall)
 
-    # Spacer bawah 
-    $spacer = New-Object System.Windows.Forms.Panel; $spacer.Size = New-Object System.Drawing.Size(715, 40); $pnlMain.Controls.Add($spacer) 
+    # --- RUANG KOSONG DI BAWAH (SPACER) --- 
+    $spacer = New-Object System.Windows.Forms.Panel
+    $spacer.Size = New-Object System.Drawing.Size(715, 40)
+    $pnlMain.Controls.Add($spacer) 
+    
     $contentPanel.Controls.Add($pnlMain) 
 }
 
@@ -2808,20 +3965,48 @@ function Render-DownloadOS {
 # ========================================================
 
 # ========================================================
-# MULAI RENDER WINDOWS TWEAKS
+# MODUL: WINDOWS TWEAKS RENDERER
 # ========================================================
 
-# ==========================================
+# ---------------------------------------------------------
 # [BLOK 1] DATABASE WINDOWS TWEAKS
-# ==========================================
+# ---------------------------------------------------------
 $global:TweakCategories = @(
-    [PSCustomObject]@{ ID="T1"; Name="Privacy Cleanup"; Info="Membersihkan jejak Registry (Regedit, Explorer, WordPad, Paint), riwayat Map Network Drive, cache Thumbnail/Java/Flash, serta menghapus log instalasi (setupapi) dan telemetri sistem." }
-    [PSCustomObject]@{ ID="T2"; Name="Disable OS Data Collection"; Info="Mematikan telemetri OS (CEIP, Diagnostic Data), pelaporan error Windows (WER), pelacakan SpyNet/MAPS, perekaman pengetikan, dan Activity Feed." }
-    [PSCustomObject]@{ ID="T3"; Name="Configure Programs"; Info="Mematikan telemetri dan pelacakan pada aplikasi bawaan (Cortana, Edge, Defender, Xbox) serta pihak ketiga (Office, Visual Studio, CCleaner)." }
-    [PSCustomObject]@{ ID="T4"; Name="Security Improvements"; Info="Menutup celah keamanan dengan mematikan protokol rentan (SMBv1, LLMNR), memblokir eksekusi otomatis (AutoPlay, WSH), dan membatasi akses remote (RDP, WinRM)." }
-    [PSCustomObject]@{ ID="T5"; Name="Block Tracking Hosts"; Info="Membangun dua lapis pertahanan dengan menyuntikkan blocklist ke file Hosts dan memblokir IP/Subnet telemetri langsung dari Windows Firewall." }
-    [PSCustomObject]@{ ID="T7"; Name="UI For Privacy"; Info="Menyembunyikan riwayat file/folder di Quick Access dan aplikasi di Start Menu, serta mematikan riwayat pencarian, tips Windows, dan saran Timeline." }
-    [PSCustomObject]@{ ID="T8"; Name="Remove Bloatware"; Info="Mencabut paksa aplikasi UWP bawaan Windows (seperti Xbox, 3D Viewer, Zune, Solitaire, Maps, dan Mixed Reality) untuk melegakan penyimpanan dan RAM." }
+    [PSCustomObject]@{ 
+        ID = "T1"
+        Name = "Privacy Cleanup"
+        Info = "Membersihkan jejak Registry (Regedit, Explorer, WordPad, Paint), riwayat Map Network Drive, cache Thumbnail/Java/Flash, serta menghapus log instalasi (setupapi) dan telemetri sistem." 
+    }
+    [PSCustomObject]@{ 
+        ID = "T2"
+        Name = "Disable OS Data Collection"
+        Info = "Mematikan telemetri OS (CEIP, Diagnostic Data), pelaporan error Windows (WER), pelacakan SpyNet/MAPS, perekaman pengetikan, dan Activity Feed." 
+    }
+    [PSCustomObject]@{ 
+        ID = "T3"
+        Name = "Configure Programs"
+        Info = "Mematikan telemetri dan pelacakan pada aplikasi bawaan (Cortana, Edge, Defender, Xbox) serta pihak ketiga (Office, Visual Studio, CCleaner)." 
+    }
+    [PSCustomObject]@{ 
+        ID = "T4"
+        Name = "Security Improvements"
+        Info = "Menutup celah keamanan dengan mematikan protokol rentan (SMBv1, LLMNR), memblokir eksekusi otomatis (AutoPlay, WSH), dan membatasi akses remote (RDP, WinRM)." 
+    }
+    [PSCustomObject]@{ 
+        ID = "T5"
+        Name = "Block Tracking Hosts"
+        Info = "Membangun dua lapis pertahanan dengan menyuntikkan blocklist ke file Hosts dan memblokir IP/Subnet telemetri langsung dari Windows Firewall." 
+    }
+    [PSCustomObject]@{ 
+        ID = "T7"
+        Name = "UI For Privacy"
+        Info = "Menyembunyikan riwayat file/folder di Quick Access dan aplikasi di Start Menu, serta mematikan riwayat pencarian, tips Windows, dan saran Timeline." 
+    }
+    [PSCustomObject]@{ 
+        ID = "T8"
+        Name = "Remove Bloatware"
+        Info = "Mencabut paksa aplikasi UWP bawaan Windows (seperti Xbox, 3D Viewer, Zune, Solitaire, Maps, dan Mixed Reality) untuk melegakan penyimpanan dan RAM." 
+    }
 )
 
 # ==========================================
@@ -2841,12 +4026,15 @@ function Render-WindowsTweaks {
 
     $script:CatCheckboxes = @()
 
-    # --- HELPER: Fungsi Pembuat Sudut Bulat (Bisa untuk Tombol & Panel) ---
+    # --- HELPER: Fungsi Pembuat Sudut Bulat ---
     function Set-RoundedElement {
-        param([System.Windows.Forms.Control]$ctrl, [int]$radius)
+        param(
+            [System.Windows.Forms.Control]$ctrl, 
+            [int]$radius
+        )
         $D = $radius * 2
         
-        # 1. Eksekusi instan saat elemen pertama kali dibuat
+        # Eksekusi instan saat elemen dibuat
         if ($ctrl.Width -gt $D -and $ctrl.Height -gt $D) {
             $p = New-Object System.Drawing.Drawing2D.GraphicsPath
             $p.AddArc(0, 0, $D, $D, 180, 90)
@@ -2857,24 +4045,23 @@ function Render-WindowsTweaks {
             $ctrl.Region = New-Object System.Drawing.Region($p)
         }
 
-        # 2. Pasang event otomatis: panel tetap membulat sempurna walau jendela aplikasi di-resize
-        $scriptBlock = [scriptblock]::Create("
-            `$D = $D
-            if (`$this.Width -gt `$D -and `$this.Height -gt `$D) {
-                `$p = New-Object System.Drawing.Drawing2D.GraphicsPath
-                `$p.AddArc(0, 0, `$D, `$D, 180, 90)
-                `$p.AddArc(`$this.Width - `$D, 0, `$D, `$D, 270, 90)
-                `$p.AddArc(`$this.Width - `$D, `$this.Height - `$D, `$D, `$D, 0, 90)
-                `$p.AddArc(0, `$this.Height - `$D, `$D, `$D, 90, 90)
-                `$p.CloseAllFigures()
-                `$this.Region = New-Object System.Drawing.Region(`$p)
+        # Event Resize otomatis
+        $ctrl.Add_SizeChanged({
+            $D = $radius * 2
+            if ($this.Width -gt $D -and $this.Height -gt $D) {
+                $p = New-Object System.Drawing.Drawing2D.GraphicsPath
+                $p.AddArc(0, 0, $D, $D, 180, 90)
+                $p.AddArc($this.Width - $D, 0, $D, $D, 270, 90)
+                $p.AddArc($this.Width - $D, $this.Height - $D, $D, $D, 0, 90)
+                $p.AddArc(0, $this.Height - $D, $D, $D, 90, 90)
+                $p.CloseAllFigures()
+                $this.Region = New-Object System.Drawing.Region($p)
             }
-        ")
-        $ctrl.Add_SizeChanged($scriptBlock)
+        })
     }
 
     # ----------------------------------------------------
-    # PANEL ATAS: 3 TOMBOL QUICK PRESETS (PROFIL)
+    # PANEL ATAS: QUICK PRESETS
     # ----------------------------------------------------
     $pnlPresets = New-Object System.Windows.Forms.Panel
     $pnlPresets.Dock = "Top"
@@ -2882,7 +4069,6 @@ function Render-WindowsTweaks {
     $pnlPresets.BackColor = $cP.Header
     $pnlMain.Controls.Add($pnlPresets)
 
-    # ---> BUAT PANEL ATAS JADI BULAT <---
     Set-RoundedElement -ctrl $pnlPresets -radius 15
 
     $lblPreset = New-Object System.Windows.Forms.Label
@@ -2894,7 +4080,7 @@ function Render-WindowsTweaks {
     $pnlPresets.Controls.Add($lblPreset)
 
     # Helper: Pembuat Tombol Preset
-    function Create-PresetButton([string]$Text, [int]$X, [System.Drawing.Color]$Color, [array]$TargetCats) {
+    function Create-PresetButton([string]$Text, [int]$X, [System.Drawing.Color]$Color, $TargetCats) {
         $btn = New-Object System.Windows.Forms.Button
         $btn.Text = $Text
         $btn.Font = New-Object System.Drawing.Font("Segoe UI", 9.5, [System.Drawing.FontStyle]::Bold)
@@ -2906,18 +4092,19 @@ function Render-WindowsTweaks {
         $btn.FlatAppearance.BorderSize = 0
         $btn.Cursor = "Hand"
         
-        # Panggil fungsi kelengkungan baru
         Set-RoundedElement -ctrl $btn -radius 15
-
         $btn.Tag = $TargetCats
+
         $btn.Add_Click({
             $targets = $this.Tag
             foreach ($chk in $script:CatCheckboxes) {
                 if ($targets -eq "ALL") {
                     $chk.Checked = $true
-                } elseif ($targets -contains $chk.Name) {
+                } 
+                elseif ($targets -contains $chk.Name) {
                     $chk.Checked = $true
-                } else {
+                } 
+                else {
                     $chk.Checked = $false
                 }
             }
@@ -2925,16 +4112,12 @@ function Render-WindowsTweaks {
         return $btn
     }
 
-    $btnEss = Create-PresetButton -Text "ESSENTIAL PROFILE" -X 160 -Color ([System.Drawing.Color]::SeaGreen) -TargetCats @("Privacy Cleanup", "Remove Bloatware")
-    $btnOpt = Create-PresetButton -Text "OPTIMAL PROFILE" -X 355 -Color ([System.Drawing.Color]::SteelBlue) -TargetCats @("Privacy Cleanup", "Disable OS Data Collection", "Configure Programs", "UI For Privacy", "Remove Bloatware")
-    $btnUlt = Create-PresetButton -Text "ULTIMATE PROFILE" -X 550 -Color ([System.Drawing.Color]::Crimson) -TargetCats "ALL"
-    
-    $pnlPresets.Controls.Add($btnEss)
-    $pnlPresets.Controls.Add($btnOpt)
-    $pnlPresets.Controls.Add($btnUlt)
+    $pnlPresets.Controls.Add((Create-PresetButton -Text "ESSENTIAL" -X 160 -Color ([System.Drawing.Color]::SeaGreen) -TargetCats @("Privacy Cleanup", "Remove Bloatware")))
+    $pnlPresets.Controls.Add((Create-PresetButton -Text "OPTIMAL" -X 355 -Color ([System.Drawing.Color]::SteelBlue) -TargetCats @("Privacy Cleanup", "Disable OS Data Collection", "Configure Programs", "UI For Privacy", "Remove Bloatware")))
+    $pnlPresets.Controls.Add((Create-PresetButton -Text "ULTIMATE" -X 550 -Color ([System.Drawing.Color]::Crimson) -TargetCats "ALL"))
 
     # ----------------------------------------------------
-    # PANEL BAWAH: TOMBOL EXECUTE & RESET
+    # PANEL BAWAH: EXECUTE & RESET
     # ----------------------------------------------------
     $pnlBot = New-Object System.Windows.Forms.Panel
     $pnlBot.Dock = "Bottom"
@@ -2942,9 +4125,9 @@ function Render-WindowsTweaks {
     $pnlBot.BackColor = $cP.Header
     $pnlMain.Controls.Add($pnlBot)
 
-    # ---> BUAT PANEL BAWAH JADI BULAT <---
     Set-RoundedElement -ctrl $pnlBot -radius 15
 
+    # Tombol Execute
     $btnApplyMain = New-Object System.Windows.Forms.Button
     $btnApplyMain.Text = "EXECUTE SELECTED CATEGORIES"
     $btnApplyMain.Size = New-Object System.Drawing.Size(320, 45)
@@ -2958,9 +4141,10 @@ function Render-WindowsTweaks {
     Set-RoundedElement -ctrl $btnApplyMain -radius 18 
     $pnlBot.Controls.Add($btnApplyMain)
 
+    # Tombol Reset
     $btnClearMain = New-Object System.Windows.Forms.Button
-    $btnClearMain.Text = "RESET SELECTION"
-    $btnClearMain.Size = New-Object System.Drawing.Size(160, 45)
+    $btnClearMain.Text = "RESET"
+    $btnClearMain.Size = New-Object System.Drawing.Size(120, 45)
     $btnClearMain.Location = New-Object System.Drawing.Point(360, 15)
     $btnClearMain.BackColor = [System.Drawing.Color]::Firebrick
     $btnClearMain.ForeColor = [System.Drawing.Color]::White
@@ -2971,45 +4155,44 @@ function Render-WindowsTweaks {
     Set-RoundedElement -ctrl $btnClearMain -radius 18 
     
     $btnClearMain.Add_Click({
-        foreach ($cb in $script:CatCheckboxes) { $cb.Checked = $false }
+        foreach ($cb in $script:CatCheckboxes) { 
+            $cb.Checked = $false 
+        }
     })
     $pnlBot.Controls.Add($btnClearMain)
 
     # ----------------------------------------------------
-    # LOGIKA EKSEKUSI (APPLY MULTIPLE)
+    # LOGIKA EKSEKUSI (SWITCH BLOCK)
     # ----------------------------------------------------
     $btnApplyMain.Add_Click({
         Write-Log "Action Triggered: User initiated 'Execute Selected Categories'."
         
         $selectedCats = @()
         foreach ($cb in $script:CatCheckboxes) {
-            if ($cb.Checked) { $selectedCats += $cb.Name }
+            if ($cb.Checked) { 
+                $selectedCats += $cb.Name 
+            }
         }
         
         if ($selectedCats.Count -eq 0) {
-            Write-Log "Process Aborted: No categories selected."
             [System.Windows.Forms.MessageBox]::Show("Harap centang minimal 1 kategori!", "Peringatan", "OK", "Warning")
             return
         }
         
         $msg = "Anda akan mengeksekusi $($selectedCats.Count) Kategori Tweak.`nLanjutkan?"
         if ([System.Windows.Forms.MessageBox]::Show($msg, "Konfirmasi", "YesNo", "Question") -eq "No") { 
-            Write-Log "Process Cancelled: User aborted multiple tweak execution."
             return 
         }
 
-        Write-Log "Process Started: Applying $($selectedCats.Count) selected tweaks..."
-        
-        # Script Master yang akan digabungkan
-        $masterScript = "@echo off`ntitle Waroeng Tools - Applying Tweaks`necho ==================================`necho APPLYING SELECTED WINDOWS TWEAKS`necho ==================================`necho.`n"
+        # Inisialisasi Master Script Batch
+        $masterScript = "@echo off`n"
+        $masterScript += "title Waroeng Tools - Applying Tweaks`n"
+        $masterScript += "echo APPLYING SELECTED WINDOWS TWEAKS...`n"
 
         foreach ($catName in $selectedCats) {
-            # --- MENCATAT SETIAP TWEAK YANG DIPILIH KE DALAM LOG ---
             Write-Log "-> Selected Tweak to Apply: $catName"
-            
             $masterScript += "echo [*] Applying $catName...`n"
             
-            # --- MASUKKAN SCRIPT APPLY DI SINI ---
             switch ($catName) {
                 "Privacy Cleanup" {
                     $masterScript += @'
@@ -7572,25 +8755,31 @@ exit /b 0
             }
         }
 
-        # --- RUNNER SCRIPT (Menjalankan script yang di-paste di atas) ---
+        # ---------------------------------------------------------
+# [BLOK 3] RUNNER SCRIPT & GRID LAYOUT
+# ---------------------------------------------------------
+
+        # --- RUNNER SCRIPT (Menjalankan script Batch) ---
         if (![string]::IsNullOrWhiteSpace($masterScript)) {
             try {
                 [System.Windows.Forms.Cursor]::Current = [System.Windows.Forms.Cursors]::WaitCursor
+                
                 $tempBat = Join-Path $env:TEMP "WaroengTweak_Apply.bat"
                 $masterScript | Out-File -FilePath $tempBat -Encoding ascii
                 
-                # Eksekusi CMD (Runner script tidak perlu di-log)
+                # Eksekusi CMD secara tersembunyi
                 Start-Process "cmd.exe" -ArgumentList "/c `"$tempBat`"" -Wait -WindowStyle Hidden
                 
                 Remove-Item -Path $tempBat -Force -ErrorAction SilentlyContinue
                 [System.Windows.Forms.Cursor]::Current = [System.Windows.Forms.Cursors]::Default
                 
                 Write-Log "Success: All selected tweaks have been successfully applied."
-                [System.Windows.Forms.MessageBox]::Show("Semua kategori terpilih berhasil dieksekusi dengan aman!", "Selesai", 0, 64)
-            } catch {
+                [System.Windows.Forms.MessageBox]::Show("Semua kategori terpilih berhasil dieksekusi!", "Selesai", 0, 64)
+            } 
+            catch {
                 [System.Windows.Forms.Cursor]::Current = [System.Windows.Forms.Cursors]::Default
-                Write-Log "Failed: Error occurred during execution. Details: $($_.Exception.Message)"
-                [System.Windows.Forms.MessageBox]::Show("Terjadi kesalahan teknis!`n$($_.Exception.Message)", "Error", 0, 16)
+                Write-Log "Failed: Error execution. Details: $($_.Exception.Message)"
+                [System.Windows.Forms.MessageBox]::Show("Terjadi kesalahan!`n$($_.Exception.Message)", "Error", 0, 16)
             }
         }
     })
@@ -7602,23 +8791,35 @@ exit /b 0
     $flpGrid.Dock = "Fill"
     $flpGrid.AutoScroll = $true
     $flpGrid.WrapContents = $true
-    $flpGrid.Padding = New-Object System.Windows.Forms.Padding(25, 20, 0, 20) 
+    $flpGrid.Padding = New-Object System.Windows.Forms.Padding(25, 20, 0, 20)
+
     $pnlMain.Controls.Add($flpGrid)
     $flpGrid.BringToFront() 
 
+    # ---------------------------------------------------------
+# [BLOK 4] FUNGSI PEMBUAT KARTU TWEAK
+# ---------------------------------------------------------
     function Create-TweakCard {
         param ($Title, $InfoText)
 
-        $cardW = 310; $cardH = 150; $radius = 20
-        $arcX = $cardW - $radius; $arcY = $cardH - $radius
-        $infoX = $cardW - 45; $chkY = $cardH - 45
-        $revX = $cardW - 100; $revY = $cardH - 50
+        # Konfigurasi Dimensi Kartu
+        $cardW = 310
+        $cardH = 150
+        $radius = 20
+        $arcX = $cardW - $radius
+        $arcY = $cardH - $radius
+        $infoX = $cardW - 45
+        $chkY = $cardH - 45
+        $revX = $cardW - 100
+        $revY = $cardH - 50
 
+        # Kontainer Kartu
         $card = New-Object System.Windows.Forms.Panel
         $card.Size = New-Object System.Drawing.Size($cardW, $cardH)
         $card.Margin = New-Object System.Windows.Forms.Padding(15, 15, 10, 10)
         $card.BackColor = $cP.Card
 
+        # Membuat Sudut Bulat Kartu
         $path = New-Object System.Drawing.Drawing2D.GraphicsPath
         $path.AddArc(0, 0, $radius, $radius, 180, 90)
         $path.AddArc($arcX, 0, $radius, $radius, 270, 90)
@@ -7627,6 +8828,7 @@ exit /b 0
         $path.CloseAllFigures()
         $card.Region = New-Object System.Drawing.Region($path)
 
+        # Judul Tweak
         $lblTitle = New-Object System.Windows.Forms.Label
         $lblTitle.Text = $Title
         $lblTitle.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
@@ -7635,6 +8837,7 @@ exit /b 0
         $lblTitle.Size = New-Object System.Drawing.Size(230, 50) 
         $card.Controls.Add($lblTitle)
 
+        # Tombol Info (Lingkaran kecil 'i')
         $btnInfo = New-Object System.Windows.Forms.Label
         $btnInfo.Text = "i"
         $btnInfo.Font = New-Object System.Drawing.Font("Consolas", 12, [System.Drawing.FontStyle]::Bold)
@@ -7648,10 +8851,14 @@ exit /b 0
         $pathInfo = New-Object System.Drawing.Drawing2D.GraphicsPath
         $pathInfo.AddEllipse(0, 0, 29, 29)
         $btnInfo.Region = New-Object System.Drawing.Region($pathInfo)
+        
         $btnInfo.Tag = $InfoText
-        $btnInfo.Add_Click({ [System.Windows.Forms.MessageBox]::Show($this.Tag, "Informasi Kategori", "OK", "Information") })
+        $btnInfo.Add_Click({ 
+            [System.Windows.Forms.MessageBox]::Show($this.Tag, "Informasi Kategori", "OK", "Information") 
+        })
         $card.Controls.Add($btnInfo)
 
+        # Checkbox untuk Memilih
         $chkSelect = New-Object System.Windows.Forms.CheckBox
         $chkSelect.Text = "Apply Tweak"
         $chkSelect.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
@@ -7660,12 +8867,11 @@ exit /b 0
         $chkSelect.Location = New-Object System.Drawing.Point(20, $chkY)
         $chkSelect.Cursor = "Hand"
         $chkSelect.Name = $Title 
+        
         $card.Controls.Add($chkSelect)
         $script:CatCheckboxes += $chkSelect
 
-        # ==========================================================
-        # LOGIKA TOMBOL REVERT (HANYA JIKA BUKAN PRIVACY CLEANUP)
-        # ==========================================================
+        # --- TOMBOL REVERT (Hanya muncul jika bukan Privacy Cleanup) ---
         if ($Title -ne "Privacy Cleanup") {
             $btnRevert = New-Object System.Windows.Forms.Button
             $btnRevert.Text = "Revert"
@@ -7679,19 +8885,19 @@ exit /b 0
             $btnRevert.Cursor = "Hand"
             
             Set-RoundedElement -ctrl $btnRevert -radius 10
-
             $btnRevert.Tag = $Title
-            $btnRevert.Add_Click({
-                $catName = $($this.Tag)
-                Write-Log "Action Triggered: User clicked Revert for category '$catName'."
-                
-                $msg = "Apakah Anda yakin ingin melakukan REVERT (Mengembalikan ke asal) pada kategori:`n`n$catName?"
-                if ([System.Windows.Forms.MessageBox]::Show($msg, "Revert Konfirmasi", "YesNo", "Warning") -eq "Yes") {
-                    Write-Log "Process Started: Reverting tweaks for $catName..."
-                    
-                    $revertScript = "@echo off`ntitle Waroeng Tools - Reverting Tweak`necho ==================================`necho REVERTING: $catName`necho ==================================`necho.`n"
 
-                    # --- MASUKKAN SCRIPT REVERT DI SINI ---
+            $btnRevert.Add_Click({
+                $catName = $this.Tag
+                Write-Log "Action: User clicked Revert for '$catName'."
+                
+                $msg = "Kembalikan pengaturan asli untuk kategori:`n`n$catName?"
+                if ([System.Windows.Forms.MessageBox]::Show($msg, "Konfirmasi Revert", "YesNo", "Warning") -eq "Yes") {
+                    
+                    $revertScript = "@echo off`n"
+                    $revertScript += "echo REVERTING: $catName...`n"
+
+                    # --- LOGIKA SWITCH REVERT ---
                     switch ($catName) {
                         "Disable OS Data Collection" {
                             $revertScript += @'
@@ -11508,29 +12714,37 @@ exit /b 0
 }
                 }
                 
-                # Eksekusi Script Revert
+                # ---------------------------------------------------------
+# [BLOK 5] REVERT RUNNER & FINAL RENDERING
+# ---------------------------------------------------------
+
+                    # --- EKSEKUSI SCRIPT REVERT ---
                     if (![string]::IsNullOrWhiteSpace($revertScript)) {
                         try {
                             [System.Windows.Forms.Cursor]::Current = [System.Windows.Forms.Cursors]::WaitCursor
+                            
                             $tempBat = Join-Path $env:TEMP "WaroengTweak_Revert.bat"
                             $revertScript | Out-File -FilePath $tempBat -Encoding ascii
                             
-                            # Eksekusi CMD (Runner script tidak perlu di-log)
+                            # Menjalankan CMD secara hidden agar user tidak terganggu jendela hitam
                             Start-Process "cmd.exe" -ArgumentList "/c `"$tempBat`"" -Wait -WindowStyle Hidden
                             
+                            # Pembersihan file temporary
                             Remove-Item -Path $tempBat -Force -ErrorAction SilentlyContinue
                             [System.Windows.Forms.Cursor]::Current = [System.Windows.Forms.Cursors]::Default
                             
                             Write-Log "Success: Revert process completed for $catName."
                             [System.Windows.Forms.MessageBox]::Show("Proses Revert untuk $catName berhasil!", "Sukses", 0, 64)
-                        } catch {
+                        } 
+                        catch {
                             [System.Windows.Forms.Cursor]::Current = [System.Windows.Forms.Cursors]::Default
-                            Write-Log "Failed: Error occurred during Revert execution. Details: $($_.Exception.Message)"
-                            [System.Windows.Forms.MessageBox]::Show("Terjadi kesalahan teknis saat Revert!`n$($_.Exception.Message)", "Error", 0, 16)
+                            Write-Log "Failed: Error during Revert. Details: $($_.Exception.Message)"
+                            [System.Windows.Forms.MessageBox]::Show("Gagal melakukan Revert!`n$($_.Exception.Message)", "Error", 0, 16)
                         }
                     }
-                } else {
-                    Write-Log "Process Cancelled: User aborted Revert operation for $catName."
+                } 
+                else {
+                    Write-Log "Process Cancelled: User aborted Revert for $catName."
                 }
             })
             $card.Controls.Add($btnRevert)
@@ -11544,13 +12758,18 @@ exit /b 0
     # ----------------------------------------------------
     if ($global:TweakCategories) {
         foreach ($cat in $global:TweakCategories) {
+            # Membuat kartu baru berdasarkan database
             $card = Create-TweakCard -Title $cat.Name -InfoText $cat.Info
+            
+            # Memasukkan kartu ke dalam FlowLayoutPanel (Grid)
             $flpGrid.Controls.Add($card)
         }
     }
 
+    # Menambahkan panel utama yang sudah jadi ke container aplikasi
     $contentPanel.Controls.Add($pnlMain)
-    Write-Host "Render Windows Tweaks"
+    
+    Write-Log "UI Rendered: Windows Tweaks menu is now visible."
 }
 
 # ========================================================
@@ -12624,13 +13843,13 @@ function Render-AddSettings {
 # ========================================================
 function Action-ToolTemp {
     Write-Log "Cleaning Temp Files..."
-    if ([System.Windows.Forms.MessageBox]::Show("Script akan menghapus file sampah di C:\Windows\Temp dan %TEMP% User.`n`nLanjutkan?", "Konfirmasi", "YesNo", "Warning") -eq "Yes") {
+    if ([System.Windows.Forms.MessageBox]::Show("Script akan menghapus file sampah di C:\Windows\Temp dan %TEMP% User.`n`nLanjutkan?", "Konfirmasi", "Warning", "YesNo") -eq "Yes") {
         $form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
         
         # 1. Hapus System Temp
         Remove-Item -Path "C:\Windows\Temp\*" -Recurse -Force -ErrorAction SilentlyContinue
         
-        # 2. Hapus User Temp (Tambahan agar lebih bersih)
+        # 2. Hapus User Temp
         Remove-Item -Path "$env:TEMP\*" -Recurse -Force -ErrorAction SilentlyContinue
 
         $form.Cursor = [System.Windows.Forms.Cursors]::Default
@@ -12649,22 +13868,17 @@ function Action-ToolNetReset {
     if ([System.Windows.Forms.MessageBox]::Show($msg, "Konfirmasi Reset Network", "YesNo", "Warning") -eq "Yes") {
         $form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
         
-        # Step 1: Flush & Reset
         cmd /c "netsh winsock reset"
         cmd /c "netsh int ip reset"
         cmd /c "ipconfig /flushdns"
         cmd /c "ipconfig /release"
         cmd /c "ipconfig /renew"
 
-        # Step 2: NetBIOS
         cmd /c "nbtstat -R"
         cmd /c "nbtstat -RR"
 
-        # Step 3: Restart Adapter (PowerShell Native - Lebih Canggih dari Batch)
-        # Script ini otomatis mencari adapter yang aktif dan merestartnya
         Get-NetAdapter | Where-Object Status -eq "Up" | Restart-NetAdapter -ErrorAction SilentlyContinue
 
-        # Step 4: Restart Explorer
         Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
         Start-Sleep -Seconds 1
         
@@ -12678,13 +13892,11 @@ function Action-ToolPrinter {
     if ([System.Windows.Forms.MessageBox]::Show("Proses ini akan mengaktifkan SMB 1.0 dan mengubah konfigurasi RPC Printer.`nKomputer perlu Restart setelah ini.`n`nLanjutkan?", "Konfirmasi", "YesNo", "Question") -eq "Yes") {
         $form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
         
-        # 1. Enable Features (DISM)
         $features = "SMB1Protocol", "Printing-Foundation-LPRPortMonitor", "Printing-Foundation-LPDPrintService"
         foreach ($feat in $features) {
             Start-Process "dism.exe" -ArgumentList "/online /enable-feature /featurename:$feat /all /quiet /norestart" -Wait -NoNewWindow
         }
 
-        # 2. Registry Fixes
         $regRPC = "HKLM:\Software\Policies\Microsoft\Windows NT\Printers\RPC"
         if (-not (Test-Path $regRPC)) { New-Item -Path $regRPC -Force | Out-Null }
         
@@ -12695,7 +13907,6 @@ function Action-ToolPrinter {
         Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Print" -Name "RpcAuthnLevelPrivacyEnabled" -Value 0 -Type DWord -Force
         Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters" -Name "AllowInsecureGuestAuth" -Value 1 -Type DWord -Force
 
-        # 3. Restart Spooler
         Restart-Service -Name spooler -Force -ErrorAction SilentlyContinue
 
         $form.Cursor = [System.Windows.Forms.Cursors]::Default
@@ -12709,7 +13920,6 @@ function Action-ToolChrome {
     if (-not (Test-Path $path)) { New-Item -Path $path -Force | Out-Null }
     
     Set-ItemProperty -Path $path -Name "ExtensionManifestV2Availability" -Value 2 -Type DWord -Force
-    
     [System.Windows.Forms.MessageBox]::Show("Fix applied!`nSilakan Restart Google Chrome.", "Sukses", "OK", "Information")
 }
 
@@ -12721,7 +13931,6 @@ function Action-ToolGpEdit {
            "Lanjutkan?"
 
     if ([System.Windows.Forms.MessageBox]::Show($msg, "Konfirmasi", "YesNo", "Question") -eq "Yes") {
-        # Kita gunakan ScriptBlock untuk logic looping file .mum agar bisa dijalankan di CMD/PS terpisah
         $script = '
             $list = Get-ChildItem "$env:SystemRoot\servicing\Packages\Microsoft-Windows-GroupPolicy-ClientExtensions-Package~3*.mum", "$env:SystemRoot\servicing\Packages\Microsoft-Windows-GroupPolicy-ClientTools-Package~3*.mum"
             Write-Host "Ditemukan $($list.Count) paket GPEdit. Mulai menginstall..." -ForegroundColor Cyan
@@ -12732,11 +13941,8 @@ function Action-ToolGpEdit {
             Write-Host "`nSELESAI! Silakan coba ketik gpedit.msc di Run." -ForegroundColor Green
             Read-Host "Tekan Enter untuk keluar..."
         '
-        
-        # Encode script agar bisa dijalankan via powershell.exe -Command
         $bytes = [System.Text.Encoding]::Unicode.GetBytes($script)
         $encoded = [Convert]::ToBase64String($bytes)
-        
         Start-Process powershell -ArgumentList "-NoProfile -EncodedCommand $encoded" -Verb RunAs
     }
 }
@@ -12744,6 +13950,47 @@ function Action-ToolGpEdit {
 function Action-ToolDiagnostic {
     Write-Log "Opening Device Diagnostic..."
     Start-Process "msdt.exe" -ArgumentList "/id DeviceDiagnostic"
+}
+
+function Action-HyperVEnable {
+    Write-Log "Mengeksekusi bcdedit untuk mengaktifkan Hyper-V (Auto)..."
+    try {
+        $p = Start-Process bcdedit -ArgumentList "/set hypervisorlaunchtype auto" -Wait -NoNewWindow -PassThru
+        if ($p.ExitCode -eq 0) {
+            [System.Windows.Forms.MessageBox]::Show("Hyper-V Launch Type berhasil diatur ke [Auto].`n`nPERINGATAN: Anda harus me-restart komputer Anda agar efek perubahan ini aktif!", "Sukses", "OK", "Information")
+        } else {
+            [System.Windows.Forms.MessageBox]::Show("Gagal mengeksekusi bcdedit. Pastikan aplikasi dijalankan sebagai Administrator.", "Akses Ditolak", "OK", "Error")
+        }
+    } catch {
+        [System.Windows.Forms.MessageBox]::Show("Terjadi kesalahan: $_", "Error", "OK", "Error")
+    }
+}
+
+function Action-HyperVDisable {
+    Write-Log "Mengeksekusi bcdedit untuk menonaktifkan Hyper-V (Off)..."
+    try {
+        $p = Start-Process bcdedit -ArgumentList "/set hypervisorlaunchtype off" -Wait -NoNewWindow -PassThru
+        if ($p.ExitCode -eq 0) {
+            [System.Windows.Forms.MessageBox]::Show("Hyper-V Launch Type berhasil diatur ke [Off].`n`nPERINGATAN: Anda harus me-restart komputer Anda agar efek perubahan ini aktif (Optimal untuk Game & Emulator)!", "Sukses", "OK", "Information")
+        } else {
+            [System.Windows.Forms.MessageBox]::Show("Gagal mengeksekusi bcdedit. Pastikan aplikasi dijalankan sebagai Administrator.", "Akses Ditolak", "OK", "Error")
+        }
+    } catch {
+        [System.Windows.Forms.MessageBox]::Show("Terjadi kesalahan: $_", "Error", "OK", "Error")
+    }
+}
+
+function Action-CreateRestorePoint {
+    Write-Log "Memulai proses pembuatan System Restore Point..."
+    [System.Windows.Forms.Cursor]::Current = [System.Windows.Forms.Cursors]::WaitCursor
+    try {
+        Enable-ComputerRestore -Drive "C:\" -ErrorAction SilentlyContinue
+        Checkpoint-Computer -Description "WaroengTools_AutoBackup" -RestorePointType MODIFY_SETTINGS -ErrorAction Stop
+        [System.Windows.Forms.MessageBox]::Show("System Restore Point 'WaroengTools_AutoBackup' BERHASIL dibuat!`nSistem Anda sekarang aman sebelum melakukan tweaking.", "Restore Point Sukses", "OK", "Information")
+    } catch {
+        [System.Windows.Forms.MessageBox]::Show("Gagal membuat Restore Point.`n`nKemungkinan penyebab:`n1. System Restore dimatikan permanen di Windows.`n2. Batasan Windows (Hanya boleh membuat 1 restore point dalam 24 jam).`n`nDetail Error: $_", "Gagal", "OK", "Warning")
+    }
+    [System.Windows.Forms.Cursor]::Current = [System.Windows.Forms.Cursors]::Default
 }
 
 function Render-OtherTools {
@@ -12764,11 +14011,11 @@ function Render-OtherTools {
         $ctrl.Region = New-Object System.Drawing.Region($p)
     }
 
-    # PANEL UTAMA
+    # PANEL UTAMA (Scroll utama diletakkan di sini)
     $pnlMain = New-Object System.Windows.Forms.Panel
     $pnlMain.Dock = "Fill"
     $pnlMain.BackColor = $cP.Bg
-    $pnlMain.AutoScroll = $true # SCROLL UTAMA HALAMAN
+    $pnlMain.AutoScroll = $true  # <--- AKTIFKAN SCROLL HALAMAN DI SINI
 
     # --- 1. HEADER BANNER ---
     $bannerCard = New-Object System.Windows.Forms.Panel
@@ -12794,7 +14041,7 @@ function Render-OtherTools {
     $bannerCard.Controls.Add($lblTitle)
 
     $lblSubTitle = New-Object System.Windows.Forms.Label
-    $lblSubTitle.Text = "Kumpulan alat utilitas tambahan untuk manajemen dan optimasi OS."
+    $lblSubTitle.Text = "Kumpulan alat utilitas tambahan untuk manajemen, proteksi, dan optimasi OS."
     $lblSubTitle.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Regular)
     $lblSubTitle.ForeColor = [System.Drawing.Color]::LightGray
     $lblSubTitle.AutoSize = $true
@@ -12803,20 +14050,22 @@ function Render-OtherTools {
 
     $pnlMain.Controls.Add($bannerCard)
 
-    # --- 2. CONTAINER FLOW (Untuk isi menunya nanti) ---
+    # --- 2. CONTAINER FLOW (Diperbaiki Layout-nya) ---
     $flowGrid = New-Object System.Windows.Forms.FlowLayoutPanel
     $flowGrid.Location = New-Object System.Drawing.Point(30, 160)
-    $flowGrid.Size = New-Object System.Drawing.Size(735, 400) # Bisa disesuaikan
-    $flowGrid.Anchor = "Top, Bottom, Left, Right"
-    $flowGrid.AutoScroll = $true
-    $flowGrid.Padding = New-Object System.Windows.Forms.Padding(0)
+    $flowGrid.Width = 735
+    $flowGrid.AutoScroll = $false         # <--- Matikan scroll internal agar tidak konflik
+    $flowGrid.AutoSize = $true           # <--- Biar grid memanjang otomatis ke bawah sesuai isi
+    $flowGrid.AutoSizeMode = "GrowAndShrink"
+    $flowGrid.Padding = New-Object System.Windows.Forms.Padding(0, 0, 0, 30) # Padding bawah biar tidak mepet
     $pnlMain.Controls.Add($flowGrid)
 
-    # --- FUNCTION HELPER: CREATE CARD ---
+    # --- FUNCTION HELPER: CREATE CARD FIX ---
     function Add-ToolCard ($Title, $Desc, $IconCode, $IconColor, $Action) {
         $card = New-Object System.Windows.Forms.Panel
-        $card.Size = New-Object System.Drawing.Size(($flowGrid.Width / 2 - 25), 100)
-        $card.Margin = New-Object System.Windows.Forms.Padding(10)
+        # FIX: Gunakan ukuran static 345px agar tidak terkena bug Width = 0 saat inisialisasi awal
+        $card.Size = New-Object System.Drawing.Size(345, 100) 
+        $card.Margin = New-Object System.Windows.Forms.Padding(0, 10, 20, 10)
         $card.BackColor = if ($global:IsDarkMode) {[System.Drawing.Color]::FromArgb(45, 45, 50)} else {[System.Drawing.Color]::White}
         $card.Cursor = "Hand"
 
@@ -12856,16 +14105,28 @@ function Render-OtherTools {
         $card.Add_MouseLeave({ $this.BackColor = if ($global:IsDarkMode) {[System.Drawing.Color]::FromArgb(45, 45, 50)} else {[System.Drawing.Color]::White} })
 
         $flowGrid.Controls.Add($card)
-        $null = $card.Handle; &$SetRounded $card 12
+        
+        # Sempurnakan siklus render lengkungan objek
+        $null = $card.Handle
+        &$SetRounded $card 12
     }
 
-    # --- MENAMBAHKAN TOOLS DENGAN WARNA IKON ---
+    # --- MENAMBAHKAN TOOLS BAWAAN ---
     Add-ToolCard "Delete Temp Files" "Bersihkan file sampah di C:\Windows\Temp dan %TEMP% user." 0xE74D "Crimson" { Action-ToolTemp } 
     Add-ToolCard "Reset Network Stack" "Flush DNS, Reset Winsock, & Restart Adapter (Fix Internet)." 0xE909 "DodgerBlue" { Action-ToolNetReset } 
     Add-ToolCard "Printer Sharing Fix" "Aktifkan SMB1.0, Fix RPC 11b, & Restart Print Spooler." 0xE749 "Teal" { Action-ToolPrinter } 
     Add-ToolCard "Chrome Ext. Fix" "Paksa aktifkan Manifest V2 extensions via Registry Policy." 0xE774 "Goldenrod" { Action-ToolChrome } 
     Add-ToolCard "Enable GPEdit" "Install Group Policy Editor khusus untuk Windows Home Edition." 0xE7EF "MediumPurple" { Action-ToolGpEdit } 
     Add-ToolCard "Hardware Diagnostic" "Jalankan Windows MSDT untuk cek masalah perangkat keras." 0xE9D9 "MediumSeaGreen" { Action-ToolDiagnostic } 
+
+    # --- MENAMBAHKAN KARTU HYPER-V & RESTORE POINT BARU ---
+    Add-ToolCard "Disable Hyper-V (Off)" "Matikan Hypervisor via bcdedit agar Game & Emulator berjalan lancar." 0xEE3F "OrangeRed" { Action-HyperVDisable }
+    Add-ToolCard "Enable Hyper-V (Auto)" "Aktifkan kembali mesin virtualisasi bcdedit untuk WSL, Docker, / VM." 0xEE3F "LimeGreen" { Action-HyperVEnable }
+    Add-ToolCard "Create Restore Point" "Buat titik keamanan sistem (Safety Guard) saat ini sebelum tweaks ekstrem." 0xE73E "DodgerBlue" { Action-CreateRestorePoint }
+
+    # SINKRONISASI AKHIR LAYOUT ENGINE
+    $pnlMain.ResumeLayout()
+    $flowGrid.ResumeLayout()
 
     $contentPanel.Controls.Add($pnlMain)
 }
