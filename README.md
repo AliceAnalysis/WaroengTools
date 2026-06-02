@@ -1,4 +1,4 @@
-# 🛠️ Waroeng Tools - v7.0 Ultimate (Stable Release)
+# 🛠️ Waroeng Tools
 
 [![PowerShell](https://img.shields.io/badge/PowerShell-5.1%2B-blue.svg?style=flat-square&logo=powershell)](https://microsoft.com/powershell)
 [![OS Support](https://img.shields.io/badge/Windows-10%20%2F%2011-0078d4.svg?style=flat-square&logo=windows)](https://microsoft.com/windows)
