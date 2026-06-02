@@ -2,7 +2,7 @@
 
 [![PowerShell](https://img.shields.io/badge/PowerShell-5.1%2B-blue.svg?style=flat-square&logo=powershell)](https://microsoft.com/powershell)
 [![OS Support](https://img.shields.io/badge/Windows-10%20%2F%2011-0078d4.svg?style=flat-square&logo=windows)](https://microsoft.com/windows)
-[![Release Version](https://img.shields.io/badge/Version-7.0--Ultimate-emerald.svg?style=flat-square)](#)
+[![Release Version](https://img.shields.io/badge/Version-6.6.3--Ultimate-emerald.svg?style=flat-square)](#)
 [![Developer](https://img.shields.io/badge/Creator-Bagas%20Alam%20Saputra-orange.svg?style=flat-square)](https://github.com)
 
 **Waroeng Tools** adalah aplikasi utilitas berbasis GUI (Graphical User Interface) premium, ringan, dan sangat bertenaga yang dibangun menggunakan **Native PowerShell**. Alat ini dirancang khusus oleh **Bagas Alam Saputra** untuk mengoptimalkan performa sistem operasi Windows, menghapus aplikasi bawaan (*bloatware*) yang menguras memori, serta memulihkan privasi penuh pengguna dengan mematikan telemetri pelacak bawaan Microsoft secara aman dan bersih.
