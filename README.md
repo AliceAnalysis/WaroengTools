@@ -93,7 +93,7 @@ Proyek ini sangat menghargai komunitas *open-source* dunia.
 > 🛑 **Mohon Perhatian:**
 > 
 > * **English:** Please do not change this script to make it your own without giving me credit in the script.
-> * **Bahasa Indonesia:** Tolong jangan ubah skrip ini untuk menjadikannya seolah-olah milik Anda sendiri tanpa mencantumkan kredit/sumber asli kepada saya (**Bagas Alam Saputra**) di dalam skrip. Hargailah waktu dan kerja keras yang dituangkan dalam pembuatan alat ini.
+> * **Bahasa Indonesia:** Tolong jangan ubah skrip ini untuk menjadikannya seolah-olah milik Anda sendiri tanpa mencantumkan kredit/sumber asli kepada saya di dalam skrip. Hargailah waktu dan kerja keras yang dituangkan dalam pembuatan alat ini.
 
 ---
 *Dibuat dengan 💻 dan ☕ oleh Bagas Alam Saputra.*
