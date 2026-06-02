@@ -81,10 +81,10 @@ Waroeng Tools hadir dengan dashboard navigasi modern berisikan perkakas esensial
 
 ## 🤝 Special Thanks & Credits
 
-Proyek ini sangat menghargai komunitas *open-source* dunia. Integrasi eksternal di dalam aplikasi ini memanggil alat-alat hebat berikut tanpa memodifikasi kode asli mereka sedikit pun:
+Proyek ini sangat menghargai komunitas *open-source* dunia.
 
-* **[massgrave (MAS)](https://massgrave.dev/)** - 
-* **[abbodi1406 (OfficeScrubber)](https://github.com/abbodi1406/BatUtil)** - 
+* **[massgrave (MAS)](https://massgrave.dev/)** 
+* **[abbodi1406 (OfficeScrubber)](https://github.com/abbodi1406/BatUtil)** 
 
 ---
 
