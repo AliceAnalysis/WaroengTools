@@ -13,9 +13,9 @@
 
 Karena aplikasi ini memerlukan modifikasi pada level registri sistem dan file hosts, Anda **wajib menjalankannya dengan Hak Akses Administrator**. 
 
-Pilih salah satu dari **4 metode akses** di bawah ini yang paling sesuai dengan kondisi sistem Anda:
+Pilih salah satu dari **2 kategori akses** di bawah ini yang paling sesuai dengan kondisi sistem Anda:
 
-### Kategori A: Eksekusi Online (Tanpa Unduh Manual)
+### Kategori A: Eksekusi Instan Online (Menggunakan Perintah)
 Buka **PowerShell (Admin)** atau **Terminal (Admin)**, lalu pilih salah satu perintah berikut:
 
 * **Metode 1: Perintah Instan Utama (Rekomendasi)**
@@ -27,30 +27,25 @@ Buka **PowerShell (Admin)** atau **Terminal (Admin)**, lalu pilih salah satu per
 * **Metode 2: Solusi Anti-Blokir / DNS Terganggu (DoH Curl)**
     Jika koneksi provider internet Anda mengganggu pemanggilan domain, gunakan perintah berbasis *DNS-over-HTTPS Cloudflare* ini:
     ```powershell
-    iex (curl.exe -s --doh-url https://1.1.1.1/dns-query waroengtools.my.id | Out-String)
-    ```
-
-* **Metode 3: Jalur Alternatif (Backup Shortlink)**
-    Gunakan metode ini jika sistem proteksi `irm` pada domain utama Anda mengalami kendala atau terblokir:
-    ```powershell
-    irm https://bit.ly/4v3LxWm | iex
+    iex (curl.exe -s --doh-url [https://1.1.1.1/dns-query](https://1.1.1.1/dns-query) waroengtools.my.id | Out-String)
     ```
 
 ---
 
-### Kategori B: Eksekusi Offline / Manual
+### Kategori B: Eksekusi Offline (Menggunakan Launcher Lokal)
 
-* **Metode 4: Unduh Berkas Skrip Secara Manual**
-    1. Unduh berkas skrip `WaroengTweak.ps1` dari repositori ini ke penyimpanan lokal Anda.
-    2. Klik kanan pada tombol **Start Windows**, lalu pilih **PowerShell (Admin)** atau **Terminal (Admin)**.
-    3. Izinkan eksekusi skrip lokal pada sistem Windows Anda dengan mengetikkan perintah berikut:
+* **Metode 3: Menggunakan Launcher_Offline.ps1 (Solusi Terbaik & Bebas Lupa Perintah)**
+    Jika Anda ingin menggunakan aplikasi tanpa perlu selalu mengetik perintah di atas, atau ingin membukanya dalam keadaan **tanpa koneksi internet (Offline)**, gunakan skrip Launcher resmi:
+    
+    1. Unduh berkas **`Launcher_Offline.ps1`** dari repositori ini ke folder lokal komputer Anda (misal: *Desktop* atau *Documents*).
+    2. Klik kanan pada file `Launcher_Offline.ps1` lalu pilih **Run with PowerShell**, **ATAU** jalankan lewat **PowerShell (Admin)** dengan perintah berikut:
        ```powershell
-       Set-ExecutionPolicy Bypass -Scope Process -Force
+       Set-ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
+       .\Launcher_Offline.ps1
        ```
-    4. Jalankan skrip tersebut dengan menavigasi ke folder tempat Anda menyimpan berkas tadi, lalu eksekusi:
-       ```powershell
-       .\WaroengTweak.ps1
-       ```
+    3. **Navigasi Menu Launcher:**
+       * **Pilih Menu [2] (Update / Download)** saat pertama kali menggunakan launcher untuk mengunduh modul sistem inti Waroeng Tools secara permanen ke komputer Anda.
+       * **Pilih Menu [1] (Buka Aplikasi)** untuk langsung membuka dashboard utama kapan saja secara instan, bahkan saat PC Anda sedang **Offline**.
 
 ---
 
@@ -79,13 +74,9 @@ Waroeng Tools hadir dengan dashboard navigasi modern berisikan perkakas esensial
 
 ---
 
-
 ## ⚠️ Pemberitahuan Hak Cipta (Copyright Notice)
 
 > **Mohon Perhatian:**
 > 
 > * **English:** Please do not change this script to make it your own without giving me credit in the script.
 > * **Bahasa Indonesia:** Tolong jangan ubah skrip ini untuk menjadikannya seolah-olah milik Anda sendiri tanpa mencantumkan kredit/sumber asli kepada saya di dalam skrip. Hargailah waktu dan kerja keras yang dituangkan dalam pembuatan alat ini.
-
----
-*Dibuat dengan 💻 dan ☕ oleh Bagas Alam Saputra.*
