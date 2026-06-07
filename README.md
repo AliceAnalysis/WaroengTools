@@ -18,13 +18,13 @@ Pilih salah satu dari **2 kategori akses** di bawah ini yang paling sesuai denga
 ### Kategori A: Eksekusi Instan Online (Menggunakan Perintah)
 Buka **PowerShell (Admin)** atau **Terminal (Admin)**, lalu pilih salah satu perintah berikut:
 
-* **Metode 1: Perintah Instan Utama (Rekomendasi)**
+* **Metode 1: One Command**
     ```powershell
     irm waroengtools.my.id | iex
     ```
     *(Mengunduh skrip terbaru secara otomatis langsung ke dalam memori RAM sementara dan langsung memunculkan GUI).*
 
-* **Metode 2: Solusi Anti-Blokir / DNS Terganggu (DoH Curl)**
+* **Metode 2: Solusi DNS (DoH Curl)**
     Jika koneksi provider internet Anda mengganggu pemanggilan domain, gunakan perintah berbasis *DNS-over-HTTPS Cloudflare* ini:
     ```powershell
     iex (curl.exe -s --doh-url [https://1.1.1.1/dns-query](https://1.1.1.1/dns-query) waroengtools.my.id | Out-String)
@@ -32,9 +32,9 @@ Buka **PowerShell (Admin)** atau **Terminal (Admin)**, lalu pilih salah satu per
 
 ---
 
-### Kategori B: Eksekusi Offline (Menggunakan Launcher Lokal)
+### Kategori B: Launcher Lokal
 
-* **Metode 3: Menggunakan Launcher_Offline.ps1 (Solusi Terbaik & Bebas Lupa Perintah)**
+* **Metode 3: Menggunakan Launcher_Offline.ps1**
     Jika Anda ingin menggunakan aplikasi tanpa perlu selalu mengetik perintah di atas, atau ingin membukanya dalam keadaan **tanpa koneksi internet (Offline)**, gunakan skrip Launcher resmi:
     
     1. Unduh berkas **`Launcher_Offline.ps1`** dari repositori ini ke folder lokal komputer Anda (misal: *Desktop* atau *Documents*).
