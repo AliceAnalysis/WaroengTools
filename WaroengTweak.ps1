@@ -1,20 +1,16 @@
 <#
 :: =====================================================================
-:: WAROENG TOOLS - v6.6.3
+:: WAROENG TOOLS - v6.7
 :: Creator: Bagas Alam Saputra
 :: =====================================================================
 :: 
-:: Update Log v6.6.3:
-:: [NATIVE POWERSHELL ENGINE & OPTIMIZATION]
-:: 1. SCRIPT OVERHAUL: Merombak total ribuan baris kode "Revert Tweak" menjadi skrip Native PowerShell murni yang jauh lebih bersih dan ringan.
-:: 2. BLAZING FAST EXECUTION: Peningkatan performa ekstrem pada fitur "Remove Bloatware" dan "Block Tracking Hosts", menghemat waktu eksekusi dari menit menjadi hitungan milidetik.
-:: 3. CLIPBOARD LOGIC FIX: Menyesuaikan logika sinkronisasi Cloud Clipboard agar fitur riwayat lokal (Windows + V) dapat aktif/nonaktif dengan sempurna tanpa menyebabkan error sistem.
-:: 4. SMART REGISTRY & UI REFRESH: Menyederhanakan manipulasi pembacaan/penulisan Registry dan menambahkan fitur Auto-Restart Explorer.exe agar perubahan antarmuka (UI) langsung diterapkan.
-:: 5. SMART UWP RESTORE: Memperbaiki logika pemulihan aplikasi bawaan Windows (Bloatware) dengan kemampuan bypass "Deprovisioned" secara otomatis.
+:: Update Log v6.7
 ::
 :: [SPECIAL THANKS & CREDITS]
 :: - massgrave (MAS)
 :: - abbodi1406 (OfficeScrubber)
+:: - stefanpejcic (EmptyStandbyList)
+:: - Nir Sofer (BlueScreenView)
 ::
 :: [COPYRIGHT NOTICE]
 :: PLEASE DO NOT CHANGE THIS SCRIPT TO MAKE IT YOUR OWN WITHOUT GIVING ME CREDIT IN THE SCRIPT.
@@ -281,98 +277,116 @@ $header.Controls.Add($headInfo)
 # ELEMEN 1: TOMBOL EXPORT LOG (Ikon Disket/Save)
 # -------------------------------------------------------------------------
 $btnExportLog = New-Object System.Windows.Forms.Label
-$btnExportLog.Text = [char]0xE74E # Kode Ikon 'Save' dari font bawaan Windows
-$btnExportLog.Font = New-Object System.Drawing.Font("Segoe MDL2 Assets", 15) # Font rahasia Windows 10/11
+$btnExportLog.Text = [char]0xE74E 
+$btnExportLog.Font = New-Object System.Drawing.Font("Segoe MDL2 Assets", 15)
 $btnExportLog.ForeColor = [System.Drawing.Color]::White
 $btnExportLog.AutoSize = $true
-$btnExportLog.Cursor = "Hand"     # Mengubah kursor panah menjadi ikon 'Tangan' saat disorot
-$btnExportLog.Location = New-Object System.Drawing.Point(185, 31)
+$btnExportLog.Cursor = "Hand"
+$btnExportLog.Location = New-Object System.Drawing.Point(165, 31) # Digeser sedikit ke kiri (dari 185 ke 165)
 
-# EVENT HANDLER: Menambahkan aksi interaktif pada tombol
-$btnExportLog.Add_Click({ Export-Log }) # Jika diklik, jalankan fungsi Export-Log
-$btnExportLog.Add_MouseEnter({ $btnExportLog.ForeColor = [System.Drawing.Color]::LimeGreen }) # Sorot -> Hijau
-$btnExportLog.Add_MouseLeave({ $btnExportLog.ForeColor = [System.Drawing.Color]::White })     # Lepas -> Putih
+$btnExportLog.Add_Click({ Export-Log })
+$btnExportLog.Add_MouseEnter({ $this.ForeColor = [System.Drawing.Color]::LimeGreen })
+$btnExportLog.Add_MouseLeave({ $this.ForeColor = [System.Drawing.Color]::White })
 $headInfo.Controls.Add($btnExportLog)
 
 # (PEMBATAS VISUAL 1)
 $sepLine1 = New-Object System.Windows.Forms.Panel
 $sepLine1.Width = 1; $sepLine1.Height = 20; $sepLine1.BackColor = [System.Drawing.Color]::FromArgb(80, 255, 255, 255)
-$sepLine1.Location = New-Object System.Drawing.Point(220, 32); $headInfo.Controls.Add($sepLine1)
+$sepLine1.Location = New-Object System.Drawing.Point(195, 32); $headInfo.Controls.Add($sepLine1)
 
 # -------------------------------------------------------------------------
 # ELEMEN 2: TOMBOL THEME SWITCHER (Ikon Matahari/Bulan)
 # -------------------------------------------------------------------------
 $btnTheme = New-Object System.Windows.Forms.Label
-$btnTheme.Text = $p.Icon # Memanggil ikon berdasarkan variabel Tema (Light/Dark)
+$btnTheme.Text = $p.Icon
 $btnTheme.Font = New-Object System.Drawing.Font("Segoe MDL2 Assets", 15)
 $btnTheme.ForeColor = [System.Drawing.Color]::White
 $btnTheme.AutoSize = $true
 $btnTheme.Cursor = "Hand"
-$btnTheme.Location = New-Object System.Drawing.Point(235, 31)
+$btnTheme.Location = New-Object System.Drawing.Point(205, 31)
 
-# EVENT HANDLER
-$btnTheme.Add_Click({ Toggle-Theme }) # Jika diklik, jalankan fungsi Toggle-Theme
-$btnTheme.Add_MouseEnter({ $btnTheme.ForeColor = [System.Drawing.Color]::Yellow }) # Sorot -> Kuning
-$btnTheme.Add_MouseLeave({ $btnTheme.ForeColor = [System.Drawing.Color]::White })  # Lepas -> Putih
+$btnTheme.Add_Click({ Toggle-Theme })
+$btnTheme.Add_MouseEnter({ $this.ForeColor = [System.Drawing.Color]::Yellow })
+$btnTheme.Add_MouseLeave({ $this.ForeColor = [System.Drawing.Color]::White })
 $headInfo.Controls.Add($btnTheme)
 
 # (PEMBATAS VISUAL 2)
 $sepLine2 = New-Object System.Windows.Forms.Panel
 $sepLine2.Width = 1; $sepLine2.Height = 20; $sepLine2.BackColor = [System.Drawing.Color]::FromArgb(80, 255, 255, 255)
-$sepLine2.Location = New-Object System.Drawing.Point(270, 32); $headInfo.Controls.Add($sepLine2)
+$sepLine2.Location = New-Object System.Drawing.Point(235, 32); $headInfo.Controls.Add($sepLine2)
 
 # -------------------------------------------------------------------------
-# ELEMEN 3: JAM REAL-TIME & TIMER ENGINE
+# ELEMEN 3: TOMBOL GITHUB / OFFLINE LAUNCHER (BARU)
 # -------------------------------------------------------------------------
-# Membuat teks statis "00:00:00" sebagai cetakan (placeholder) awal
+$btnGitHub = New-Object System.Windows.Forms.Label
+$btnGitHub.Text = [char]0xE12B # Kode Ikon 'Globe / Web'
+$btnGitHub.Font = New-Object System.Drawing.Font("Segoe MDL2 Assets", 15)
+$btnGitHub.ForeColor = [System.Drawing.Color]::White
+$btnGitHub.AutoSize = $true
+$btnGitHub.Cursor = "Hand"
+$btnGitHub.Location = New-Object System.Drawing.Point(245, 31)
+
+# EVENT HANDLER: Buka browser ke link GitHub
+$btnGitHub.Add_Click({ 
+    Write-Log "Action: User clicked GitHub / Offline Launcher button."
+    Start-Process "https://github.com/AliceAnalysis/WaroengTools" 
+})
+$btnGitHub.Add_MouseEnter({ $this.ForeColor = [System.Drawing.Color]::DeepSkyBlue }) 
+$btnGitHub.Add_MouseLeave({ $this.ForeColor = [System.Drawing.Color]::White })       
+$headInfo.Controls.Add($btnGitHub)
+
+# (PEMBATAS VISUAL 3)
+$sepLine3 = New-Object System.Windows.Forms.Panel
+$sepLine3.Width = 1; $sepLine3.Height = 20; $sepLine3.BackColor = [System.Drawing.Color]::FromArgb(80, 255, 255, 255)
+$sepLine3.Location = New-Object System.Drawing.Point(275, 32); $headInfo.Controls.Add($sepLine3)
+
+# -------------------------------------------------------------------------
+# ELEMEN 4: JAM REAL-TIME & TIMER ENGINE (KEMBALI KE POSISI AWAL)
+# -------------------------------------------------------------------------
 $lblClock = New-Object System.Windows.Forms.Label
 $lblClock.Text = "00:00:00"
 $lblClock.Font = New-Object System.Drawing.Font("Segoe UI", 16)
 $lblClock.ForeColor = [System.Drawing.Color]::FromArgb(240, 240, 240)
 $lblClock.AutoSize = $true
-$lblClock.Location = New-Object System.Drawing.Point(285, 27)
+$lblClock.Location = New-Object System.Drawing.Point(285, 27) # Dikembalikan ke 285
 $headInfo.Controls.Add($lblClock)
 
-# ENGINE TIMER: Membuat proses yang berjalan di latar belakang (asynchronous)
 $timer = New-Object System.Windows.Forms.Timer
-$timer.Interval = 1000 # 1000 milidetik = 1 Detik
-# Setiap 1 detik (Tick), perbarui teks pada variabel $lblClock dengan waktu sistem terbaru (Jam:Menit:Detik)
+$timer.Interval = 1000
 $timer.Add_Tick({ $lblClock.Text = Get-Date -Format "HH:mm:ss" })
-$timer.Start() # Menyalakan mesin waktu
+$timer.Start()
 
-# (PEMBATAS VISUAL 3 UTAMA)
-$sepLine3 = New-Object System.Windows.Forms.Panel
-$sepLine3.Width = 1; $sepLine3.Height = 40; $sepLine3.BackColor = [System.Drawing.Color]::FromArgb(100, 255, 255, 255)
-$sepLine3.Location = New-Object System.Drawing.Point(395, 22); $headInfo.Controls.Add($sepLine3)
+# (PEMBATAS VISUAL UTAMA)
+$sepLineMain = New-Object System.Windows.Forms.Panel
+$sepLineMain.Width = 1; $sepLineMain.Height = 40; $sepLineMain.BackColor = [System.Drawing.Color]::FromArgb(100, 255, 255, 255)
+$sepLineMain.Location = New-Object System.Drawing.Point(395, 22); $headInfo.Controls.Add($sepLineMain) # Dikembalikan ke 395
 
 # -------------------------------------------------------------------------
-# ELEMEN 4: IDENTITAS USER KOMPUTER LOKAL
+# ELEMEN 5: IDENTITAS USER KOMPUTER LOKAL (KEMBALI KE POSISI AWAL)
 # -------------------------------------------------------------------------
 $lblUserInfo = New-Object System.Windows.Forms.Label
-# Menarik nama akun Windows yang sedang login dan membuatnya KAPITAL
 $lblUserInfo.Text = "$($env:USERNAME.ToUpper())" 
 $lblUserInfo.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
 $lblUserInfo.ForeColor = [System.Drawing.Color]::White
 $lblUserInfo.AutoSize = $true
-$lblUserInfo.Location = New-Object System.Drawing.Point(415, 24)
+$lblUserInfo.Location = New-Object System.Drawing.Point(415, 24) # Dikembalikan ke 415
 $headInfo.Controls.Add($lblUserInfo)
 
 $lblPCInfo = New-Object System.Windows.Forms.Label
-# Menarik nama perangkat (Hostname) dari sistem Windows
 $lblPCInfo.Text = "$($env:COMPUTERNAME)"
 $lblPCInfo.Font = New-Object System.Drawing.Font("Segoe UI", 8)
 $lblPCInfo.ForeColor = [System.Drawing.Color]::FromArgb(200, 255, 255, 255)
 $lblPCInfo.AutoSize = $true
-$lblPCInfo.Location = New-Object System.Drawing.Point(415, 44)
+$lblPCInfo.Location = New-Object System.Drawing.Point(415, 44) # Dikembalikan ke 415
 $headInfo.Controls.Add($lblPCInfo)
 
-# ELEMEN 5: IKON FOTO PROFIL (User Icon)
+# ELEMEN 6: IKON FOTO PROFIL (User Icon)
 $lblUserIcon = New-Object System.Windows.Forms.Label
-$lblUserIcon.Text = [char]0xE77B # Kode Ikon 'Orang/User' dari font bawaan
+$lblUserIcon.Text = [char]0xE77B 
 $lblUserIcon.Font = New-Object System.Drawing.Font("Segoe MDL2 Assets", 22)
 $lblUserIcon.ForeColor = [System.Drawing.Color]::White
 $lblUserIcon.AutoSize = $true
-$lblUserIcon.Location = New-Object System.Drawing.Point(535, 24)
+$lblUserIcon.Location = New-Object System.Drawing.Point(535, 24) # Dikembalikan ke 535
 $headInfo.Controls.Add($lblUserIcon)
 
 # =========================================================================
@@ -434,274 +448,312 @@ function Export-Log {
 function Get-DetailedSpecs {
     try {
         # -----------------------------------------------------------------
-        # 1. ANALISIS PENGGUNAAN MEMORI (RAM USAGE)
+        # 1. ANALISIS PENGGUNAAN MEMORI (RAM)
         # -----------------------------------------------------------------
-        # Mengambil data OS untuk melihat kapasitas RAM yang terbaca oleh Windows
         $os = Get-CimInstance Win32_OperatingSystem
         
-        # Kapasitas asli dalam format Kilobytes (KB), kita bagi 1MB agar berubah menjadi Gigabytes (GB)
         $totalVis = $os.TotalVisibleMemorySize / 1MB 
         $freeMem  = $os.FreePhysicalMemory / 1MB
         $usedMem  = $totalVis - $freeMem
         
-        # Membulatkan angka desimal agar rapi (contoh: 7.8 GB, bukan 7.8231 GB)
         $usedGB  = [math]::Round($usedMem, 1)
         $totalGB = [math]::Round($totalVis, 0)
-        
-        # Menghitung persentase beban RAM saat ini
         $perc    = [math]::Round(($usedMem / $totalVis) * 100, 0)
-        $ramFinalStr = "$usedGB GB Used / $totalGB GB ($perc%)"
 
-        # -----------------------------------------------------------------
-        # 2. ANALISIS SLOT FISIK RAM (MOTHERBOARD INFO)
-        # -----------------------------------------------------------------
-        # Mengambil informasi jumlah Slot RAM yang ada di Motherboard
         $memArray = Get-CimInstance Win32_PhysicalMemoryArray
         $totalSlots = 0
-        
-        if ($memArray) {
-            # Menjumlahkan slot (berguna jika PC/Server memiliki lebih dari 1 papan sirkuit)
-            foreach ($arr in $memArray) { $totalSlots += $arr.MemoryDevices }
-        }
+        if ($memArray) { foreach ($arr in $memArray) { $totalSlots += $arr.MemoryDevices } }
 
-        # Mengambil data kepingan RAM (Sticks) yang benar-benar terpasang
         $memSticks = Get-CimInstance Win32_PhysicalMemory
         $usedSlotsCount = $memSticks.Count
-        
-        # Validasi (Fail-Safe): Jika dijalankan di Virtual Machine (VM), 
-        # kadang jumlah total slot terbaca 0. Kita paksa samakan dengan jumlah RAM terpasang.
         if ($totalSlots -lt $usedSlotsCount) { $totalSlots = $usedSlotsCount }
         
         $freeSlots = $totalSlots - $usedSlotsCount
         $slotString = "$usedSlotsCount Used / $totalSlots Total ($freeSlots Available)"
         
-        # Menganalisis Kecepatan (MHz) dan Kapasitas masing-masing keping RAM
         $ramSpeeds = @()
         foreach ($stick in $memSticks) {
-            $cap = [math]::Round($stick.Capacity / 1GB, 0) # Konversi Byte ke GB
-            $ramSpeeds += "${cap}GB-$($stick.Speed)MHz"    # Output: 8GB-3200MHz
+            $cap = [math]::Round($stick.Capacity / 1GB, 0)
+            $ramSpeeds += "${cap}GB-$($stick.Speed)MHz" 
         }
         $ramSpeedStr = $ramSpeeds -join " / "
 
+        $ramMainStr = "$totalGB GB | $ramSpeedStr ($usedSlotsCount/$totalSlots Slots Used)"
+        $ramSubStr  = "$usedGB GB Used / $totalGB GB ($perc% Allocated)"
+
         # -----------------------------------------------------------------
-        # 3. ANALISIS HARDWARE UTAMA & VERSI OS
+        # 2. ANALISIS HARDWARE UTAMA & OS
         # -----------------------------------------------------------------
-        # Membaca Registry Windows untuk mendapatkan versi OS yang lebih akurat (misal: 22H2 / 21H1)
         $regPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion"
         $regInfo = Get-ItemProperty -Path $regPath -ErrorAction SilentlyContinue
         $dispVer = if ($regInfo.DisplayVersion) { $regInfo.DisplayVersion } else { $regInfo.ReleaseId }
-        $osFinalString = "$($os.Caption) ($dispVer / $($os.Version))"
+        $osArch  = if ($os.OSArchitecture) { $os.OSArchitecture } else { "64-bit" }
+        $osFinalString = "$($os.Caption) $osArch ($dispVer / $($os.Version))"
 
-        # Mengambil data Model PC, Prosesor (CPU), dan Kartu Grafis (GPU)
         $cs   = Get-CimInstance Win32_ComputerSystem
         $cpu  = Get-CimInstance Win32_Processor
         $gpus = Get-CimInstance Win32_VideoController
         
-        # Jika ada 2 GPU (misal Laptop Intel + Nvidia), gabungkan namanya dengan tanda "+"
-        $gpuName = ($gpus | ForEach-Object { $_.Name }) -join " + "
+        $cpuFirst   = $cpu | Select-Object -First 1
+        $cpuCores   = $cpuFirst.NumberOfCores
+        $cpuThreads = $cpuFirst.NumberOfLogicalProcessors
+        $cpuClock   = [math]::Round($cpuFirst.MaxClockSpeed / 1000, 1) 
+        
+        $cpuMainStr = "$($cpuFirst.Name.Trim()) | $cpuCores Cores / $cpuThreads Threads @ $cpuClock GHz"
+        $cpuSocket  = if ($cpuFirst.SocketDesignation) { $cpuFirst.SocketDesignation } else { "Unknown Socket" }
+        $cpuSubStr  = "Socket: $cpuSocket"
+
+        # PERUBAHAN: Driver dihapus, sisa Refresh Rate saja
+        $gpuList = @()
+        $gpuSubList = @()
+        foreach ($g in $gpus) {
+            $gpuList += "$($g.Name)"
+            if ($g.CurrentRefreshRate) { 
+                $gpuSubList += "Refresh Rate: $($g.CurrentRefreshRate)Hz" 
+            }
+        }
+        $gpuMainFinal = $gpuList -join " + "
+        
+        # Jika tidak ada Refresh Rate yang terdeteksi, tampilkan teks default agar tidak kosong
+        if ($gpuSubList.Count -gt 0) {
+            $gpuSubFinal = $gpuSubList -join " | "
+        } else {
+            $gpuSubFinal = "Display Adapter"
+        }
 
         # -----------------------------------------------------------------
-        # 4. ANALISIS PENYIMPANAN FISIK (DISK STORAGE)
+        # 3. FIRMWARE, BOOT, & PARTISI
+        # -----------------------------------------------------------------
+        $bootMethod = "Legacy BIOS"
+        if ($env:firmware_type) { $bootMethod = $env:firmware_type.ToUpper() } 
+        else { if (Test-Path "HKLM:\System\CurrentControlSet\Control\SecureBoot\State") { $bootMethod = "UEFI" } }
+
+        $partitionStyle = "MBR"
+        $sysDisk = Get-Disk | Where-Object { $_.IsSystem -eq $true } -ErrorAction SilentlyContinue
+        if ($sysDisk) { $partitionStyle = $sysDisk.PartitionStyle.ToString() } 
+        else { if ($bootMethod -eq "UEFI") { $partitionStyle = "GPT" } }
+
+        $bios = Get-CimInstance Win32_Bios -ErrorAction SilentlyContinue
+        $biosVersion = if ($bios.SMBIOSBIOSVersion) { $bios.SMBIOSBIOSVersion } else { $bios.Version }
+
+        $secureBoot = "Disabled/Unsupported"
+        $sbReg = Get-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\SecureBoot\State" -Name UEFISecureBootEnabled -ErrorAction SilentlyContinue
+        if ($sbReg -and $sbReg.UEFISecureBootEnabled -eq 1) { $secureBoot = "Enabled" } 
+        elseif ($sbReg -and $sbReg.UEFISecureBootEnabled -eq 0) { $secureBoot = "Disabled" }
+
+        # -----------------------------------------------------------------
+        # 4. PENYIMPANAN FISIK
         # -----------------------------------------------------------------
         $storageList = @()
         try {
-            # Menggunakan Get-PhysicalDisk (fitur modern Windows) untuk mendapat nama asli Harddisk/SSD
             $pDisks = Get-PhysicalDisk | Sort-Object DeviceId
             foreach ($d in $pDisks) {
                 $sizeGB = [math]::Round($d.Size / 1GB, 2)
                 $storageList += "$($d.FriendlyName) ($sizeGB GB)"
             }
-        } catch { 
-            # Jika gagal (biasanya karena limitasi hak akses), beri nilai default
-            $storageList += "Disk Info Unavailable" 
-        }
+        } catch { $storageList += "Disk Info Unavailable" }
 
         # -----------------------------------------------------------------
-        # 5. DETEKSI STATUS KEAMANAN (ANTIVIRUS ENGINE)
+        # 5. DETEKSI STATUS KEAMANAN
         # -----------------------------------------------------------------
+        $avMain = "Unknown Security State"
+        $avSub  = "System Protection Status"
         try {
-            $avStatus = "Unknown"
-            
-            # Cek Level 1: Mencari Antivirus Pihak Ketiga (Avast, McAfee, dll) via Security Center
+            $fwStatusStr = "Unknown"
+            $fwProfiles = Get-NetFirewallProfile -ErrorAction SilentlyContinue
+            if ($fwProfiles) {
+                $enabledFw = $fwProfiles | Where-Object { $_.Enabled -eq $true }
+                if ($enabledFw.Count -eq $fwProfiles.Count) {
+                    $fwStatusStr = "Active (All)"
+                } elseif ($enabledFw.Count -gt 0) {
+                    $fwStatusStr = "Partially Active"
+                } else {
+                    $fwStatusStr = "DISABLED"
+                }
+            }
+
             $3rdPartyAV = Get-CimInstance -Namespace root/SecurityCenter2 -ClassName AntiVirusProduct -ErrorAction SilentlyContinue | 
                           Where-Object { $_.displayName -notmatch "Windows Defender|Microsoft Defender" }
             
             if ($3rdPartyAV) {
-                $avStatus = "$($3rdPartyAV.displayName) (Active)"
+                $avMain = "Antivirus: $($3rdPartyAV.displayName)`r`nFirewall: $fwStatusStr"
             } else {
-                # Cek Level 2: Jika tidak ada AV luar, periksa modul Windows Defender bawaan
                 $defenderStatus = Get-MpComputerStatus -ErrorAction SilentlyContinue
-                
                 if ($defenderStatus) {
-                    # Mengecek apakah proteksi Real-Time (pelindung utama) sedang menyala atau dimatikan
-                    if ($defenderStatus.RealTimeProtectionEnabled -eq $true) {
-                        $avStatus = "Windows Defender (Real-time: ON)"
-                    } else {
-                        $avStatus = "Windows Defender (Real-time: OFF / Disabled)"
-                    }
+                    $rtStatus = if ($defenderStatus.RealTimeProtectionEnabled -eq $true) { "ON" } else { "OFF" }
+                    $tpStatus = if ($defenderStatus.TamperProtection -eq $true) { "ON" } else { "OFF" }
+                    $avMain = "Antivirus: Real-Time ($rtStatus) | Tamper ($tpStatus)`r`nFirewall: $fwStatusStr"
                 } else {
-                    $avStatus = "Windows Defender (Services Offline)"
+                    $avMain = "Antivirus: Offline`r`nFirewall: $fwStatusStr"
                 }
             }
-        } catch { 
-            $avStatus = "Detection Failed" 
-        }
+        } catch { $avMain = "Security Detection Failed" }
 
         # -----------------------------------------------------------------
-        # 6. PENGEMBALIAN DATA (RETURN HASHTABLE)
+        # 6. DETEKSI JARINGAN (NETWORK ADAPTERS)
         # -----------------------------------------------------------------
-        # Membungkus semua variabel yang sudah diolah ke dalam satu objek 'Hashtable'
-        # agar mudah dipanggil dan ditampilkan di layar antarmuka (GUI)
+        $netMain = "Terputus (Disconnected)"
+        $netSub  = "Tidak ada jaringan terhubung."
+        try {
+            $activeNets = Get-NetAdapter -Physical -ErrorAction SilentlyContinue | Where-Object Status -eq 'Up'
+            if ($activeNets) {
+                $mainArr = @()
+                $subArr  = @()
+                foreach ($net in $activeNets) {
+                    $ipInfo = Get-NetIPAddress -InterfaceIndex $net.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue | Select-Object -First 1
+                    $ipStr = if ($ipInfo) { $ipInfo.IPAddress } else { "No IP" }
+                    
+                    $mainArr += "$($net.Name) : $($net.InterfaceDescription)"
+                    $subArr  += "IP: $ipStr | Speed: $($net.LinkSpeed)"
+                }
+                if ($mainArr.Count -gt 2) { $mainArr = $mainArr[0..1]; $subArr = $subArr[0..1] }
+                $netMain = $mainArr -join "`r`n"
+                $netSub  = $subArr -join " // "
+            }
+        } catch {}
+
+        # -----------------------------------------------------------------
+        # 7. PENGEMBALIAN DATA KESELURUHAN
+        # -----------------------------------------------------------------
         return @{
-            OSVer     = $osFinalString
-            Model     = "$($cs.Model) ($($cs.Manufacturer))"
-            User      = "$($env:USERNAME) on $($env:COMPUTERNAME)"
-            CPU       = "$($cpu.Name)"
-            GPU       = "$gpuName"
-            RAM_Main  = $ramFinalStr
-            RAM_Speed = "$ramSpeedStr"
-            RAM_Slots = "$slotString"  
-            Storage   = $storageList
-            AV        = "$avStatus"
+            OSVer         = $osFinalString
+            Model         = "$($cs.Model) ($($cs.Manufacturer))"
+            User          = "$($env:USERNAME) on $($env:COMPUTERNAME)"
+            CPU           = $cpuMainStr
+            CPU_Sub       = $cpuSubStr
+            GPU           = $gpuMainFinal
+            GPU_Sub       = $gpuSubFinal
+            RAM_Main      = $ramMainStr
+            RAM_Sub       = $ramSubStr
+            RAM_Slots     = "$slotString"  
+            Storage       = $storageList
+            AV_Main       = $avMain   
+            AV_Sub        = $avSub    
+            BootMethod    = $bootMethod
+            Partition     = $partitionStyle
+            BIOSVer       = "$biosVersion"
+            SecureBoot    = $secureBoot
+            Net_Main      = $netMain
+            Net_Sub       = $netSub
         }
-    } catch { 
-        # Fail-safe: Jika seluruh fungsi crash, kembalikan nilai kosong (null) agar aplikasi tidak force-close
-        return $null 
-    }
+    } catch { return $null }
 }
 
 # ---------------------------------------------------------------------
-    # 3.5 FUNGSI INTERNAL: MODAL POPUP DETAIL STORAGE 
-    # ---------------------------------------------------------------------
-    function Show-StorageDetails ($StorageList, $ThemeColors) {
-        $dlg = New-Object System.Windows.Forms.Form
-        $dlg.Size = New-Object System.Drawing.Size(420, 320)
-        $dlg.StartPosition = "CenterScreen"
-        $dlg.FormBorderStyle = "None"
-        $dlg.BackColor = $ThemeColors.Card
-        $dlg.TopMost = $true
+# FUNGSI INTERNAL: MODAL POPUP DETAIL STORAGE 
+# ---------------------------------------------------------------------
+function Show-StorageDetails ($StorageList, $ThemeColors) {
+    $dlg = New-Object System.Windows.Forms.Form
+    $dlg.Size = New-Object System.Drawing.Size(420, 320)
+    $dlg.StartPosition = "CenterScreen"
+    $dlg.FormBorderStyle = "None"
+    $dlg.BackColor = $ThemeColors.Card
+    $dlg.TopMost = $true
 
-        $rad = 20
-        $path = New-Object System.Drawing.Drawing2D.GraphicsPath
-        $path.AddArc(0, 0, $rad, $rad, 180, 90)
-        $path.AddArc($dlg.Width - $rad, 0, $rad, $rad, 270, 90)
-        $path.AddArc($dlg.Width - $rad, $dlg.Height - $rad, $rad, $rad, 0, 90)
-        $path.AddArc(0, $dlg.Height - $rad, $rad, $rad, 90, 90)
-        $path.CloseAllFigures()
-        $dlg.Region = New-Object System.Drawing.Region($path)
+    $rad = 20
+    $path = New-Object System.Drawing.Drawing2D.GraphicsPath
+    $path.AddArc(0, 0, $rad, $rad, 180, 90)
+    $path.AddArc($dlg.Width - $rad, 0, $rad, $rad, 270, 90)
+    $path.AddArc($dlg.Width - $rad, $dlg.Height - $rad, $rad, $rad, 0, 90)
+    $path.AddArc(0, $dlg.Height - $rad, $rad, $rad, 90, 90)
+    $path.CloseAllFigures()
+    $dlg.Region = New-Object System.Drawing.Region($path)
 
-        $lblTitle = New-Object System.Windows.Forms.Label
-        $lblTitle.Text = "Detail Penyimpanan Fisik"
-        $lblTitle.Font = New-Object System.Drawing.Font("Segoe UI", 13, [System.Drawing.FontStyle]::Bold)
-        $lblTitle.ForeColor = $ThemeColors.Accent
-        $lblTitle.Location = New-Object System.Drawing.Point(25, 22)
-        $lblTitle.AutoSize = $true
-        $dlg.Controls.Add($lblTitle)
+    $lblTitle = New-Object System.Windows.Forms.Label
+    $lblTitle.Text = "Detail Penyimpanan Fisik"
+    $lblTitle.Font = New-Object System.Drawing.Font("Segoe UI", 13, [System.Drawing.FontStyle]::Bold)
+    $lblTitle.ForeColor = $ThemeColors.Accent
+    $lblTitle.Location = New-Object System.Drawing.Point(25, 22)
+    $lblTitle.AutoSize = $true
+    $dlg.Controls.Add($lblTitle)
 
-        $lblDesc = New-Object System.Windows.Forms.Label
-        $lblDesc.Text = "Daftar hardware storage terdeteksi di sistem:"
-        $lblDesc.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Regular)
-        $lblDesc.ForeColor = [System.Drawing.Color]::Gray
-        $lblDesc.Location = New-Object System.Drawing.Point(26, 52)
-        $lblDesc.AutoSize = $true
-        $dlg.Controls.Add($lblDesc)
+    $lblDesc = New-Object System.Windows.Forms.Label
+    $lblDesc.Text = "Daftar hardware storage terdeteksi di sistem:"
+    $lblDesc.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Regular)
+    $lblDesc.ForeColor = [System.Drawing.Color]::Gray
+    $lblDesc.Location = New-Object System.Drawing.Point(26, 52)
+    $lblDesc.AutoSize = $true
+    $dlg.Controls.Add($lblDesc)
 
-        $pnlList = New-Object System.Windows.Forms.FlowLayoutPanel
-        $pnlList.Location = New-Object System.Drawing.Point(25, 85)
-        $pnlList.Size = New-Object System.Drawing.Size(370, 160)
-        $pnlList.AutoScroll = $true
-        $pnlList.FlowDirection = "TopDown"
-        $pnlList.WrapContents = $false
-        
-        $index = 1
-        foreach ($drive in $StorageList) {
-            $lblDrive = New-Object System.Windows.Forms.Label
-            $lblDrive.Text = "$index. $drive"
-            $lblDrive.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
-            $lblDrive.ForeColor = $ThemeColors.Text
-            $lblDrive.Width = 340
-            $lblDrive.AutoSize = $true
-            $lblDrive.Margin = New-Object System.Windows.Forms.Padding(0, 0, 0, 12)
-            $pnlList.Controls.Add($lblDrive)
-            $index++
-        }
-        $dlg.Controls.Add($pnlList)
-
-        $btnClose = New-Object System.Windows.Forms.Button
-        $btnClose.Text = "Tutup"
-        $btnClose.Size = New-Object System.Drawing.Size(110, 36)
-        $btnClose.Location = New-Object System.Drawing.Point(285, 260)
-        $btnClose.BackColor = $ThemeColors.Accent
-        $btnClose.ForeColor = [System.Drawing.Color]::White
-        $btnClose.FlatStyle = "Flat"
-        $btnClose.FlatAppearance.BorderSize = 0
-        $btnClose.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
-        $btnClose.Cursor = "Hand"
-        $btnClose.Add_Click({ $dlg.Close() })
-        $dlg.Controls.Add($btnClose)
-
-        $pnlLine = New-Object System.Windows.Forms.Panel
-        $pnlLine.Size = New-Object System.Drawing.Size($dlg.Width, 3)
-        $pnlLine.Location = New-Object System.Drawing.Point(0, ($dlg.Height - 3))
-        $pnlLine.BackColor = $ThemeColors.Accent
-        $dlg.Controls.Add($pnlLine)
-
-        $dlg.ShowDialog() | Out-Null
+    $pnlList = New-Object System.Windows.Forms.FlowLayoutPanel
+    $pnlList.Location = New-Object System.Drawing.Point(25, 85)
+    $pnlList.Size = New-Object System.Drawing.Size(370, 160)
+    $pnlList.AutoScroll = $true
+    $pnlList.FlowDirection = "TopDown"
+    $pnlList.WrapContents = $false
+    
+    $index = 1
+    foreach ($drive in $StorageList) {
+        $lblDrive = New-Object System.Windows.Forms.Label
+        $lblDrive.Text = "$index. $drive"
+        $lblDrive.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
+        $lblDrive.ForeColor = $ThemeColors.Text
+        $lblDrive.Width = 340
+        $lblDrive.AutoSize = $true
+        $lblDrive.Margin = New-Object System.Windows.Forms.Padding(0, 0, 0, 12)
+        $pnlList.Controls.Add($lblDrive)
+        $index++
     }
+    $dlg.Controls.Add($pnlList)
+
+    $btnClose = New-Object System.Windows.Forms.Button
+    $btnClose.Text = "Tutup"
+    $btnClose.Size = New-Object System.Drawing.Size(110, 36)
+    $btnClose.Location = New-Object System.Drawing.Point(285, 260)
+    $btnClose.BackColor = $ThemeColors.Accent
+    $btnClose.ForeColor = [System.Drawing.Color]::White
+    $btnClose.FlatStyle = "Flat"
+    $btnClose.FlatAppearance.BorderSize = 0
+    $btnClose.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+    $btnClose.Cursor = "Hand"
+    $btnClose.Add_Click({ $dlg.Close() })
+    $dlg.Controls.Add($btnClose)
+
+    $pnlLine = New-Object System.Windows.Forms.Panel
+    $pnlLine.Size = New-Object System.Drawing.Size($dlg.Width, 3)
+    $pnlLine.Location = New-Object System.Drawing.Point(0, ($dlg.Height - 3))
+    $pnlLine.BackColor = $ThemeColors.Accent
+    $dlg.Controls.Add($pnlLine)
+
+    $dlg.ShowDialog() | Out-Null
+}
 
 # =========================================================================
 # FASE 11: FUNGSI RENDER HALAMAN DASHBOARD (TAMPILAN SPESIFIKASI)
 # =========================================================================
 function Render-Dashboard {
-    # ---------------------------------------------------------------------
-    # 1. PERSIAPAN DATA & TEMA
-    # ---------------------------------------------------------------------
-    # Menarik seluruh data spesifikasi (OS, CPU, RAM) dari fungsi sebelumnya
     $data = Get-DetailedSpecs
-    
-    # Menentukan palet warna yang harus dipakai saat ini (tergantung mode Light/Dark)
     $cP = if ($global:IsDarkMode) { $ThemePalettes.Dark } else { $ThemePalettes.Light }
 
-    # KUNCI UTAMA: Membersihkan kanvas (Content Panel) dari elemen halaman sebelumnya
-    # Tanpa perintah ini, jika user berpindah menu, halamannya akan menumpuk!
     $contentPanel.Controls.Clear()
 
-    # Membuat panel penampung khusus untuk halaman Dashboard
     $pnlMain = New-Object System.Windows.Forms.Panel
     $pnlMain.Dock = "Fill"
     $pnlMain.BackColor = $cP.Bg
-    $pnlMain.AutoScroll = $true # Memastikan scroll nyala agar kartu di bawah tetap bisa dilihat
+    $pnlMain.AutoScroll = $true 
 
-    # ---------------------------------------------------------------------
-    # 2. PEMBUATAN ELEMEN: SPANDUK SELAMAT DATANG (WELCOME BANNER)
-    # ---------------------------------------------------------------------
     $bannerCard = New-Object System.Windows.Forms.Panel
-    $bannerCard.Size = New-Object System.Drawing.Size(750, 110) # Lebar 750px, Tinggi 110px
-    $bannerCard.Location = New-Object System.Drawing.Point(30, 30) # Jarak 30px dari kiri dan atas
+    $bannerCard.Size = New-Object System.Drawing.Size(750, 110) 
+    $bannerCard.Location = New-Object System.Drawing.Point(30, 30) 
     $bannerCard.BackColor = $cP.Header 
     
-    # --- LOGIKA DESAIN: Membuat Sudut Melengkung (Rounded Corners) ---
-    $banRadius = 20 # Tingkat kelengkungan
+    $banRadius = 20 
     $banPath = New-Object System.Drawing.Drawing2D.GraphicsPath
-    # Menggambar 4 busur (arc) di keempat sudut kotak banner
-    $banPath.AddArc(0, 0, $banRadius, $banRadius, 180, 90) # Kiri Atas
-    $banPath.AddArc($bannerCard.Width - $banRadius, 0, $banRadius, $banRadius, 270, 90) # Kanan Atas
-    $banPath.AddArc($bannerCard.Width - $banRadius, $bannerCard.Height - $banRadius, $banRadius, $banRadius, 0, 90) # Kanan Bawah
-    $banPath.AddArc(0, $bannerCard.Height - $banRadius, $banRadius, $banRadius, 90, 90) # Kiri Bawah
-    $banPath.CloseAllFigures() # Menutup garis agar menyatu menjadi kotak utuh
-    # Menerapkan bentuk hasil potongan tersebut ke panel banner
+    $banPath.AddArc(0, 0, $banRadius, $banRadius, 180, 90) 
+    $banPath.AddArc($bannerCard.Width - $banRadius, 0, $banRadius, $banRadius, 270, 90) 
+    $banPath.AddArc($bannerCard.Width - $banRadius, $bannerCard.Height - $banRadius, $banRadius, $banRadius, 0, 90) 
+    $banPath.AddArc(0, $bannerCard.Height - $banRadius, $banRadius, $banRadius, 90, 90) 
+    $banPath.CloseAllFigures() 
     $bannerCard.Region = New-Object System.Drawing.Region($banPath)
 
-    # --- Teks Judul Banner ---
     $lblWelcome = New-Object System.Windows.Forms.Label
-    $lblWelcome.Text = "Pusat Kendali Waroeng Tools"
+    $lblWelcome.Text = "Dashboard System"
     $lblWelcome.Font = New-Object System.Drawing.Font("Segoe UI", 18, [System.Drawing.FontStyle]::Bold)
     $lblWelcome.ForeColor = [System.Drawing.Color]::White
     $lblWelcome.AutoSize = $true
     $lblWelcome.Location = New-Object System.Drawing.Point(25, 20)
     $bannerCard.Controls.Add($lblWelcome)
 
-    # --- Teks Sub-Judul Banner (Profil User) ---
     $lblSubWelcome = New-Object System.Windows.Forms.Label
     $lblSubWelcome.Text = "Pengguna: $($env:USERNAME) di $($env:COMPUTERNAME)"
     $lblSubWelcome.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Regular)
@@ -712,35 +764,22 @@ function Render-Dashboard {
 
     $pnlMain.Controls.Add($bannerCard)
 
-    # ---------------------------------------------------------------------
-    # 3. PEMBUATAN ELEMEN: GRID KONTAINER (TEMPAT KARTU SPESIFIKASI)
-    # ---------------------------------------------------------------------
-    # Menggunakan FlowLayoutPanel: Panel pintar yang otomatis menyusun isinya secara berurutan
     $flpCards = New-Object System.Windows.Forms.FlowLayoutPanel
     $flpCards.Location = New-Object System.Drawing.Point(25, 160)
-    
-    # --- LOGIKA RESPONSIVITAS KARTU ---
-    # Membatasi lebar maksimal panel agar 1 baris hanya muat 2 kartu.
-    # Jika ada kartu ke-3, ia akan dipaksa turun ke baris bawah.
     $flpCards.MaximumSize = New-Object System.Drawing.Size(770, 0)
     $flpCards.Size = New-Object System.Drawing.Size(770, 0)
     $flpCards.AutoSize = $true
-    $flpCards.AutoSizeMode = "GrowAndShrink" # Tinggi panel akan bertambah otomatis mengikuti jumlah kartu
+    $flpCards.AutoSizeMode = "GrowAndShrink" 
     $flpCards.AutoScroll = $false 
-    $flpCards.WrapContents = $true # KUNCI: Fitur yang membungkus/memaksa isi turun ke baris baru
-    $flpCards.FlowDirection = "LeftToRight" # Arah penyusunan: dari kiri ke kanan
+    $flpCards.WrapContents = $true 
+    $flpCards.FlowDirection = "LeftToRight" 
 
-    # ---------------------------------------------------------------------
-    # 4. FUNGSI INTERNAL: TEMPLATE PEMBUAT KARTU SPESIFIKASI (FIXED EVENT BINDING)
-    # ---------------------------------------------------------------------
     function Create-SpecCard ($Title, $MainValue, $SubValue, $RawData = $null) {
         $card = New-Object System.Windows.Forms.Panel
         $card.Size = New-Object System.Drawing.Size(360, 120) 
         $card.Margin = New-Object System.Windows.Forms.Padding(5, 5, 15, 15)
         $card.BackColor = $cP.Card
         
-        # Simpan warna tema asli di memori properti 'Tag' milik kartu
-        # Agar saat mouse keluar, kita tahu warna apa yang harus dikembalikan
         $card.Tag = @{
             NormalColor = $cP.Card
             HoverColor  = if ($global:IsDarkMode) { [System.Drawing.Color]::FromArgb(55, 55, 60) } else { [System.Drawing.Color]::FromArgb(240, 245, 255) }
@@ -769,25 +808,23 @@ function Render-Dashboard {
         $lMain.Text = $MainValue
         $lMain.Font = New-Object System.Drawing.Font("Segoe UI", 11, [System.Drawing.FontStyle]::Bold)
         $lMain.ForeColor = $cP.Text
-        $lMain.Location = New-Object System.Drawing.Point(15, 35)
+        $lMain.Location = New-Object System.Drawing.Point(15, 33)
         $lMain.AutoSize = $false
-        $lMain.Size = New-Object System.Drawing.Size(330, 45)
-        
-        if ($Title -eq "PENYIMPANAN") {
-            $lMain.AutoEllipsis = $true
-        }
+        $lMain.Size = New-Object System.Drawing.Size(330, 56) 
+        $lMain.AutoEllipsis = $true
         $card.Controls.Add($lMain)
 
+        # PERBAIKAN: Memperlebar ruang teks (340) dan Mengaktifkan AutoEllipsis agar tidak terpotong kasar
         $lSub = New-Object System.Windows.Forms.Label
         $lSub.Text = $SubValue
         $lSub.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Regular)
         $lSub.ForeColor = [System.Drawing.Color]::Gray
-        $lSub.Location = New-Object System.Drawing.Point(15, 82)
+        $lSub.Location = New-Object System.Drawing.Point(15, 92) 
         $lSub.AutoSize = $false
-        $lSub.Size = New-Object System.Drawing.Size(330, 30)
+        $lSub.Size = New-Object System.Drawing.Size(340, 22)
+        $lSub.AutoEllipsis = $true
         $card.Controls.Add($lSub)
 
-        # --- LOGIKA INTERAKTIF (TANPA CLOSURE) ---
         if ($Title -eq "PENYIMPANAN" -and $RawData -and $RawData.Count -gt 2) {
             $icoExpand = New-Object System.Windows.Forms.Label
             $icoExpand.Text = [char]0xE710 
@@ -797,12 +834,8 @@ function Render-Dashboard {
             $icoExpand.AutoSize = $true
             $card.Controls.Add($icoExpand)
 
-            $card.Cursor = "Hand"
-            $lMain.Cursor = "Hand"
-            $lSub.Cursor = "Hand"
-            $icoExpand.Cursor = "Hand"
+            $card.Cursor = "Hand"; $lMain.Cursor = "Hand"; $lSub.Cursor = "Hand"; $icoExpand.Cursor = "Hand"
 
-            # Event Hover (Ambil kontrol induk dan ubah warnanya berdasarkan data di Tag)
             $hoverEnter = {
                 $ctrl = $this
                 if ($ctrl -isnot [System.Windows.Forms.Panel]) { $ctrl = $ctrl.Parent }
@@ -818,70 +851,40 @@ function Render-Dashboard {
             $card.Add_MouseEnter($hoverEnter); $lMain.Add_MouseEnter($hoverEnter); $lSub.Add_MouseEnter($hoverEnter)
             $card.Add_MouseLeave($hoverLeave); $lMain.Add_MouseLeave($hoverLeave); $lSub.Add_MouseLeave($hoverLeave)
 
-            # Event Click (Ambil data array dari Tag, lalu panggil fungsi Global)
             $actionClick = {
                 $ctrl = $this
                 if ($ctrl -isnot [System.Windows.Forms.Panel]) { $ctrl = $ctrl.Parent }
-                
-                $dataTarget = $ctrl.Tag.DataRaw
-                $warnaTema  = $ctrl.Tag.ThemeColors
-                
-                # Memanggil fungsi Show-StorageDetails
-                Show-StorageDetails -StorageList $dataTarget -ThemeColors $warnaTema
+                Show-StorageDetails -StorageList $ctrl.Tag.DataRaw -ThemeColors $ctrl.Tag.ThemeColors
             }
 
-            $card.Add_Click($actionClick)
-            $lMain.Add_Click($actionClick)
-            $lSub.Add_Click($actionClick)
-            $icoExpand.Add_Click($actionClick)
+            $card.Add_Click($actionClick); $lMain.Add_Click($actionClick); $lSub.Add_Click($actionClick); $icoExpand.Add_Click($actionClick)
         }
 
         return $card
     }
 
-    # ---------------------------------------------------------------------
-    # 5. EKSEKUSI PEMBUATAN KARTU (DATA INJECTION)
-    # ---------------------------------------------------------------------
     if ($data) {
-        # Jika berhasil menarik data dari komputer, masukkan ke template kartu (Create-SpecCard)
-        # Format: (Fungsi "Judul" $DataUtama $DataSub)
         $flpCards.Controls.Add((Create-SpecCard "SISTEM OPERASI" $data.OSVer $data.Model))
-        $flpCards.Controls.Add((Create-SpecCard "PROCESSOR (CPU)" $data.CPU ""))
+        $flpCards.Controls.Add((Create-SpecCard "PROCESSOR (CPU)" $data.CPU $data.CPU_Sub))
+        $flpCards.Controls.Add((Create-SpecCard "MEMORY (RAM)" $data.RAM_Main $data.RAM_Sub))
+        $flpCards.Controls.Add((Create-SpecCard "GRAPHICS (GPU)" $data.GPU $data.GPU_Sub))
         
-        # Merakit teks Sub-RAM secara manual sebelum dimasukkan ke fungsi
-        $ramSub = "$($data.RAM_Speed) | Slots: $($data.RAM_Slots)"
-        $flpCards.Controls.Add((Create-SpecCard "MEMORY (RAM)" $data.RAM_Main $ramSub))
-        
-        $flpCards.Controls.Add((Create-SpecCard "GRAPHICS (GPU)" $data.GPU ""))
-        
-        # --- MODIFIKASI KARTU PENYIMPANAN ---
         if ($data.Storage) {
             $jmlDrive = $data.Storage.Count
-            
-            # Jika drive hanya ada 1 ATAU 2, gabungkan teksnya langsung (Tidak ada efek pop-up)
-            if ($jmlDrive -le 2) {
-                # Menggunakan pemisah " | " agar jika ada 2 drive tampilannya lebih rapi
-                $diskStr = $data.Storage -join " | "
-                $diskSub = "Physical Drive"
-                
-                # Kirim parameter data mentah sebagai $null agar kartu tidak bisa diklik
-                $flpCards.Controls.Add((Create-SpecCard "PENYIMPANAN" $diskStr $diskSub $null))
-            } 
-            # Jika drive LEBIH DARI 2 (3, 4, 5, dst), aktifkan mode pop-up interaktif
-            else {
-                $diskStr = "Terdapat $jmlDrive Penyimpanan Fisik"
-                $diskSub = "Klik kartu untuk melihat detail ➜"
-                
-                # Kirim data $data.Storage untuk diproses oleh pop-up
-                $flpCards.Controls.Add((Create-SpecCard "PENYIMPANAN" $diskStr $diskSub $data.Storage))
-            }
-        } else {
-            $flpCards.Controls.Add((Create-SpecCard "PENYIMPANAN" "No Disk Found" "Physical Drive" $null))
-        }
+            if ($jmlDrive -le 2) { $flpCards.Controls.Add((Create-SpecCard "PENYIMPANAN" ($data.Storage -join " | ") "Physical Drive" $null)) } 
+            else { $flpCards.Controls.Add((Create-SpecCard "PENYIMPANAN" "Terdapat $jmlDrive Penyimpanan Fisik" "Klik untuk melihat detail . . . ." $data.Storage)) }
+        } else { $flpCards.Controls.Add((Create-SpecCard "PENYIMPANAN" "No Disk Found" "Physical Drive" $null)) }
         
-        $flpCards.Controls.Add((Create-SpecCard "STATUS KEAMANAN" $data.AV "AntiVirus Product"))
+        $flpCards.Controls.Add((Create-SpecCard "STATUS KEAMANAN" $data.AV_Main $data.AV_Sub))
+
+        # PERBAIKAN: Menyingkat struktur kalimat sub agar hemat tempat dan aman dari bug clipping
+        $bootMain = "Boot Method : $($data.BootMethod)`r`nSecure Boot : $($data.SecureBoot)"
+        $bootSub  = "BIOS: $($data.BIOSVer)  |  Partition: $($data.Partition)"
+        $flpCards.Controls.Add((Create-SpecCard "BIOS & BOOT SYSTEM" $bootMain $bootSub))
+
+        $flpCards.Controls.Add((Create-SpecCard "KONEKSI JARINGAN" $data.Net_Main $data.Net_Sub))
+
     } else {
-        # Jika sistem gagal membaca data hardware, tampilkan pesan error
         $lblErr = New-Object System.Windows.Forms.Label
         $lblErr.Text = "Gagal mengambil informasi sistem."
         $lblErr.ForeColor = [System.Drawing.Color]::Red
@@ -889,12 +892,10 @@ function Render-Dashboard {
         $flpCards.Controls.Add($lblErr)
     }
 
-    # Merakit semua bagian ke dalam panel utama (Main Panel)
     $pnlMain.Controls.Add($flpCards)
     $contentPanel.Controls.Add($pnlMain)
     
-    # Catatan terminal kecil bahwa proses render grafis telah berhasil
-    Write-Host "Render Pusat Kendali Berhasil"
+    Write-Host "Render Dashboard Berhasil"
 }
 
 # -------------------------------------------------------------------------
@@ -1720,227 +1721,6 @@ function Render-SoftwareCenter {
     $tabControl.Size = New-Object System.Drawing.Size(($cpWidth - 30), ($cpHeight - 250))
     $tabControl.Anchor = "Top, Bottom, Left, Right"
 
-    # --- Fungsi Pembangun Daftar Centang Dinamis ---
-    function Build-ScrollableList ($TabName) {
-        $panel = New-Object System.Windows.Forms.Panel
-        $panel.Dock = "Fill"
-        $panel.AutoScroll = $true
-        
-        if ($global:IsDarkMode) {
-            $panel.BackColor = [System.Drawing.Color]::FromArgb(25,25,30)
-        } else {
-            $panel.BackColor = [System.Drawing.Color]::White
-        }
-        
-        $yPos = 15
-        $categories = $global:SoftwareDatabase | Where-Object { $_.Tab -eq $TabName } | Select-Object -ExpandProperty Category -Unique
-
-        foreach ($cat in $categories) {
-            # Render Judul Kategori
-            $lblHeader = New-Object System.Windows.Forms.Label
-            $lblHeader.Text = "  $cat  "
-            $lblHeader.AutoSize = $true
-            $lblHeader.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
-            $lblHeader.ForeColor = [System.Drawing.Color]::White
-            $lblHeader.BackColor = $themeBlue
-            $lblHeader.Location = New-Object System.Drawing.Point(15, $yPos)
-            
-            $panel.Controls.Add($lblHeader)
-            
-            $null = $lblHeader.Handle
-            &$SetRounded $lblHeader 6
-            $yPos += 35
-
-            # Render Checkbox Aplikasi
-            $items = $global:SoftwareDatabase | Where-Object { $_.Tab -eq $TabName -and $_.Category -eq $cat }
-            $colIndex = 0
-            $colWidth = 210
-
-            foreach ($item in $items) {
-                $chk = New-Object System.Windows.Forms.CheckBox
-                $chk.Text = $item.Name
-                $chk.AutoSize = $true
-                $chk.Cursor = "Hand"
-                
-                if ($global:IsDarkMode) {
-                    $chk.ForeColor = [System.Drawing.Color]::White
-                } else {
-                    $chk.ForeColor = [System.Drawing.Color]::Black
-                }
-                
-                $chk.Location = New-Object System.Drawing.Point((25 + ($colIndex * $colWidth)), $yPos)
-                $chk.Tag = $item 
-
-                $panel.Controls.Add($chk)
-                
-                $colIndex++ 
-                if ($colIndex -ge 3) { 
-                    $colIndex = 0
-                    $yPos += 25 
-                }
-            }
-            
-            if ($colIndex -ne 0) { 
-                $yPos += 25 
-            }
-            $yPos += 15
-        }
-        return $panel
-    }
-
-    # ---> SETUP TAB 1: System & Features
-    $t1 = New-Object System.Windows.Forms.TabPage
-    $t1.Text = "System & Features"
-    $global:pnlWinList = Build-ScrollableList "Windows"
-    $t1.Controls.Add($global:pnlWinList)
-    
-    # ---> SETUP TAB 2: Third Party Software
-    $t2 = New-Object System.Windows.Forms.TabPage
-    $t2.Text = "Third Party Software"
-    $global:pnlThirdList = Build-ScrollableList "ThirdParty"
-    $t2.Controls.Add($global:pnlThirdList)
-
-    # ---> SETUP TAB 3: Custom Search & Install
-    $t3 = New-Object System.Windows.Forms.TabPage
-    $t3.Text = "Search & Custom Install"
-    
-    $pnlCustom = New-Object System.Windows.Forms.Panel
-    $pnlCustom.Dock = "Fill"
-    
-    if ($global:IsDarkMode) {
-        $pnlCustom.BackColor = [System.Drawing.Color]::FromArgb(25,25,30)
-    } else {
-        $pnlCustom.BackColor = [System.Drawing.Color]::White
-    }
-    
-    $lblInfoCustom = New-Object System.Windows.Forms.Label
-    $lblInfoCustom.Text = "Aplikasi yang kamu cari belum ada di daftar utama? Cari dan install secara manual di sini!`n`nTIPS PENTING: Jika aplikasi tidak ditemukan menggunakan Winget, cobalah ganti Package Manager ke Chocolatey (di bagian atas), dan sebaliknya."
-    $lblInfoCustom.Location = New-Object System.Drawing.Point(20, 20)
-    $lblInfoCustom.Size = New-Object System.Drawing.Size(($tabControl.Width - 60), 65)
-    $lblInfoCustom.Font = New-Object System.Drawing.Font("Segoe UI", 9.5, [System.Drawing.FontStyle]::Regular)
-    
-    if ($global:IsDarkMode) {
-        $lblInfoCustom.ForeColor = [System.Drawing.Color]::LightSkyBlue
-    } else {
-        $lblInfoCustom.ForeColor = [System.Drawing.Color]::DarkBlue
-    }
-    
-    $pnlCustom.Controls.Add($lblInfoCustom)
-
-    $lblInput = New-Object System.Windows.Forms.Label
-    $lblInput.Text = "Masukkan Nama atau ID Aplikasi (Cth: VLC, Google.Chrome, telegram):"
-    $lblInput.Location = New-Object System.Drawing.Point(20, 100)
-    $lblInput.AutoSize = $true
-    $lblInput.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
-    
-    if ($global:IsDarkMode) {
-        $lblInput.ForeColor = [System.Drawing.Color]::White
-    } else {
-        $lblInput.ForeColor = [System.Drawing.Color]::Black
-    }
-    
-    $pnlCustom.Controls.Add($lblInput)
-
-    $global:txtCustomApp = New-Object System.Windows.Forms.TextBox
-    $global:txtCustomApp.Location = New-Object System.Drawing.Point(20, 125)
-    $global:txtCustomApp.Size = New-Object System.Drawing.Size(350, 30)
-    $global:txtCustomApp.Font = New-Object System.Drawing.Font("Segoe UI", 10)
-    $pnlCustom.Controls.Add($global:txtCustomApp)
-
-    # Tombol Cari (Search)
-    $btnSearchCustom = New-Object System.Windows.Forms.Button
-    $btnSearchCustom.Text = "Cari Software"
-    $btnSearchCustom.Location = New-Object System.Drawing.Point(20, 170)
-    $btnSearchCustom.Size = New-Object System.Drawing.Size(150, 35)
-    $btnSearchCustom.BackColor = $themeBlue
-    $btnSearchCustom.ForeColor = [System.Drawing.Color]::White
-    $btnSearchCustom.FlatStyle = "Flat"
-    $btnSearchCustom.FlatAppearance.BorderSize = 0
-    $btnSearchCustom.Cursor = "Hand"
-    $btnSearchCustom.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
-    
-    $btnSearchCustom.Add_Click({
-        $query = $global:txtCustomApp.Text.Trim()
-        if ([string]::IsNullOrWhiteSpace($query)) {
-            Write-Log "Process Aborted: Custom search query is empty."
-            [System.Windows.Forms.MessageBox]::Show("Masukkan nama software terlebih dahulu di kotak teks!", "Peringatan", "OK", "Warning")
-            return
-        }
-        
-        if ($global:rbChoco.Checked) {
-            $pm = "Chocolatey"
-        } else {
-            $pm = "Winget"
-        }
-        
-        Write-Log "Action Triggered: User searched for custom app '$query' via $pm."
-
-        if ($global:rbChoco.Checked) {
-            Start-Process cmd -ArgumentList "/k title Mencari $query di Chocolatey && Memeriksa di Chocolatey... && . && choco search `"$query`""
-        } else {
-            Start-Process cmd -ArgumentList "/k title Mencari $query di Winget && Memeriksa di Winget... && . && winget search `"$query`""
-        }
-    })
-    
-    $pnlCustom.Controls.Add($btnSearchCustom)
-    $null = $btnSearchCustom.Handle
-    &$SetRounded $btnSearchCustom 8
-
-    # Tombol Install Manual
-    $btnInstallCustom = New-Object System.Windows.Forms.Button
-    $btnInstallCustom.Text = "Install Software"
-    $btnInstallCustom.Location = New-Object System.Drawing.Point(180, 170)
-    $btnInstallCustom.Size = New-Object System.Drawing.Size(150, 35)
-    $btnInstallCustom.BackColor = [System.Drawing.Color]::MediumSeaGreen
-    $btnInstallCustom.ForeColor = [System.Drawing.Color]::White
-    $btnInstallCustom.FlatStyle = "Flat"
-    $btnInstallCustom.FlatAppearance.BorderSize = 0
-    $btnInstallCustom.Cursor = "Hand"
-    $btnInstallCustom.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
-    
-    $btnInstallCustom.Add_Click({
-        $query = $global:txtCustomApp.Text.Trim()
-        
-        if ([string]::IsNullOrWhiteSpace($query)) {
-            Write-Log "Process Aborted: Custom install query is empty."
-            [System.Windows.Forms.MessageBox]::Show("Masukkan nama atau ID software terlebih dahulu di kotak teks!", "Peringatan", "OK", "Warning")
-            return
-        }
-        
-        if ($global:rbChoco.Checked) {
-            $pkgMngr = "Chocolatey"
-        } else {
-            $pkgMngr = "Winget"
-        }
-        
-        $msg = "Pastikan kamu sudah menemukan ID yang tepat dari tombol pencarian.`nIngin menginstal '$query' menggunakan $pkgMngr?"
-        $confirm = [System.Windows.Forms.MessageBox]::Show($msg, "Konfirmasi Install", "YesNo", "Question")
-        
-        if ($confirm -eq "Yes") {
-            Write-Log "Action Triggered: User initiated custom installation for '$query' via $pkgMngr."
-            
-            if ($global:rbChoco.Checked) {
-                $cmd = "Write-Host 'Menginstal $query via Chocolatey...' -ForegroundColor Cyan; choco install '$query' -y; Write-Host '`nSelesai!' -ForegroundColor Green; Read-Host 'Tekan ENTER untuk menutup...'"
-            } else {
-                $cmd = "Write-Host 'Menginstal $query via Winget...' -ForegroundColor Cyan; winget install --id '$query' -e --accept-package-agreements --accept-source-agreements; Write-Host '`nSelesai!' -ForegroundColor Green; Read-Host 'Tekan ENTER untuk menutup...'"
-            }
-            
-            Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Command `"$cmd`"" -Verb RunAs
-        } else {
-            Write-Log "Process Cancelled: User aborted custom installation for '$query'."
-        }
-    })
-    
-    $pnlCustom.Controls.Add($btnInstallCustom)
-    $null = $btnInstallCustom.Handle
-    &$SetRounded $btnInstallCustom 8
-
-    $t3.Controls.Add($pnlCustom)
-
-    # --- Memasukkan Semua Tab ke TabControl Utama ---
-    $tabControl.TabPages.AddRange(@($t1, $t2, $t3))
-    $contentPanel.Controls.Add($tabControl)
-
     # ---------------------------------------------------------------------
     # FUNGSI PEMBANGUN DAFTAR APLIKASI OTOMATIS (DYNAMIC GRID LIST)
     # ---------------------------------------------------------------------
@@ -2060,25 +1840,30 @@ function Render-SoftwareCenter {
         $pnlCustom.BackColor = [System.Drawing.Color]::White
     }
     
-    # -- Teks Informasi/Edukasi --
+    # -- TEKS INFORMASI & PANDUAN CARA INSTALL MANUAL --
     $lblInfoCustom = New-Object System.Windows.Forms.Label
-    $lblInfoCustom.Text = "Aplikasi yang kamu cari belum ada di daftar utama? Cari dan install secara manual di sini!`n`nTIPS PENTING: Jika aplikasi tidak ditemukan menggunakan Winget, cobalah ganti Package Manager ke Chocolatey (di bagian atas), dan sebaliknya. Beberapa aplikasi hanya tersedia di salah satu repositori."
-    $lblInfoCustom.Location = New-Object System.Drawing.Point(20, 20)
-    $lblInfoCustom.Size = New-Object System.Drawing.Size(($tabControl.Width - 60), 65)
-    $lblInfoCustom.Font = New-Object System.Drawing.Font("Segoe UI", 9.5, [System.Drawing.FontStyle]::Regular)
+    $lblInfoCustom.Text = "Aplikasi yang kamu cari belum ada di daftar utama? Cari dan install secara manual di sini!`n`n" +
+                          "   CARA PENGGUNAAN (INSTALL MANUAL):`n" +
+                          "1. Ketik nama aplikasi di kolom bawah, lalu klik 'Cari Software' untuk mencari ID resminya.`n" +
+                          "2. Setelah jendela pencarian muncul dan aplikasi ketemu, silakan COPY / SALIN bagian 'ID'-nya.`n" +
+                          "3. PASTE / TEMPEL ID tersebut ke dalam kolom bawah ini kembali, lalu klik 'Install Software'.`n`n" +
+                          "TIPS: Jika aplikasi tidak ditemukan di Winget, cobalah ganti Package Manager di atas ke Chocolatey."
+    
+    $lblInfoCustom.Location = New-Object System.Drawing.Point(20, 15)
+    $lblInfoCustom.Size = New-Object System.Drawing.Size(($tabControl.Width - 60), 105) # Ukuran tinggi dinaikkan agar teks muat
+    $lblInfoCustom.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Regular)
     
     if ($global:IsDarkMode) {
         $lblInfoCustom.ForeColor = [System.Drawing.Color]::LightSkyBlue
     } else {
         $lblInfoCustom.ForeColor = [System.Drawing.Color]::DarkBlue
     }
-    
     $pnlCustom.Controls.Add($lblInfoCustom)
 
-    # -- Teks Judul Input --
+    # -- Teks Judul Input (Koordinat Y diturunkan ke 135 agar tidak menumpuk) --
     $lblInput = New-Object System.Windows.Forms.Label
-    $lblInput.Text = "Masukkan Nama atau ID Aplikasi (Cth: VLC, Google.Chrome, telegram):"
-    $lblInput.Location = New-Object System.Drawing.Point(20, 100)
+    $lblInput.Text = "Masukkan Nama atau ID Aplikasi (Cth: VLC, Google.Chrome, Telegram):"
+    $lblInput.Location = New-Object System.Drawing.Point(20, 135)
     $lblInput.AutoSize = $true
     $lblInput.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
     
@@ -2087,22 +1872,21 @@ function Render-SoftwareCenter {
     } else {
         $lblInput.ForeColor = [System.Drawing.Color]::Black
     }
-    
     $pnlCustom.Controls.Add($lblInput)
 
-    # -- Kotak Input Teks (Textbox) --
+    # -- Kotak Input Teks / Textbox (Koordinat Y diturunkan ke 160) --
     $global:txtCustomApp = New-Object System.Windows.Forms.TextBox
-    $global:txtCustomApp.Location = New-Object System.Drawing.Point(20, 125)
+    $global:txtCustomApp.Location = New-Object System.Drawing.Point(20, 160)
     $global:txtCustomApp.Size = New-Object System.Drawing.Size(350, 30)
     $global:txtCustomApp.Font = New-Object System.Drawing.Font("Segoe UI", 10)
     $pnlCustom.Controls.Add($global:txtCustomApp)
 
     # ---------------------------------------------------------------------
-    # TOMBOL AKSI: CARI SOFTWARE (SEARCH)
+    # TOMBOL AKSI: CARI SOFTWARE (Koordinat Y diturunkan ke 205)
     # ---------------------------------------------------------------------
     $btnSearchCustom = New-Object System.Windows.Forms.Button
     $btnSearchCustom.Text = "Cari Software"
-    $btnSearchCustom.Location = New-Object System.Drawing.Point(20, 170)
+    $btnSearchCustom.Location = New-Object System.Drawing.Point(20, 205)
     $btnSearchCustom.Size = New-Object System.Drawing.Size(150, 35)
     $btnSearchCustom.BackColor = $themeBlue
     $btnSearchCustom.ForeColor = [System.Drawing.Color]::White
@@ -2120,35 +1904,27 @@ function Render-SoftwareCenter {
             return
         }
         
-        if ($global:rbChoco.Checked) {
-            $pm = "Chocolatey"
-        } else {
-            $pm = "Winget"
-        }
-        
+        if ($global:rbChoco.Checked) { $pm = "Chocolatey" } else { $pm = "Winget" }
         Write-Log "Action Triggered: User searched for custom app '$query' via $pm."
 
-        # Menjalankan CMD di background dan membiarkan jendelanya tetap terbuka (/k)
-        # Sintaks && digunakan khusus untuk CMD (Command Prompt), bukan PowerShell
         if ($global:rbChoco.Checked) {
-            $cmdArgs = "/k title Mencari $query di Chocolatey && Memeriksa di Chocolatey... && choco search `"$query`""
+            $cmdArgs = "/k title Mencari $query di Chocolatey && echo Memeriksa di Chocolatey... && choco search `"$query`""
             Start-Process cmd -ArgumentList $cmdArgs
         } else {
-            $cmdArgs = "/k title Mencari $query di Winget && Memeriksa di Winget... && winget search `"$query`""
+            $cmdArgs = "/k title Mencari $query di Winget && echo Memeriksa di Winget... && winget search `"$query`""
             Start-Process cmd -ArgumentList $cmdArgs
         }
     })
-    
     $pnlCustom.Controls.Add($btnSearchCustom)
     $null = $btnSearchCustom.Handle
     &$SetRounded $btnSearchCustom 8
 
     # ---------------------------------------------------------------------
-    # TOMBOL AKSI: INSTALL MANUAL
+    # TOMBOL AKSI: INSTALL SOFTWARE / MANUAL (Koordinat Y diturunkan ke 205)
     # ---------------------------------------------------------------------
     $btnInstallCustom = New-Object System.Windows.Forms.Button
     $btnInstallCustom.Text = "Install Software"
-    $btnInstallCustom.Location = New-Object System.Drawing.Point(180, 170)
+    $btnInstallCustom.Location = New-Object System.Drawing.Point(180, 205)
     $btnInstallCustom.Size = New-Object System.Drawing.Size(150, 35)
     $btnInstallCustom.BackColor = [System.Drawing.Color]::MediumSeaGreen
     $btnInstallCustom.ForeColor = [System.Drawing.Color]::White
@@ -2166,11 +1942,7 @@ function Render-SoftwareCenter {
             return
         }
         
-        if ($global:rbChoco.Checked) {
-            $pkgMngr = "Chocolatey"
-        } else {
-            $pkgMngr = "Winget"
-        }
+        if ($global:rbChoco.Checked) { $pkgMngr = "Chocolatey" } else { $pkgMngr = "Winget" }
         
         $msg = "Pastikan kamu sudah menemukan ID yang tepat dari tombol pencarian.`nIngin menginstal '$query' menggunakan $pkgMngr?"
         $confirm = [System.Windows.Forms.MessageBox]::Show($msg, "Konfirmasi Install", "YesNo", "Question")
@@ -2178,7 +1950,6 @@ function Render-SoftwareCenter {
         if ($confirm -eq "Yes") {
             Write-Log "Action Triggered: User initiated custom installation for '$query' via $pkgMngr."
             
-            # Merakit perintah PowerShell menggunakan Array agar rapi (menghindari penggunaan titik koma manual)
             if ($global:rbChoco.Checked) {
                 $cmdLines = @(
                     "Write-Host 'Menginstal $query via Chocolatey...' -ForegroundColor Cyan"
@@ -2195,15 +1966,12 @@ function Render-SoftwareCenter {
                 )
             }
             
-            # Menggabungkan array menjadi satu string komando yang bisa dibaca PowerShell (-Command)
             $finalCmd = $cmdLines -join "; "
-            
             Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Command `"$finalCmd`"" -Verb RunAs
         } else {
             Write-Log "Process Cancelled: User aborted custom installation for '$query'."
         }
     })
-    
     $pnlCustom.Controls.Add($btnInstallCustom)
     $null = $btnInstallCustom.Handle
     &$SetRounded $btnInstallCustom 8
@@ -3316,44 +3084,68 @@ function Action-RunMAS {
 function Action-CheckStatus {
     Write-Log "Process Started: Launching Activation Status Checker (Windows & Office)..."
     
-    # Cek status langsung di terminal PowerShell baru tanpa membuat file .bat sementara
+    # Jalur Registry tempat Tweak mematikan Windows Script Host
+    $wshPathHKLM = "HKLM:\SOFTWARE\Microsoft\Windows Script Host\Settings"
+    $wshPathHKCU = "HKCU:\Software\Microsoft\Windows Script Host\Settings"
+    
+    # Perintah PowerShell yang akan dieksekusi di jendela baru
     $psCommand = @"
-Write-Host '=================================================' -ForegroundColor Cyan
-Write-Host '          CEK STATUS AKTIVASI WINDOWS            ' -ForegroundColor Cyan
-Write-Host '=================================================' -ForegroundColor Cyan
-Write-Host ''
-cscript //nologo `"$env:SystemRoot\System32\slmgr.vbs`" /xpr
-cscript //nologo `"$env:SystemRoot\System32\slmgr.vbs`" /dli
-Write-Host ''
-Write-Host '=================================================' -ForegroundColor Magenta
-Write-Host '          CEK STATUS AKTIVASI OFFICE             ' -ForegroundColor Magenta
-Write-Host '=================================================' -ForegroundColor Magenta
-Write-Host ''
+    Write-Host 'Menginisialisasi sistem pengecekan...' -ForegroundColor Gray
 
-`$office64 = Join-Path `$env:ProgramFiles 'Microsoft Office\Office16\ospp.vbs'
-`$office32 = Join-Path `"`${env:ProgramFiles(x86)}`" 'Microsoft Office\Office16\ospp.vbs'
+    # 1. Pastikan WSH Terbuka (Aktifkan WSH secara permanen jika terkunci)
+    if (Test-Path '$wshPathHKLM') {
+        `$valHKLM = Get-ItemProperty -Path '$wshPathHKLM' -Name 'Enabled' -ErrorAction SilentlyContinue
+        if (`$valHKLM -and `$valHKLM.Enabled -eq 0) {
+            Write-Host '[!] Mendeteksi Windows Script Host diblokir oleh Tweak Keamanan.' -ForegroundColor Yellow
+            Write-Host '[*] Membuka blokir WSH secara permanen...' -ForegroundColor Gray
+            Set-ItemProperty -Path '$wshPathHKLM' -Name 'Enabled' -Value 1 -ErrorAction SilentlyContinue
+        }
+    }
+    if (Test-Path '$wshPathHKCU') {
+        `$valHKCU = Get-ItemProperty -Path '$wshPathHKCU' -Name 'Enabled' -ErrorAction SilentlyContinue
+        if (`$valHKCU -and `$valHKCU.Enabled -eq 0) {
+            Set-ItemProperty -Path '$wshPathHKCU' -Name 'Enabled' -Value 1 -ErrorAction SilentlyContinue
+        }
+    }
 
-if (Test-Path `$office64) {
-    Write-Host 'Mendeteksi instalasi Office 64-bit...' -ForegroundColor Gray
-    cscript //nologo `"`$office64`" /dstatus
-} elseif (Test-Path `$office32) {
-    Write-Host 'Mendeteksi instalasi Office 32-bit...' -ForegroundColor Gray
-    cscript //nologo `"`$office32`" /dstatus
-} else {
-    Write-Host '[X] Microsoft Office tidak terinstal atau file lisensi (ospp.vbs) tidak ditemukan di PC ini.' -ForegroundColor Yellow
-}
+    Clear-Host
+    Write-Host '=================================================' -ForegroundColor Cyan
+    Write-Host '          CEK STATUS AKTIVASI WINDOWS            ' -ForegroundColor Cyan
+    Write-Host '=================================================' -ForegroundColor Cyan
+    Write-Host ''
+    cscript //nologo `"$env:SystemRoot\System32\slmgr.vbs`" /xpr
+    cscript //nologo `"$env:SystemRoot\System32\slmgr.vbs`" /dli
+    Write-Host ''
+    Write-Host '=================================================' -ForegroundColor Magenta
+    Write-Host '          CEK STATUS AKTIVASI OFFICE             ' -ForegroundColor Magenta
+    Write-Host '=================================================' -ForegroundColor Magenta
+    Write-Host ''
 
-Write-Host ''
-Write-Host '=================================================' -ForegroundColor Cyan
-Read-Host 'Tekan ENTER untuk menutup jendela ini...'
+    `$office64 = Join-Path `$env:ProgramFiles 'Microsoft Office\Office16\ospp.vbs'
+    `$office32 = Join-Path `"`${env:ProgramFiles(x86)}`" 'Microsoft Office\Office16\ospp.vbs'
+
+    if (Test-Path `$office64) {
+        Write-Host 'Mendeteksi instalasi Office 64-bit...' -ForegroundColor Gray
+        cscript //nologo `"`$office64`" /dstatus
+    } elseif (Test-Path `$office32) {
+        Write-Host 'Mendeteksi instalasi Office 32-bit...' -ForegroundColor Gray
+        cscript //nologo `"`$office32`" /dstatus
+    } else {
+        Write-Host '[X] Microsoft Office tidak terinstal atau file lisensi (ospp.vbs) tidak ditemukan di PC ini.' -ForegroundColor Yellow
+    }
+
+    Write-Host ''
+    Write-Host '=================================================' -ForegroundColor Cyan
+    Read-Host 'Tekan ENTER untuk menutup jendela ini...'
 "@
     
     try {
-        Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Command `"$psCommand`""
+        # Menggunakan -Verb RunAs agar jendela baru meminta hak akses Admin untuk mengubah Registry & membaca slmgr
+        Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Command `"$psCommand`"" -Verb RunAs
         Write-Log "Success: Activation Status Checker terminal successfully launched."
     } catch {
         Write-Log "Failed: Unable to launch Activation Checker terminal. Error Details: $($_.Exception.Message)"
-        [System.Windows.Forms.MessageBox]::Show("Gagal membuka terminal untuk pengecekan status.", "Error", "OK", "Error")
+        [System.Windows.Forms.MessageBox]::Show("Gagal membuka terminal untuk pengecekan status.`nPastikan Anda mengizinkan hak UAC Administrator.", "Error", "OK", "Error")
     }
 }
 
@@ -3883,10 +3675,15 @@ function Render-DownloadOS {
                 }
                 New-Item -ItemType Directory -Path $scrubDir -Force | Out-Null
 
-                # Unduh ZIP utama dari repositori GitHub
+                # TRICK OPTIMASI: Matikan Progress Bar agar download secepat kilat
+                $oldProgressPreference = $ProgressPreference
+                $ProgressPreference = 'SilentlyContinue'
+                
                 $url = "https://github.com/abbodi1406/BatUtil/archive/refs/heads/master.zip"
                 Write-Log "Executing: Downloading BatUtil master repository from GitHub..."
                 Invoke-WebRequest -Uri $url -OutFile $zipPath -UseBasicParsing
+                
+                $ProgressPreference = $oldProgressPreference
                 
                 # --- PROSES EKSTRAKSI SELEKTIF (.NET FRAMEWORK) ---
                 Write-Log "Success: Download complete. Starting selective extraction of OfficeScrubber components..."
@@ -3894,19 +3691,15 @@ function Render-DownloadOS {
                 $zip = [System.IO.Compression.ZipFile]::OpenRead($zipPath)
                 
                 foreach ($entry in $zip.Entries) {
-                    # Filter Regex: Hanya ekstrak file/folder di dalam folder "OfficeScrubber"
                     if ($entry.FullName -match "^BatUtil-master/OfficeScrubber/(.+)") {
                         $relativePath = $matches[1]
                         $targetPath = Join-Path $scrubDir $relativePath
                         
-                        # Jika entry adalah Folder
                         if ($entry.FullName.EndsWith("/")) {
                             if (-not (Test-Path $targetPath)) { 
                                 New-Item -ItemType Directory -Path $targetPath -Force | Out-Null 
                             }
-                        } 
-                        # Jika entry adalah File
-                        else {
+                        } else {
                             $parentDir = Split-Path $targetPath -Parent
                             if (-not (Test-Path $parentDir)) { 
                                 New-Item -ItemType Directory -Path $parentDir -Force | Out-Null 
@@ -3916,10 +3709,7 @@ function Render-DownloadOS {
                     }
                 }
                 
-                # Bebaskan resource ZIP dari memori
                 $zip.Dispose()
-                
-                # Langsung HAPUS file ZIP master-nya
                 Remove-Item -Path $zipPath -Force -ErrorAction SilentlyContinue
                 Write-Log "Success: Extraction complete. Master ZIP deleted."
 
@@ -3929,7 +3719,6 @@ function Render-DownloadOS {
                 # Jalankan skrip OfficeScrubber
                 if (Test-Path $scrubCmd) {
                     Write-Log "Executing: Launching OfficeScrubber.cmd via cmd.exe..."
-                    # Buka terminal CMD dan tunggu pengguna selesai menggunakannya (-Wait)
                     Start-Process -FilePath "cmd.exe" -ArgumentList "/c `"$scrubCmd`"" -Wait
                     
                     # PROSES PEMBERSIHAN OTOMATIS (ZERO-FOOTPRINT)
@@ -3937,20 +3726,34 @@ function Render-DownloadOS {
                     Remove-Item -Path $scrubDir -Recurse -Force -ErrorAction SilentlyContinue
                     Write-Log "Success: All temporary OfficeScrubber files have been cleanly removed."
                 } else {
-                    Write-Log "Failed: OfficeScrubber.cmd could not be found after extraction."
-                    [System.Windows.Forms.MessageBox]::Show("Gagal menemukan file OfficeScrubber.cmd setelah ekstraksi.", "Error", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
+                    # Memicu ke blok catch jika file tiba- khilangan/terhapus mendadak oleh Antivirus setelah ekstraksi
+                    throw "File OfficeScrubber.cmd tidak ditemukan. Kemungkinan besar file ini otomatis dihapus atau dikarantina oleh Windows Defender."
                 }
 
             } catch {
+                # Kembalikan kursor ke normal jika terjadi eror
                 [System.Windows.Forms.Cursor]::Current = [System.Windows.Forms.Cursors]::Default
                 Write-Log "Failed: An error occurred during Office Uninstaller process. Error Details: $($_.Exception.Message)"
-                [System.Windows.Forms.MessageBox]::Show("Terjadi kesalahan teknis saat memuat:`n$($_.Exception.Message)", "Gagal", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
+                
+                # Penyusunan pesan panduan Antivirus yang informatif dan rapi
+                $errorMessage = "Terjadi kesalahan teknis saat memuat/menjalankan Office Scrubber.`n`n" +
+                                "Detail Error: $($_.Exception.Message)`n`n" +
+                                "========================================`n" +
+                                "               SOLUSI MASALAH (DIBLOKIR ANTIVIRUS)`n" +
+                                "========================================`n" +
+                                "1. Buka 'Windows Security'.`n" +
+                                "2. Masuk ke menu 'Virus & threat protection' -> 'Manage settings'.`n" +
+                                "3. Matikan 'Real-time protection' dan 'Tamper Protection' untuk sementara.`n" +
+                                "4. Jika sudah dinonaktifkan, silakan klik ulang tombol 'Uninstall Office' di aplikasi ini.`n`n" +
+                                "Catatan: Skrip ini aman. Windows Defender mendeteksinya sebagai False Positive karena skrip ini memodifikasi file sistem Office saat proses pembersihan."
+                
+                [System.Windows.Forms.MessageBox]::Show($errorMessage, "Unduhan / Eksekusi Diblokir", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Warning)
             }
         } else {
             Write-Log "Process Cancelled: User aborted Office Uninstaller operation."
         }
     }
-    
+
     $pnlMain.Controls.Add($btnUninstall)
 
     # --- RUANG KOSONG DI BAWAH (SPACER) --- 
@@ -3976,95 +3779,114 @@ $global:TweakCategories = @(
     [PSCustomObject]@{ 
         ID = "T1"
         Name = "Privacy Cleanup"
-        Info = "Membersihkan seluruh log jejak aktivitas lokal pada sistem operasi untuk menjaga privasi Anda dari pengguna lain di komputer yang sama.
+        Info = "Melakukan pembersihan mendalam terhadap 44 titik log riwayat aktivitas lokal dan tumpukan file sampah guna membersihkan jejak digital pada perangkat Anda.
 
-Detail Tindakan:
-- Menghapus riwayat pencarian berkas dan perintah pada Windows Explorer, Run, Regedit, WordPad, dan Paint.
-- Membersihkan riwayat koneksi Map Network Drive yang sudah tidak digunakan.
-- Menghapus tumpukan cache berkas sementara (Temporary Files), cache Thumbnail gambar, Java, dan Adobe Flash.
-- Membersihkan berkas log instalasi sistem lama (setupapi.log) untuk membebaskan ruang penyimpanan.
+Detail Tindakan Teknis Skrip:
+- Menghapus nilai 'LastKey' dan riwayat folder favorit pada Windows Registry Editor (Regedit).
+- Membersihkan riwayat berkas terakhir yang dibuka (MRU) pada perintah Windows Run, Explorer (ComDlg32), Adobe MediaBrowser, Microsoft Paint, dan WordPad.
+- Menghapus log riwayat pemetaan drive jaringan (Map Network Drive MRU) dan riwayat pencarian Windows Search (WordWheelQuery).
+- Membersihkan cache item pada folder Recent Items, riwayat pemutar media (Windows Media Player & MPC), serta riwayat peluncuran aplikasi DirectX.
+- Menghapus file dump, jejak (traces), dan cache aplikasi internal dari Steam, Listary, Sun Java, Macromedia Flash, serta Dotnet CLI Telemetry.
+- Membersihkan file telemetri offline, log Application Insights, lisensi sementara, dan log kesalahan (VSFaultInfo/VSTelem) pada Microsoft Visual Studio (versi 2010 s.d 2022).
+- Mengosongkan paksa folder Temporary (Temp) Sistem, Temp Pengguna, cache folder Prefetch, log CBS Windows Update, dan log diagnostik servis SIH / waasmedic.
+- Menghapus file log instalasi sistem lama (setupapi.log, setupact.log, setuperr.log) beserta seluruh direktori log instalasi Windows Panther.
+- Menghentikan paksa layanan DiagTrack untuk menghapus file pelacakan diagnostik berbasis enkripsi (.etl logs) secara permanen.
+- Membersihkan total database User Web Cache, riwayat pemindaian lokal Windows Defender, cache database Thumbnail Explorer, log CLR, dan mengosongkan Recycle Bin.
+- Mengambil alih hak akses penuh (takeown & icacls) pada folder sisa instalasi sistem lama (Windows.old) untuk dihapus secara paksa dari drive.
 
-[INFO KEAMANAN]: Fitur ini hanya membersihkan berkas sampah dan log riwayat aktivitas sistem. Dokumen pribadi Anda (seperti Foto, Video, Musik, atau Berkas Kerja) sama sekali TIDAK AKAN disentuh atau dihapus." 
+[PERINGATAN & RISIKO]: Fitur ini bekerja dengan menghapus file log secara massal. Efek samping langsungnya adalah daftar file terakhir yang baru Anda buka (Jump Lists) di taskbar atau aplikasi akan kosong. Pembersihan file temporary yang sedang dikunci oleh proses background lain berpotensi memicu kegagalan skrip atau error sistem kecil. Eksekusi ini berjalan di bawah prinsip 'Use Your Own Risk'. Anda WAJIB membuat System Restore Point terlebih dahulu melalui menu 'Other Tools' sebelum melanjutkan." 
     }
     [PSCustomObject]@{ 
         ID = "T2"
         Name = "Disable OS Data Collection"
-        Info = "Menghentikan sistem Windows agar tidak mengumpulkan dan mengirimkan data penggunaan perangkat serta aktivitas harian Anda ke server Microsoft secara diam-diam.
+        Info = "Menghentikan sistem Windows agar tidak mengumpulkan dan mengirimkan data penggunaan perangkat, telemetri, serta aktivitas harian Anda ke server Microsoft secara diam-diam. Fitur ini dirancang untuk meningkatkan privasi data secara menyeluruh sekaligus menghemat sumber daya komputer dari proses latar belakang yang tidak diperlukan.
 
 Detail Tindakan:
-- Mematikan fitur Telemetri OS (CEIP / Customer Experience Improvement Program) dan Diagnostic Data.
-- Menonaktifkan Windows Error Reporting (WER) sehingga log sistem tidak dikirim ke luar secara otomatis saat aplikasi crash.
-- Mematikan fungsi pelacakan otomatis dari Microsoft SpyNet dan cloud pertahanan MAPS.
-- Menghentikan perekaman pola pengetikan keyboard dan pengenalan tinta digital (Ink & Typing Recognition).
-- Menonaktifkan fitur perekaman kronologi aktivitas latar belakang (Activity Feed / Timeline).
+- Menonaktifkan program pengumpul data massal seperti Customer Experience Improvement Program (CEIP), Software Quality Metrics (SQM), dan diagnostik perangkat.
+- Melumpuhkan total agen telemetri utama (CompatTelRunner.exe & DeviceCensus.exe) melalui penghentian paksa, penginjeksian debugger dummy (IFEO), pembatasan kebijakan Explorer, serta pengubahan nama file (soft delete).
+- Mematikan layanan pelacakan latar belakang yang agresif seperti Connected User Experiences and Telemetry (DiagTrack) dan Windows Error Reporting (WER).
+- Menonaktifkan total asisten digital Cortana, fitur kontroversial AI Recall (Copilot), serta perekaman suara berbasis Cloud.
+- Memblokir integrasi pencarian web Bing pada Start Menu, saran iklan/tips (Windows Spotlight), serta pelacakan riwayat aktivitas sistem (Activity Feed).
+- Menghentikan sinkronisasi data akun otomatis (Setting Sync), pengumpulan data pengetikan/tulisan tangan (Input Personalization), serta layanan Windows Insider.
 
-[INFO KEAMANAN]: Mematikan pengiriman data latar belakang ini justru akan menghemat kuota internet Anda, meningkatkan privasi total, dan mengurangi beban kerja CPU." 
+[PERINGATAN & RISIKO]: Fitur ini murni mematikan fungsi pengumpulan data (telemetri) internal sistem operasi. Ini TIDAK AKAN mengganggu fungsi inti sistem, tidak merusak jalur Windows Update / Windows Defender, dan TIDAK AKAN menghapus dokumen pribadi Anda. Beberapa efek visual pada menu pencarian baru akan terlihat sepenuhnya setelah komputer atau Windows Explorer di-restart." 
     }
     [PSCustomObject]@{ 
         ID = "T3"
         Name = "Configure Programs"
-        Info = "Menonaktifkan modul telemetri, iklan, dan pelacakan internal tersembunyi yang tertanam di dalam aplikasi bawaan Windows maupun aplikasi pihak ketiga.
+        Info = "Memodifikasi konfigurasi internal pada aplikasi bawaan Windows dan software pihak ketiga guna memutus jalur pengiriman telemetri, diagnostik log, dan iklan tersembunyi.
 
-Detail Tindakan:
-- Mematikan pelacakan aktivitas pencarian pada peramban Microsoft Edge dan asisten virtual Cortana.
-- Menonaktifkan fitur pengiriman sampel berkas otomatis dari Windows Defender ke server eksternal.
-- Mematikan fitur pelacakan dan sinkronisasi konstan pada komponen gaming bawaan (Xbox Live & Xbox Game Bar).
-- Memblokir pengumpulan log data otomatis pada program produktivitas kerja (Microsoft Office, Visual Studio).
-- Mematikan fungsi pelacakan iklan (Ad-tracking) on aplikasi utilitas pihak ketiga seperti CCleaner.
+Detail Tindakan Teknis Skrip:
+- Mematikan agen Customer Experience Improvement Program (CEIP), IntelliCode Remote Analysis, dan collector background service pada Microsoft Visual Studio.
+- Menonaktifkan fitur pelacakan, pelaporan metrik (crash reporter), dan eksperimen rahasia pada Visual Studio Code (modifikasi file settings.json).
+- Mematikan agen pelaporan telemetri internal (Telemetry Agent LogOn/Fallback) dan pengiriman data error pada Microsoft Office.
+- Memutus koneksi telemetri, iklan, sinkronisasi cloud paksa (Hubs/Copilot Context), dan modul Edge Update otomatis pada Microsoft Edge dan Edge Legacy.
+- Mengunci Chrome Software Reporter Tool dan menonaktifkan agen pengumpul data (Telemetry & Default Browser Agent) milik Mozilla Firefox.
+- Mematikan sinkronisasi latar belakang Dropbox, pencarian web otomatis pada Windows Media Player, dan menutup izin pelaporan perangkat pihak ketiga (Razer & Logitech).
+- Memblokir pengiriman analitik paksa and pop-up iklan komersial (Trial Offer/IPM) di utilitas sistem seperti CCleaner.
 
-[INFO KEAMANAN]: Semua aplikasi di atas akan tetap berfungsi dengan normal dan stabil. Skrip ini hanya menutup jalur 'mata-mata' dan pengiriman data analitik di dalam aplikasi tersebut." 
+[PERINGATAN & RISIKO]: Modifikasi ini akan mengubah konfigurasi bawaan aplikasi secara drastis. Akibat pemutusan telemetri dan agen updater, fitur seperti auto-update pada Microsoft Edge atau pelaporan bug otomatis pada VS Code dan Office akan lumpuh. Perubahan ini murni bertujuan mengamankan privasi, namun segala bentuk ketidakstabilan aplikasi pihak ketiga berada di bawah tanggung jawab Anda ('Use Your Own Risk'). Direkomendasikan untuk membuat System Restore Point melalui menu 'Other Tools' terlebih dahulu." 
     }
     [PSCustomObject]@{ 
         ID = "T4"
         Name = "Security Improvements"
-        Info = "Memperketat keamanan sistem Windows dengan menutup celah-celah kritis yang sering dieksploitasi oleh malware, ransomware, maupun peretas jarak jauh.
+        Info = "Memperkuat postur keamanan sistem Windows dengan menutup celah eksploitasi usang, mengunci layanan rentan, dan mengaktifkan standar enkripsi jaringan modern.
 
-Detail Tindakan:
-- Mengaktifkan protokol enkripsi jaringan modern terbaru (TLS 1.3 dan DTLS 1.2) serta memaksa aplikasi berbasis .NET menggunakannya.
-- Mematikan fitur Cloud Clipboard History untuk mencegah kebocoran teks sensitif (seperti password atau nomor rekening yang tidak sengaja tersalin).
-- Mengaktifkan perlindungan memori tingkat lanjut (DEP & Exception Chain Validation/SEHOP) guna menangkal injeksi kode berbahaya ke RAM.
-- Mencegah serangan Downgrade dengan mencabut fitur usang PowerShell 2.0 yang kerap dimanfaatkan hacker untuk menembus antivirus.
-- Mematikan fitur rentan Windows Connect Now (WCN) yang memiliki celah eksploitasi tinggi pada jaringan nirkabel.
+Detail Tindakan Teknis Skrip:
+- Memaksa pengaktifan protokol enkripsi jaringan modern (TLS 1.3 & DTLS 1.2) di tingkat OS dan mengikat aplikasi berbasis .NET Framework untuk patuh menggunakannya.
+- Memutus sinkronisasi otomatis Cloud Clipboard (Riwayat Papan Klip) untuk mencegah teks sensitif (seperti password atau PIN) terunggah tanpa sadar ke server Microsoft.
+- Mengaktifkan kebijakan perlindungan memori tingkat lanjut (Data Execution Prevention / DEP & Exception Chain Validation / SEHOP) guna menggagalkan upaya injeksi malware ke RAM.
+- Mencabut paksa subsistem warisan PowerShell 2.0 (melalui Windows Optional Features) yang kerap dieksploitasi oleh ransomware dan peretas untuk teknik 'downgrade attack'.
+- Mematikan antarmuka UI dan layanan registrasi Windows Connect Now (WCN) yang diketahui memiliki riwayat kerentanan tinggi pada jaringan nirkabel.
 
-[INFO KEAMANAN]: Tweak ini murni berfokus pada penguatan dinding pertahanan OS. Tidak ada fitur harian yang terganggu, dan koneksi internet Anda akan tetap berjalan normal dengan perlindungan yang jauh lebih kuat." 
+[PERINGATAN & RISIKO]: Penguatan dinding keamanan ini memiliki efek samping kompatibilitas. Menonaktifkan PowerShell 2.0 akan membuat skrip-skrip sangat usang (buatan dekade lalu) gagal berjalan. Mematikan Cloud Clipboard juga membuat Anda tidak bisa melakukan sinkronisasi salin-tempel antar perangkat Windows. Sistem proteksi memori mungkin akan memerlukan Restart komputer untuk aktif sepenuhnya. Modifikasi tingkat sistem ini bersifat 'Use Your Own Risk'. Anda WAJIB membuat System Restore Point di menu 'Other Tools' sebagai jaring pengaman sebelum mengeksekusi kategori ini." 
     }
     [PSCustomObject]@{ 
         ID = "T5"
         Name = "Block Tracking Hosts"
-        Info = "Membangun sistem pemblokiran jaringan dua lapis yang tegas untuk memastikan komputer Anda tidak dapat terhubung ke server pelacak, iklan, maupun telemetri.
+        Info = "Membangun sistem pemblokiran jaringan statis secara langsung untuk memutus rute komunikasi komputer ke server telemetri, server iklan, dan host pelacak eksternal.
 
-Detail Tindakan:
-- Menyuntikkan daftar blokir (Blocklist) berisi ratusan domain pelacak (seperti telemetri Windows, Dropbox, Spotify, MSN Ads) langsung ke file Hosts lokal (dialihkan ke IP kosong 0.0.0.0).
-- Membuat aturan otomatis (Rule) pada Windows Firewall untuk memblokir rentang IP/Subnet server telemetri Microsoft yang dikenal agresif.
+Detail Tindakan Teknis Skrip:
+- Memodifikasi file 'hosts' bawaan Windows pada direktori tingkat-kernel (System32\drivers\etc\hosts).
+- Mendaftarkan puluhan URL pelacak dan mengalihkannya (sinkholing) ke alamat IP buntu lokal (0.0.0.0 untuk IPv4 dan ::1 untuk IPv6).
+- Memblokir server pelaporan Telemetri Windows dan Windows Error Reporting (watson.telemetry.microsoft.com, oca.telemetry, azureedge.net).
+- Memblokir server pengiriman analitik pihak ketiga, seperti log background Dropbox (telemetry.dropbox.com) dan laporan Live Tile Spotify.
+- Mematikan koneksi ke jaringan periklanan Windows Spotlight, Widget News, dan sinkronisasi saran MSN (arc.msn.com, api.msn.com, dll).
+- Memblokir koneksi latar belakang asisten Cortana, sinkronisasi peta dev (virtualearth.net), serta Content Delivery Network (CDN) yang sering menyuntikkan bloatware.
 
-[INFO KEAMANAN]: Metode ini bekerja secara pasif di tingkat sistem jaringan tanpa menggunakan aplikasi pihak ketiga yang berat. Proses ini juga dapat membuat loading internet terasa sedikit lebih cepat karena iklan dan tracker langsung dibendung sebelum terunduh." 
+[PERINGATAN & RISIKO]: Modifikasi file hosts sering kali diawasi secara ketat oleh sebagian besar perangkat lunak Anti-Virus (termasuk Windows Defender). Jika eksekusi gagal, Anda mungkin harus memberikan pengecualian (whitelist) pada file hosts terlebih dahulu. Beberapa aplikasi pihak ketiga terkadang gagal memuat konten web tertentu akibat pemblokiran domain MSN/Bing. Jika ada aplikasi spesifik yang mendadak tidak dapat terhubung ke internet pasca-eksekusi, fitur 'Revert to Default' harus digunakan. Gunakan fungsi ini dengan tanggung jawab ('Use Your Own Risk') dan siapkan Restore Point via menu 'Other Tools'." 
+    }
+    [PSCustomObject]@{ 
+        ID = "T6"
+        Name = "UI For Privacy"
+        Info = "Mengubah konfigurasi antarmuka (UI) Windows untuk menyembunyikan jejak aktivitas harian, menonaktifkan elemen visual yang melacak kebiasaan Anda, serta membuang folder kosmetik bawaan OS.
+
+Detail Tindakan Teknis Skrip:
+- Menonaktifkan fitur pelacakan aplikasi yang sering digunakan (MFU Tracking), riwayat aplikasi terbaru (Recent Apps), serta tips iklan online bawaan OS.
+- Mematikan notifikasi aplikasi pada Lock Screen dan menghentikan push notification untuk Live Tiles guna menjaga privasi layar Anda dari orang lain.
+- Membersihkan Windows Explorer dari perekaman riwayat dokumen terbaru (Recent Docs) dan mematikan iklan pemberitahuan sinkronisasi OneDrive (Sync Provider Notifications).
+- Menonaktifkan wizard berbasis web yang mengganggu privasi, seperti wizard 'Internet Open With', Online Prints, dan Publishing Wizard.
+- Menyembunyikan folder kosmetik '3D Objects' yang tidak diperlukan dari tampilan 'This PC' melalui modifikasi subkey CLSID Namespace Registry.
+- Menghapus paksa pintasan otomatis berkas yang baru dibuka (Recent Files) dari menu Quick Access / Home Folder di File Explorer.
+- Mematikan fitur Hibernation (powercfg -h off) untuk menghapus berkas sistem raksasa 'hiberfil.sys', membebaskan ruang SSD, dan mencegah kebocoran data RAM saat PC mati.
+
+[PERINGATAN & RISIKO]: Modifikasi antarmuka ini akan membuat File Explorer tidak lagi mengingat berkas atau aplikasi apa saja yang terakhir Anda buka (menu Recent Files menjadi kosong). Menonaktifkan Hibernation juga berarti fitur 'Fast Startup' dan mode 'Hibernate' tidak dapat digunakan lagi (PC hanya bisa di-Shutdown murni atau Sleep). Perubahan visual pada File Explorer baru akan terlihat sepenuhnya setelah proses 'explorer.exe' di-restart atau komputer dihidupkan ulang. Seluruh modifikasi ini bersifat 'Use Your Own Risk' - pastikan Anda sudah membuat System Restore Point di menu 'Other Tools' sebagai jaring pengaman." 
     }
     [PSCustomObject]@{ 
         ID = "T7"
-        Name = "UI For Privacy"
-        Info = "Merapikan tampilan antarmuka (UI) Windows sekaligus melindungi privasi visual Anda agar aktivitas kerja tidak mudah diintip atau dilihat oleh orang di sekitar Anda.
-
-Detail Tindakan:
-- Menyembunyikan daftar berkas dan folder yang baru saja dibuka (Recent Files) pada menu Quick Access di File Explorer.
-- Menonaktifkan rekomendasi atau saran aplikasi yang sering dibuka pada Start Menu.
-- Mematikan riwayat pencarian otomatis (Search History) pada kolom pencarian utama Windows Taskbar.
-- Menghilangkan tayangan iklan promosi, tips Windows, dan saran Timeline yang mengganggu di layar kunci (Lock Screen).
-
-[INFO KEAMANAN]: Perubahan ini murni bersifat kosmetik/visual pada sistem. Tidak ada data riwayat yang dihapus secara permanen dari komputer, sistem hanya menyembunyikannya dari layar agar lingkungan kerja Anda terlihat bersih dan privat." 
-    }
-    [PSCustomObject]@{ 
-        ID = "T8"
         Name = "Remove Bloatware"
-        Info = "Mencabut paksa aplikasi bawaan sistem (Bloatware) yang tidak penting, jarang digunakan, memenuhi kapasitas penyimpanan, serta sering berjalan diam-diam di latar belakang.
+        Info = "Mencabut aplikasi pra-instal (Bloatware) pihak ketiga, membongkar paksa komponen bawaan Windows yang tidak penting, dan mematikan layanan latar belakang untuk membebaskan kapasitas RAM.
 
-Detail Tindakan:
-- Mencabut paksa aplikasi pihak ketiga dan game sponsor bawaan pabrik (seperti Candy Crush, Spotify, Duolingo, Shazam).
-- Menghapus bersih aplikasi UWP Microsoft yang memakan ruang (Xbox Apps, 3D Viewer, Solitaire Collection, MSN News, Weather, Sports, Maps).
-- Membongkar OneDrive beserta seluruh layanannya secara tuntas hingga ke akar sistem (sangat efektif mengatasi masalah Disk Usage 100%).
-- Menonaktifkan fitur berat yang tidak semua orang pakai seperti Windows Copilot dan menu Meet Now di Taskbar.
-- Mematikan layanan latar belakang (Background Services) yang tidak penting untuk menghemat konsumsi RAM.
+Detail Tindakan Teknis Skrip:
+- Menghapus lebih dari 40 paket aplikasi UWP pihak ketiga (Candy Crush, Spotify, Duolingo, Shazam, Twitter) menggunakan perintah 'Remove-AppxPackage'.
+- Menghapus komponen UWP Microsoft non-esensial, termasuk seluruh utilitas Xbox App, MSN News/Weather/Sports, 3D Viewer, Solitaire, dan Windows Maps.
+- Memodifikasi registri 'Deprovisioned' (AppxAllUserStore) untuk memblokir Windows agar tidak menginstal ulang aplikasi-aplikasi yang baru saja dihapus saat komputer di-restart.
+- Melakukan injeksi C# (WIN32 API) guna memperoleh token 'SeTakeOwnershipPrivilege', memungkinkan penghapusan paksa System Apps yang sangat tangguh seperti XboxGameCallableUI dan PeopleExperienceHost.
+- Membongkar penuh instalasi Microsoft OneDrive secara tuntas, mencabut kunci Run Registry-nya, menghapus folder sinkronisasinya (jika aman), dan menghapus pintasannya.
+- Menonaktifkan fitur kecerdasan buatan Windows Copilot dan ikon Meet Now dari Windows Taskbar secara permanen.
+- Menghentikan dan menonaktifkan layanan latar belakang (XblGameSave, MapsBroker, MessagingService, UserDataSvc) yang berjalan diam-diam.
 
-[INFO KEAMANAN]: Aplikasi vital inti Windows (seperti Microsoft Store / App Store) TIDAK AKAN DIHAPUS. Dengan begitu, Anda tetap bisa mengunduh aplikasi lain kapan saja, kapasitas penyimpanan menjadi lebih lega, dan RAM komputer akan menjadi jauh lebih hemat." 
+[PERINGATAN & RISIKO]: Ini adalah kategori dengan tingkat modifikasi paling tinggi dan berbahaya. Penghapusan komponen inti Xbox akan membuat Anda tidak bisa memainkan game yang membutuhkan integrasi Xbox Live di Windows Store. Penghapusan OneDrive secara paksa dapat menghilangkan berkas sinkronisasi Cloud Anda jika Anda tidak mencadangkannya (backup) ke hardisk eksternal/lokal terlebih dahulu. Seluruh proses ini berjalan dengan prinsip 'Use Your Own Risk'. Sangat diwajibkan untuk membuat System Restore Point di menu 'Other Tools' sebelum mengeksekusinya." 
     }
 )
 
@@ -4174,7 +3996,7 @@ function Render-WindowsTweaks {
 
     $pnlPresets.Controls.Add((Create-PresetButton -Text "ESSENTIAL" -X 160 -Color ([System.Drawing.Color]::SeaGreen) -TargetCats @("Privacy Cleanup", "Remove Bloatware")))
     $pnlPresets.Controls.Add((Create-PresetButton -Text "OPTIMAL" -X 355 -Color ([System.Drawing.Color]::SteelBlue) -TargetCats @("Privacy Cleanup", "Disable OS Data Collection", "Configure Programs", "UI For Privacy", "Remove Bloatware")))
-    $pnlPresets.Controls.Add((Create-PresetButton -Text "ULTIMATE" -X 550 -Color ([System.Drawing.Color]::Crimson) -TargetCats "ALL"))
+    $pnlPresets.Controls.Add((Create-PresetButton -Text "ULTIMATE" -X 550 -Color ([System.Drawing.Color]::Firebrick) -TargetCats "ALL"))
 
     # ----------------------------------------------------
     # PANEL BAWAH: EXECUTE & RESET
@@ -4630,7 +4452,7 @@ Write-Host "=== Pembersihan Privasi (Privacy Cleanup) Selesai ===" -ForegroundCo
 '@
                 }
                 "Disable OS Data Collection" {
-                $masterScript += @'
+                    $masterScript += @'
 # =====================================================================
 # SCRIPT DISABLE OS DATA COLLECTION (NATIVE POWERSHELL)
 # =====================================================================
@@ -4650,14 +4472,12 @@ function Disable-TweakTask {
     param([string]$TaskPath, [string]$TaskName)
     try {
         $task = Get-ScheduledTask -TaskPath $TaskPath -TaskName $TaskName -ErrorAction SilentlyContinue
-        if ($task) {
-            if ($task.State -ne 'Disabled') {
-                $task | Disable-ScheduledTask -ErrorAction Stop | Out-Null
-                Write-Host "   [Selesai] Menonaktifkan Task: $TaskName" -ForegroundColor Green
-            }
+        if ($task -and $task.State -ne 'Disabled') {
+            $task | Disable-ScheduledTask -ErrorAction Stop | Out-Null
+            Write-Host "   [Selesai] Menonaktifkan Task: $TaskName" -ForegroundColor Green
         }
     } catch {
-        Write-Warning "Gagal menonaktifkan task '$TaskName': $_"
+        # Error disembunyikan agar log tidak kotor karena beberapa task memang tidak ada di edisi Windows tertentu
     }
 }
 
@@ -4714,73 +4534,51 @@ Disable-TweakTask -TaskPath "\Microsoft\Windows\Application Experience\" -TaskNa
 
 # 7. Disable telemetry collector and sender process (CompatTelRunner.exe)
 Write-Host "-> 7. Menonaktifkan CompatTelRunner.exe (Pengumpul Telemetri)" -ForegroundColor Cyan
-$processName = "CompatTelRunner"
+$procCompat = "CompatTelRunner"
 
 # 7.a Kill process if running
-$runningProc = Get-Process -Name $processName -ErrorAction SilentlyContinue
-if ($runningProc) {
+if (Get-Process -Name $procCompat -ErrorAction SilentlyContinue) {
     Write-Host "   CompatTelRunner sedang berjalan. Menghentikan proses..." -ForegroundColor Yellow
-    Stop-Process -Name $processName -Force -ErrorAction SilentlyContinue
+    Stop-Process -Name $procCompat -Force -ErrorAction SilentlyContinue
 }
 
 # 7.b Configure termination immediately upon its startup (IFEO Debugger injection)
 Write-Host "   Menginjeksikan Debugger Dummy via IFEO..." -ForegroundColor Yellow
-$ifeoPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\CompatTelRunner.exe"
-Set-TweakRegistry -Path $ifeoPath -Name "Debugger" -Value "$env:SYSTEMROOT\System32\taskkill.exe" -Type "String"
+Set-TweakRegistry -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\CompatTelRunner.exe" -Name "Debugger" -Value "$env:SYSTEMROOT\System32\taskkill.exe" -Type "String"
 
 # 7.c Add a rule to prevent running via File Explorer (DisallowRun)
 Write-Host "   Memblokir eksekusi via Kebijakan Explorer..." -ForegroundColor Yellow
 $disallowPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer"
 $disallowRunPath = "$disallowPath\DisallowRun"
 
-# Enable DisallowRun policy
 Set-TweakRegistry -Path $disallowPath -Name "DisallowRun" -Value 1 -Type "DWord"
 
-# Add CompatTelRunner to the blocked list
 try {
-    if (-not (Test-Path $disallowRunPath)) {
-        New-Item -Path $disallowRunPath -Force -ErrorAction SilentlyContinue | Out-Null
-    }
-    # Check if already exists to prevent duplicate entries
+    if (-not (Test-Path $disallowRunPath)) { New-Item -Path $disallowRunPath -Force -ErrorAction SilentlyContinue | Out-Null }
     $existingEntries = Get-ItemProperty -Path $disallowRunPath -ErrorAction SilentlyContinue
     $alreadyBlocked = $false
-    
     if ($existingEntries) {
-        foreach ($prop in $existingEntries.psobject.properties) {
-            if ($prop.Value -eq "CompatTelRunner.exe") {
-                $alreadyBlocked = $true
-                break
-            }
-        }
+        foreach ($prop in $existingEntries.psobject.properties) { if ($prop.Value -eq "CompatTelRunner.exe") { $alreadyBlocked = $true; break } }
     }
-    
     if (-not $alreadyBlocked) {
         $nextIndex = 1
-        while ($existingEntries.psobject.properties.Name -contains [string]$nextIndex) {
-            $nextIndex++
-        }
+        while ($existingEntries.psobject.properties.Name -contains [string]$nextIndex) { $nextIndex++ }
         Set-ItemProperty -Path $disallowRunPath -Name [string]$nextIndex -Value "CompatTelRunner.exe" -Type "String" -Force -ErrorAction SilentlyContinue
     }
-} catch {
-    Write-Warning "Gagal mengatur DisallowRun untuk CompatTelRunner: $_"
-}
+} catch {}
 
 # 7.d Soft delete file (Rename to .OLD)
 Write-Host "   Menghapus secara halus (soft delete) CompatTelRunner.exe..." -ForegroundColor Yellow
 $compatPath = "$env:SYSTEMROOT\System32\CompatTelRunner.exe"
 if (Test-Path $compatPath) {
     try {
-        # Ambil alih paksa dari TrustedInstaller menggunakan native tools (Lebih aman dari inject C# on the fly)
         & takeown /f $compatPath /a *>&1 | Out-Null
         & icacls $compatPath /grant "*S-1-5-32-544:F" /c /q *>&1 | Out-Null
-        
         Move-Item -Path $compatPath -Destination "$compatPath.OLD" -Force -ErrorAction Stop
         Write-Host "   Berhasil mengubah nama menjadi CompatTelRunner.exe.OLD" -ForegroundColor Green
     } catch {
-        Write-Warning "   Gagal mengubah nama $compatPath. File mungkin sedang dikunci oleh sistem."
+        Write-Warning "   Gagal mengubah nama $compatPath. File mungkin sedang dikunci sistem."
     }
-} else {
-    Write-Host "   CompatTelRunner.exe tidak ditemukan atau sudah diubah namanya." -ForegroundColor DarkGray
 }
 
 # 8. Disable Application Experience & Program Compatibility Assistant (PCA) Tasks
@@ -4803,26 +4601,16 @@ Set-TweakRegistry -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\AppCompat" -N
 
 # 10. Disable Telemetry and Diagnostics Services
 Write-Host "-> 10. Menonaktifkan Layanan Diagnostik & Telemetri" -ForegroundColor Cyan
-$servicesToDisable = @(
-    "PcaSvc",                                  # Program Compatibility Assistant Service
-    "DiagTrack",                               # Connected User Experiences and Telemetry
-    "dmwappushservice",                        # WAP Push Message Routing Service
-    "diagnosticshub.standardcollector.service",# Diagnostics Hub Standard Collector
-    "diagsvc"                                  # Diagnostic Execution Service
-)
+$servicesToDisable = @("PcaSvc", "DiagTrack", "dmwappushservice", "diagnosticshub.standardcollector.service", "diagsvc")
 foreach ($svcName in $servicesToDisable) {
     try {
         $svc = Get-Service -Name $svcName -ErrorAction SilentlyContinue
         if ($svc) {
-            if ($svc.Status -eq 'Running') {
-                Stop-Service -Name $svcName -Force -ErrorAction SilentlyContinue
-            }
+            if ($svc.Status -eq 'Running') { Stop-Service -Name $svcName -Force -ErrorAction SilentlyContinue }
             Set-Service -Name $svcName -StartupType Disabled -ErrorAction SilentlyContinue
             Write-Host "   Menonaktifkan Layanan: $svcName" -ForegroundColor Green
         }
-    } catch {
-        Write-Warning "   Gagal menonaktifkan layanan: $svcName"
-    }
+    } catch {}
 }
 
 # 11. Disable Device Information Tasks
@@ -4832,55 +4620,33 @@ Disable-TweakTask -TaskPath "\Microsoft\Windows\Device Information\" -TaskName "
 
 # 12. Disable Device Census Data Collection (DeviceCensus.exe)
 Write-Host "-> 12. Menonaktifkan DeviceCensus.exe (Pengumpul Data)" -ForegroundColor Cyan
-$processName = "DeviceCensus"
+$procCensus = "DeviceCensus"
 
 # 12.a Kill process if running
-$runningProc = Get-Process -Name $processName -ErrorAction SilentlyContinue
-if ($runningProc) {
+if (Get-Process -Name $procCensus -ErrorAction SilentlyContinue) {
     Write-Host "   DeviceCensus sedang berjalan. Menghentikan proses..." -ForegroundColor Yellow
-    Stop-Process -Name $processName -Force -ErrorAction SilentlyContinue
+    Stop-Process -Name $procCensus -Force -ErrorAction SilentlyContinue
 }
 
 # 12.b Configure termination immediately upon its startup (IFEO Debugger injection)
 Write-Host "   Menginjeksikan Debugger Dummy via IFEO untuk DeviceCensus..." -ForegroundColor Yellow
-$ifeoPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\DeviceCensus.exe"
-Set-TweakRegistry -Path $ifeoPath -Name "Debugger" -Value "$env:SYSTEMROOT\System32\taskkill.exe" -Type "String"
+Set-TweakRegistry -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\DeviceCensus.exe" -Name "Debugger" -Value "$env:SYSTEMROOT\System32\taskkill.exe" -Type "String"
 
 # 12.c Add a rule to prevent running via File Explorer (DisallowRun)
 Write-Host "   Memblokir eksekusi via Kebijakan Explorer untuk DeviceCensus..." -ForegroundColor Yellow
-$disallowPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer"
-$disallowRunPath = "$disallowPath\DisallowRun"
-
 try {
-    # Ensure DisallowRun is active
-    Set-TweakRegistry -Path $disallowPath -Name "DisallowRun" -Value 1 -Type "DWord"
-
-    if (-not (Test-Path $disallowRunPath)) {
-        New-Item -Path $disallowRunPath -Force -ErrorAction SilentlyContinue | Out-Null
-    }
-    
+    if (-not (Test-Path $disallowRunPath)) { New-Item -Path $disallowRunPath -Force -ErrorAction SilentlyContinue | Out-Null }
     $existingEntries = Get-ItemProperty -Path $disallowRunPath -ErrorAction SilentlyContinue
     $alreadyBlocked = $false
-    
     if ($existingEntries) {
-        foreach ($prop in $existingEntries.psobject.properties) {
-            if ($prop.Value -eq "DeviceCensus.exe") {
-                $alreadyBlocked = $true
-                break
-            }
-        }
+        foreach ($prop in $existingEntries.psobject.properties) { if ($prop.Value -eq "DeviceCensus.exe") { $alreadyBlocked = $true; break } }
     }
-    
     if (-not $alreadyBlocked) {
         $nextIndex = 1
-        while ($existingEntries.psobject.properties.Name -contains [string]$nextIndex) {
-            $nextIndex++
-        }
+        while ($existingEntries.psobject.properties.Name -contains [string]$nextIndex) { $nextIndex++ }
         Set-ItemProperty -Path $disallowRunPath -Name [string]$nextIndex -Value "DeviceCensus.exe" -Type "String" -Force -ErrorAction SilentlyContinue
     }
-} catch {
-    Write-Warning "Gagal mengatur DisallowRun untuk DeviceCensus: $_"
-}
+} catch {}
 
 # 13. Disable Desktop Analytics & Diagnostic Data Processing
 Write-Host "-> 13. Menonaktifkan Pemrosesan Desktop Analytics & Data Diagnostik" -ForegroundColor Cyan
@@ -4911,19 +4677,14 @@ Disable-TweakTask -TaskPath "\Microsoft\Windows\ErrorDetails\" -TaskName "Enable
 Disable-TweakTask -TaskPath "\Microsoft\Windows\Windows Error Reporting\" -TaskName "QueueReporting"
 
 # Matikan Service WER
-$werServices = @("wersvc", "wercplsupport")
-foreach ($svcName in $werServices) {
+foreach ($svcName in @("wersvc", "wercplsupport")) {
     try {
         $svc = Get-Service -Name $svcName -ErrorAction SilentlyContinue
         if ($svc) {
-            if ($svc.Status -eq 'Running') {
-                Stop-Service -Name $svcName -Force -ErrorAction SilentlyContinue
-            }
+            if ($svc.Status -eq 'Running') { Stop-Service -Name $svcName -Force -ErrorAction SilentlyContinue }
             Set-Service -Name $svcName -StartupType Disabled -ErrorAction SilentlyContinue
         }
-    } catch {
-        Write-Warning "Gagal menonaktifkan layanan WER: $svcName"
-    }
+    } catch {}
 }
 
 # 16. Completely Disable Cortana
@@ -4948,9 +4709,6 @@ Set-TweakRegistry -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explore
 Set-TweakRegistry -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Search" -Name "CortanaInAmbientMode" -Value 0
 Set-TweakRegistry -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search" -Name "AllowIndexingEncryptedStoresOrItems" -Value 0
 
-# Flag to remind restarting Explorer at the end of the script
-$global:RequireExplorerRestart = $true
-
 # 17. Disable Web Search (Bing) & Cloud Content in Windows Search
 Write-Host "-> 17. Menonaktifkan Pencarian Web (Bing) & Saran Pencarian" -ForegroundColor Cyan
 Set-TweakRegistry -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search" -Name "AlwaysUseAutoLangDetection" -Value 0
@@ -4971,13 +4729,6 @@ Set-TweakRegistry -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\SearchS
 Set-TweakRegistry -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search" -Name "ConnectedSearchPrivacy" -Value 3
 Set-TweakRegistry -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\SearchSettings" -Name "IsMSACloudSearchEnabled" -Value 0
 Set-TweakRegistry -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\SearchSettings" -Name "IsAADCloudSearchEnabled" -Value 0
-
-# Display Explorer Restart Notice (if required by earlier tweaks)
-if ($global:RequireExplorerRestart) {
-    Write-Host ""
-    Write-Host "CATATAN: Beberapa perubahan pencarian & taskbar memerlukan restart Windows Explorer agar efeknya terlihat." -ForegroundColor Cyan
-    Write-Host "Anda dapat merestartnya melalui Task Manager atau dengan merestart komputer Anda." -ForegroundColor Cyan
-}
 
 # 18. Disable Windows Tips, Spotlight, and Consumer Experience (Bloatware)
 Write-Host "-> 18. Menonaktifkan Tips Windows, Iklan, dan Windows Spotlight" -ForegroundColor Cyan
@@ -5013,13 +4764,6 @@ Set-TweakRegistry -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\SettingSync" 
 Set-TweakRegistry -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\SettingSync" -Name "DisableWebBrowserSettingSyncUserOverride" -Value 1
 Set-TweakRegistry -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\SettingSync" -Name "DisableWindowsSettingSync" -Value 2
 Set-TweakRegistry -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\SettingSync" -Name "DisableWindowsSettingSyncUserOverride" -Value 1
-
-# Display Explorer Restart Notice (if required by earlier tweaks)
-if ($global:RequireExplorerRestart) {
-    Write-Host ""
-    Write-Host "CATATAN: Beberapa perubahan pencarian & taskbar memerlukan restart Windows Explorer agar efeknya terlihat." -ForegroundColor Cyan
-    Write-Host "Anda dapat merestartnya melalui Task Manager atau dengan merestart komputer Anda." -ForegroundColor Cyan
-}
 
 # 20. Disable Language Setting Sync
 Write-Host "-> 20. Menonaktifkan Sinkronisasi Pengaturan Bahasa" -ForegroundColor Cyan
@@ -5078,18 +4822,15 @@ Set-TweakRegistry -Path "HKCU:\Control Panel\International\User Profile" -Name "
 Set-TweakRegistry -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Maps" -Name "AllowUntriggeredNetworkTrafficOnSettingsPage" -Value 0
 Set-TweakRegistry -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Maps" -Name "AutoDownloadAndUpdateMapData" -Value 0
 
-# Display Explorer Restart Notice (if required by earlier tweaks)
-if ($global:RequireExplorerRestart) {
-    Write-Host ""
-    Write-Host "CATATAN: Beberapa perubahan pencarian & taskbar memerlukan restart Windows Explorer agar efeknya terlihat." -ForegroundColor Cyan
-    Write-Host "Anda dapat merestartnya melalui Task Manager atau dengan merestart komputer Anda." -ForegroundColor Cyan
-}
-
-Write-Host "=== Penonaktifan Pengumpulan Data OS Selesai ===" -ForegroundColor Magenta
+# ---------------------------------------------------------------------
+# FINALISASI (ONE-TIME RESTART NOTICE)
+# ---------------------------------------------------------------------
+Write-Host "`nCATATAN: Beberapa perubahan privasi (seperti Taskbar, Pencarian Bing, dan Start Menu) memerlukan restart Windows Explorer agar efeknya langsung terlihat." -ForegroundColor Yellow
+Write-Host "=== Disable OS Data Collection Selesai ===" -ForegroundColor Magenta
 '@
-            } # Tutup switch case "Disable OS Data Collection"
+                } # Tutup switch case "Disable OS Data Collection"
                 "Configure Programs" {
-                $masterScript += @'
+                    $masterScript += @'
 # =====================================================================
 # SCRIPT CONFIGURE PROGRAMS (NATIVE POWERSHELL)
 # =====================================================================
@@ -5108,11 +4849,9 @@ if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
 function Set-TweakRegistry {
     param([string]$Path, [string]$Name, $Value, [string]$Type="DWord")
     try {
-        if (-not (Test-Path $Path)) {
-            New-Item -Path $Path -Force -ErrorAction SilentlyContinue | Out-Null
-        }
+        if (-not (Test-Path $Path)) { New-Item -Path $Path -Force -ErrorAction SilentlyContinue | Out-Null }
         Set-ItemProperty -Path $Path -Name $Name -Value $Value -Type $Type -Force -ErrorAction SilentlyContinue
-        Write-Host "Set Registry: $Path\$Name = $Value"
+        Write-Host "   [Selesai] Mengatur Registry: $Path\$Name = $Value" -ForegroundColor Green
     } catch {
         Write-Warning "Gagal mengatur registry '$Path\$Name': $_"
     }
@@ -5124,7 +4863,7 @@ function Remove-TweakRegistry {
     try {
         if (Test-Path $Path) {
             Remove-ItemProperty -Path $Path -Name $Name -Force -ErrorAction SilentlyContinue
-            Write-Host "Menghapus Registry: $Path\$Name"
+            Write-Host "   [Selesai] Menghapus Registry: $Path\$Name" -ForegroundColor Green
         }
     } catch {
         Write-Warning "Gagal menghapus registry '$Path\$Name': $_"
@@ -5136,43 +4875,45 @@ function Set-VSCodeSetting {
     param([string]$Key, $Value)
     $jsonFilePath = "$env:APPDATA\Code\User\settings.json"
     
-    if (-not (Test-Path $jsonFilePath)) {
-        Write-Host "Melewati pengaturan '$Key': VS Code tidak terinstall atau settings.json tidak ditemukan."
-        return
-    }
+    if (-not (Test-Path $jsonFilePath)) { return }
 
     try {
         $content = Get-Content -Path $jsonFilePath -Raw -ErrorAction Stop
         if ([string]::IsNullOrWhiteSpace($content)) { $content = "{}" }
         
         $jsonObj = $content | ConvertFrom-Json
-        
-        # Mengecek apakah nilainya sudah sama
         $existingValue = $jsonObj.$Key
-        if ($existingValue -ne $null -and $existingValue -eq $Value) {
-            Write-Host "Pengaturan VS Code '$Key' sudah di-set ke '$Value'. Dilewati."
-            return
-        }
+        
+        if ($existingValue -ne $null -and $existingValue -eq $Value) { return }
 
-        # Menambahkan atau memperbarui kunci json
         if ($jsonObj -is [PSCustomObject]) {
             $jsonObj | Add-Member -MemberType NoteProperty -Name $Key -Value $Value -Force
         }
         
         $jsonObj | ConvertTo-Json -Depth 10 | Set-Content -Path $jsonFilePath -Encoding UTF8
-        Write-Host "Berhasil menerapkan '$Key' = '$Value' ke VS Code."
-    } catch {
-        Write-Warning "Gagal memodifikasi konfigurasi VS Code: $_"
-    }
+        Write-Host "   [Selesai] Mengatur VS Code '$Key' = '$Value'" -ForegroundColor Green
+    } catch {}
+}
+
+# Fungsi untuk mematikan Scheduled Task
+function Disable-TweakTask {
+    param([string]$TaskPath, [string]$TaskName)
+    try {
+        $task = Get-ScheduledTask -TaskPath $TaskPath -TaskName $TaskName -ErrorAction SilentlyContinue
+        if ($task -and $task.State -ne 'Disabled') {
+            $task | Disable-ScheduledTask -ErrorAction Stop | Out-Null
+            Write-Host "   [Selesai] Menonaktifkan Task: $TaskName" -ForegroundColor Green
+        }
+    } catch {}
 }
 
 # ---------------------------------------------------------------------
 # EKSEKUSI PENGATURAN PROGRAM
 # ---------------------------------------------------------------------
-Write-Host "=== Memulai Konfigurasi Program ==="
+Write-Host "=== Memulai Konfigurasi Program ===" -ForegroundColor Magenta
 
-# 1. Mematikan Visual Studio CEIP (Customer Experience Improvement Program) & Telemetri
-Write-Host "-> Mematikan Telemetri dan CEIP Visual Studio"
+# 1. Mematikan Visual Studio CEIP & Telemetri
+Write-Host "-> 1. Mematikan Telemetri, CEIP, dan Layanan Log Visual Studio" -ForegroundColor Cyan
 Set-TweakRegistry -Path "HKLM:\Software\Policies\Microsoft\VisualStudio\SQM" -Name "OptIn" -Value 0
 Set-TweakRegistry -Path "HKLM:\SOFTWARE\Microsoft\VSCommon\14.0\SQM" -Name "OptIn" -Value 0
 Set-TweakRegistry -Path "HKLM:\SOFTWARE\Wow6432Node\Microsoft\VSCommon\14.0\SQM" -Name "OptIn" -Value 0
@@ -5181,11 +4922,8 @@ Set-TweakRegistry -Path "HKLM:\SOFTWARE\Wow6432Node\Microsoft\VSCommon\15.0\SQM"
 Set-TweakRegistry -Path "HKLM:\SOFTWARE\Microsoft\VSCommon\16.0\SQM" -Name "OptIn" -Value 0
 Set-TweakRegistry -Path "HKLM:\SOFTWARE\Wow6432Node\Microsoft\VSCommon\16.0\SQM" -Name "OptIn" -Value 0
 Set-TweakRegistry -Path "HKLM:\SOFTWARE\Wow6432Node\Microsoft\VSCommon\17.0\SQM" -Name "OptIn" -Value 0
-
 Set-TweakRegistry -Path "HKCU:\Software\Microsoft\VisualStudio\Telemetry" -Name "TurnOffSwitch" -Value 1
 
-# 2. Mematikan fitur Feedback & Layanan Log Visual Studio
-Write-Host "-> Mematikan Feedback dan Logging Visual Studio"
 Set-TweakRegistry -Path "HKLM:\SOFTWARE\Policies\Microsoft\VisualStudio\Feedback" -Name "DisableFeedbackDialog" -Value 1
 Set-TweakRegistry -Path "HKLM:\SOFTWARE\Policies\Microsoft\VisualStudio\Feedback" -Name "DisableEmailInput" -Value 1
 Set-TweakRegistry -Path "HKLM:\SOFTWARE\Policies\Microsoft\VisualStudio\Feedback" -Name "DisableScreenshotCapture" -Value 1
@@ -5195,18 +4933,17 @@ Set-TweakRegistry -Path "HKLM:\SOFTWARE\Policies\Microsoft\VisualStudio\IntelliC
 Set-TweakRegistry -Path "HKCU:\SOFTWARE\Microsoft\VSCommon\16.0\IntelliCode" -Name "DisableRemoteAnalysis" -Value 1
 Set-TweakRegistry -Path "HKCU:\SOFTWARE\Microsoft\VSCommon\17.0\IntelliCode" -Name "DisableRemoteAnalysis" -Value 1
 
-# Matikan service VSStandardCollectorService150
+# Matikan service VSStandardCollector
 try {
     $vsSvc = Get-Service -Name "VSStandardCollectorService150" -ErrorAction SilentlyContinue
     if ($vsSvc) {
         if ($vsSvc.Status -eq 'Running') { Stop-Service -Name "VSStandardCollectorService150" -Force -ErrorAction SilentlyContinue }
         Set-Service -Name "VSStandardCollectorService150" -StartupType Disabled -ErrorAction SilentlyContinue
-        Write-Host "Berhasil mematikan VS Standard Collector Service."
     }
-} catch { Write-Warning "Gagal mematikan VSStandardCollectorService150." }
+} catch {}
 
-# 3. Konfigurasi Keamanan dan Privasi Visual Studio Code
-Write-Host "-> Menerapkan pengaturan privasi untuk Visual Studio Code"
+# 2. Konfigurasi Keamanan dan Privasi Visual Studio Code
+Write-Host "-> 2. Menerapkan pengaturan privasi untuk Visual Studio Code" -ForegroundColor Cyan
 Set-VSCodeSetting -Key "telemetry.enableTelemetry" -Value $false
 Set-VSCodeSetting -Key "telemetry.enableCrashReporter" -Value $false
 Set-VSCodeSetting -Key "workbench.enableExperiments" -Value $false
@@ -5217,10 +4954,9 @@ Set-VSCodeSetting -Key "extensions.showRecommendationsOnlyOnDemand" -Value $true
 Set-VSCodeSetting -Key "git.autofetch" -Value $false
 Set-VSCodeSetting -Key "npm.fetchOnlinePackageInfo" -Value $false
 
-# 4. Mematikan Logging dan Telemetri Microsoft Office
-Write-Host "-> Mematikan Logging dan Telemetri Microsoft Office"
+# 3. Mematikan Logging dan Telemetri Microsoft Office
+Write-Host "-> 3. Mematikan Logging, Telemetri, dan Feedback Microsoft Office" -ForegroundColor Cyan
 $officePaths = @("15.0", "16.0")
-
 foreach ($ver in $officePaths) {
     Set-TweakRegistry -Path "HKCU:\SOFTWARE\Microsoft\Office\$ver\Outlook\Options\Mail" -Name "EnableLogging" -Value 0
     Set-TweakRegistry -Path "HKCU:\SOFTWARE\Microsoft\Office\$ver\Outlook\Options\Calendar" -Name "EnableCalendarLogging" -Value 0
@@ -5230,142 +4966,26 @@ foreach ($ver in $officePaths) {
     Set-TweakRegistry -Path "HKCU:\SOFTWARE\Microsoft\Office\$ver\Common\ClientTelemetry" -Name "DisableTelemetry" -Value 1
     Set-TweakRegistry -Path "HKCU:\SOFTWARE\Microsoft\Office\$ver\Common\ClientTelemetry" -Name "VerboseLogging" -Value 0
     Set-TweakRegistry -Path "HKCU:\Software\Policies\Microsoft\Office\$ver\Common" -Name "QMEnable" -Value 0
+    Set-TweakRegistry -Path "HKCU:\SOFTWARE\Microsoft\Office\$ver\Common\Feedback" -Name "Enabled" -Value 0
 }
 
 Set-TweakRegistry -Path "HKCU:\SOFTWARE\Microsoft\Office\Common\ClientTelemetry" -Name "DisableTelemetry" -Value 1
 Set-TweakRegistry -Path "HKCU:\SOFTWARE\Microsoft\Office\Common\ClientTelemetry" -Name "VerboseLogging" -Value 0
 
-# 5. Mematikan Feedback dan Tasks Telemetri Microsoft Office
-Write-Host "-> Mematikan Feedback dan Tasks Telemetri Microsoft Office"
-$officePaths = @("15.0", "16.0")
-foreach ($ver in $officePaths) {
-    Set-TweakRegistry -Path "HKCU:\SOFTWARE\Microsoft\Office\$ver\Common\Feedback" -Name "Enabled" -Value 0
-}
-
-$officeTasks = @(
-    "OfficeTelemetryAgentFallBack", 
-    "OfficeTelemetryAgentFallBack2016", 
-    "OfficeTelemetryAgentLogOn", 
-    "OfficeTelemetryAgentLogOn2016", 
-    "Office 15 Subscription Heartbeat"
-)
+$officeTasks = @("OfficeTelemetryAgentFallBack", "OfficeTelemetryAgentFallBack2016", "OfficeTelemetryAgentLogOn", "OfficeTelemetryAgentLogOn2016", "Office 15 Subscription Heartbeat")
 foreach ($taskName in $officeTasks) {
     Disable-TweakTask -TaskPath "\Microsoft\Office\" -TaskName $taskName
 }
 
-# 6. Mematikan Telemetri, Metrik, dan Feedback Microsoft Edge
-Write-Host "-> Mematikan Telemetri, Metrik, dan Feedback Microsoft Edge"
+# 4. Mematikan Telemetri, Metrik, dan Auto-Install Microsoft Edge
+Write-Host "-> 4. Mematikan Telemetri, Instalasi Paksa, dan Pembaruan Otomatis Microsoft Edge" -ForegroundColor Cyan
 Set-TweakRegistry -Path "HKLM:\SOFTWARE\Policies\Microsoft\Edge" -Name "DiagnosticData" -Value 0
 Set-TweakRegistry -Path "HKLM:\SOFTWARE\Policies\Microsoft\Edge" -Name "MetricsReportingEnabled" -Value 0
 Set-TweakRegistry -Path "HKLM:\SOFTWARE\Policies\Microsoft\Edge" -Name "SendSiteInfoToImproveServices" -Value 0
 Set-TweakRegistry -Path "HKLM:\SOFTWARE\Policies\Microsoft\Edge" -Name "UserFeedbackAllowed" -Value 0
-
-# 7. Mematikan Auto-Install Microsoft Edge & WebView2
-Write-Host "-> Mencegah instalasi otomatis Edge & WebView2"
 Set-TweakRegistry -Path "HKLM:\SOFTWARE\Microsoft\EdgeUpdate" -Name "DoNotUpdateToEdgeWithChromium" -Value 1
 Set-TweakRegistry -Path "HKLM:\SOFTWARE\Policies\Microsoft\EdgeUpdate" -Name "InstallDefault" -Value 0
 
-$edgeGuids = @(
-    "{56EB18F8-B008-4CBD-B6D2-8C97FE7E9062}",
-    "{2CD8A007-E189-409D-A2C8-9AF4EF3C72AA}",
-    "{65C35B14-6C1D-4122-AC46-7148CC9D6497}",
-    "{0D50BFEC-CD6A-4F9A-964C-C7416E3ACB10}",
-    "{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}" # WebView & WebView2
-)
-foreach ($guid in $edgeGuids) {
-    Set-TweakRegistry -Path "HKLM:\SOFTWARE\Policies\Microsoft\EdgeUpdate" -Name "Install$guid" -Value 0
-}
-
-# 8. Mematikan Services dan Tasks Microsoft Edge Update
-Write-Host "-> Mematikan Services dan Scheduled Tasks Microsoft Edge Update"
-$edgeServices = @("edgeupdate", "edgeupdatem")
-foreach ($svcName in $edgeServices) {
-    try {
-        $svc = Get-Service -Name $svcName -ErrorAction SilentlyContinue
-        if ($svc) {
-            if ($svc.Status -eq 'Running') { Stop-Service -Name $svcName -Force -ErrorAction SilentlyContinue }
-            Set-Service -Name $svcName -StartupType Disabled -ErrorAction SilentlyContinue
-            Write-Host "   Service dimatikan: $svcName"
-        }
-    } catch { Write-Warning "   Gagal mematikan service $svcName." }
-}
-
-# Menghentikan task dengan wildcard (MicrosoftEdgeUpdateTaskMachineCore & UA)
-try {
-    $edgeTasks = Get-ScheduledTask -TaskName "MicrosoftEdgeUpdateTask*" -ErrorAction SilentlyContinue
-    if ($edgeTasks) {
-        $edgeTasks | Disable-ScheduledTask -ErrorAction SilentlyContinue | Out-Null
-        Write-Host "   Berhasil mematikan Scheduled Tasks untuk Edge Update."
-    }
-} catch { Write-Warning "   Gagal mematikan Scheduled Tasks Edge Update." }
-
-# 9. Melumpuhkan Executable Microsoft Edge Update (MicrosoftEdgeUpdate.exe)
-Write-Host "-> Melumpuhkan file eksekusi MicrosoftEdgeUpdate.exe"
-$processName = "MicrosoftEdgeUpdate"
-
-# 9.a Hentikan proses jika sedang berjalan
-$runningProc = Get-Process -Name $processName -ErrorAction SilentlyContinue
-if ($runningProc) {
-    Write-Host "   Menghentikan proses $processName yang sedang berjalan..."
-    Stop-Process -Name $processName -Force -ErrorAction SilentlyContinue
-}
-
-# 9.b Suntikkan Dummy Debugger via IFEO (Mencegah aplikasi terbuka)
-Write-Host "   Menyuntikkan Dummy Debugger (IFEO) untuk Edge Update..."
-$ifeoPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\MicrosoftEdgeUpdate.exe"
-Set-TweakRegistry -Path $ifeoPath -Name "Debugger" -Value "$env:SYSTEMROOT\System32\taskkill.exe" -Type "String"
-
-# 9.c Blokir eksekusi via Explorer Policies (DisallowRun)
-Write-Host "   Memblokir eksekusi Edge Update melalui Explorer Policies..."
-$disallowPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer"
-$disallowRunPath = "$disallowPath\DisallowRun"
-
-try {
-    Set-TweakRegistry -Path $disallowPath -Name "DisallowRun" -Value 1 -Type "DWord"
-    if (-not (Test-Path $disallowRunPath)) { New-Item -Path $disallowRunPath -Force -ErrorAction SilentlyContinue | Out-Null }
-    
-    $existingEntries = Get-ItemProperty -Path $disallowRunPath -ErrorAction SilentlyContinue
-    $alreadyBlocked = $false
-    
-    if ($existingEntries) {
-        foreach ($prop in $existingEntries.psobject.properties) {
-            if ($prop.Value -eq "MicrosoftEdgeUpdate.exe") {
-                $alreadyBlocked = $true
-                break
-            }
-        }
-    }
-    
-    if (-not $alreadyBlocked) {
-        $nextIndex = 1
-        while ($existingEntries.psobject.properties.Name -contains [string]$nextIndex) { $nextIndex++ }
-        Set-ItemProperty -Path $disallowRunPath -Name [string]$nextIndex -Value "MicrosoftEdgeUpdate.exe" -Type "String" -Force -ErrorAction SilentlyContinue
-    }
-} catch { Write-Warning "Gagal mengatur DisallowRun untuk Edge Update: $_" }
-
-# 9.d Ganti nama file eksekusi menjadi .OLD (Soft Delete)
-Write-Host "   Melakukan soft-delete (rename ke .OLD) pada MicrosoftEdgeUpdate.exe..."
-$edgeUpdateGlobs = @(
-    "${env:ProgramFiles(x86)}\Microsoft\EdgeUpdate\MicrosoftEdgeUpdate.exe",
-    "${env:ProgramFiles(x86)}\Microsoft\EdgeUpdate\*\MicrosoftEdgeUpdate.exe"
-)
-
-foreach ($glob in $edgeUpdateGlobs) {
-    # Ambil file sesuai pattern (mendukung folder dengan versi angka)
-    Get-Item -Path $glob -ErrorAction SilentlyContinue | ForEach-Object {
-        if (-not $_.Name.EndsWith('.OLD')) {
-            try {
-                Move-Item -LiteralPath $_.FullName -Destination "$($_.FullName).OLD" -Force -ErrorAction Stop
-                Write-Host "   Berhasil mengubah nama file: $($_.FullName)"
-            } catch {
-                Write-Warning "   Gagal mengubah nama $($_.FullName) (Mungkin sedang digunakan sistem)."
-            }
-        }
-    }
-}
-
-# 10. Konfigurasi Pembaruan Microsoft Edge (Edge Update)
-Write-Host "-> Mematikan Pembaruan Otomatis Microsoft Edge"
 $edgeUpdatePath = "HKLM:\SOFTWARE\Policies\Microsoft\EdgeUpdate"
 Set-TweakRegistry -Path $edgeUpdatePath -Name "UpdateDefault" -Value 0
 Set-TweakRegistry -Path $edgeUpdatePath -Name "AutoUpdateCheckPeriodMinutes" -Value 0
@@ -5373,23 +4993,67 @@ Set-TweakRegistry -Path $edgeUpdatePath -Name "UpdatesSuppressedDurationMin" -Va
 Set-TweakRegistry -Path $edgeUpdatePath -Name "UpdatesSuppressedStartHour" -Value 0
 Set-TweakRegistry -Path $edgeUpdatePath -Name "UpdatesSuppressedStartMin" -Value 0
 
-$edgeUpdateGuids = @(
-    "{56EB18F8-B008-4CBD-B6D2-8C97FE7E9062}",
-    "{2CD8A007-E189-409D-A2C8-9AF4EF3C72AA}",
-    "{65C35B14-6C1D-4122-AC46-7148CC9D6497}",
-    "{0D50BFEC-CD6A-4F9A-964C-C7416E3ACB10}",
-    "{F3C4FE00-EFD5-403B-9569-398A20F1BA4A}",
-    "{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}" # WebView & WebView2
-)
-foreach ($guid in $edgeUpdateGuids) {
+$edgeGuids = @("{56EB18F8-B008-4CBD-B6D2-8C97FE7E9062}", "{2CD8A007-E189-409D-A2C8-9AF4EF3C72AA}", "{65C35B14-6C1D-4122-AC46-7148CC9D6497}", "{0D50BFEC-CD6A-4F9A-964C-C7416E3ACB10}", "{F3C4FE00-EFD5-403B-9569-398A20F1BA4A}", "{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}")
+foreach ($guid in $edgeGuids) {
+    Set-TweakRegistry -Path $edgeUpdatePath -Name "Install$guid" -Value 0
     Set-TweakRegistry -Path $edgeUpdatePath -Name "Update$guid" -Value 0
 }
 
-# 11. Konfigurasi Privasi dan Telemetri Microsoft Edge
-Write-Host "-> Menerapkan Kebijakan Privasi Microsoft Edge (Mematikan Telemetri, Iklan, Bing, Copilot)"
-$edgePolicyPath = "HKLM:\SOFTWARE\Policies\Microsoft\Edge"
+# Matikan Service Edge
+$edgeServices = @("edgeupdate", "edgeupdatem")
+foreach ($svcName in $edgeServices) {
+    try {
+        $svc = Get-Service -Name $svcName -ErrorAction SilentlyContinue
+        if ($svc) {
+            if ($svc.Status -eq 'Running') { Stop-Service -Name $svcName -Force -ErrorAction SilentlyContinue }
+            Set-Service -Name $svcName -StartupType Disabled -ErrorAction SilentlyContinue
+        }
+    } catch {}
+}
 
-# Copilot & Hubs Sidebar
+# Matikan Edge Task (Wildcard)
+try {
+    Get-ScheduledTask -TaskName "MicrosoftEdgeUpdateTask*" -ErrorAction SilentlyContinue | Disable-ScheduledTask -ErrorAction SilentlyContinue | Out-Null
+} catch {}
+
+# 5. Melumpuhkan Executable Microsoft Edge Update (MicrosoftEdgeUpdate.exe)
+Write-Host "-> 5. Melumpuhkan file eksekusi MicrosoftEdgeUpdate.exe" -ForegroundColor Cyan
+if (Get-Process -Name "MicrosoftEdgeUpdate" -ErrorAction SilentlyContinue) {
+    Stop-Process -Name "MicrosoftEdgeUpdate" -Force -ErrorAction SilentlyContinue
+}
+
+# IFEO & DisallowRun
+Set-TweakRegistry -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\MicrosoftEdgeUpdate.exe" -Name "Debugger" -Value "$env:SYSTEMROOT\System32\taskkill.exe" -Type "String"
+$disallowPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer"
+$disallowRunPath = "$disallowPath\DisallowRun"
+try {
+    Set-TweakRegistry -Path $disallowPath -Name "DisallowRun" -Value 1 -Type "DWord"
+    if (-not (Test-Path $disallowRunPath)) { New-Item -Path $disallowRunPath -Force -ErrorAction SilentlyContinue | Out-Null }
+    $existingEntries = Get-ItemProperty -Path $disallowRunPath -ErrorAction SilentlyContinue
+    $alreadyBlocked = $false
+    if ($existingEntries) {
+        foreach ($prop in $existingEntries.psobject.properties) { if ($prop.Value -eq "MicrosoftEdgeUpdate.exe") { $alreadyBlocked = $true; break } }
+    }
+    if (-not $alreadyBlocked) {
+        $nextIndex = 1
+        while ($existingEntries.psobject.properties.Name -contains [string]$nextIndex) { $nextIndex++ }
+        Set-ItemProperty -Path $disallowRunPath -Name [string]$nextIndex -Value "MicrosoftEdgeUpdate.exe" -Type "String" -Force -ErrorAction SilentlyContinue
+    }
+} catch {}
+
+# Soft-delete EdgeUpdate
+$edgeUpdateGlobs = @("${env:ProgramFiles(x86)}\Microsoft\EdgeUpdate\MicrosoftEdgeUpdate.exe", "${env:ProgramFiles(x86)}\Microsoft\EdgeUpdate\*\MicrosoftEdgeUpdate.exe")
+foreach ($glob in $edgeUpdateGlobs) {
+    Get-Item -Path $glob -ErrorAction SilentlyContinue | ForEach-Object {
+        if (-not $_.Name.EndsWith('.OLD')) {
+            try { Move-Item -LiteralPath $_.FullName -Destination "$($_.FullName).OLD" -Force -ErrorAction Stop } catch {}
+        }
+    }
+}
+
+# 6. Konfigurasi Privasi Visual Edge (Iklan, Copilot, Telemetri UX)
+Write-Host "-> 6. Menerapkan Kebijakan Privasi Lanjutan (UI) Microsoft Edge" -ForegroundColor Cyan
+$edgePolicyPath = "HKLM:\SOFTWARE\Policies\Microsoft\Edge"
 Set-TweakRegistry -Path $edgePolicyPath -Name "HubsSidebarEnabled" -Value 0
 Set-TweakRegistry -Path $edgePolicyPath -Name "StandaloneHubsSidebarEnabled" -Value 0
 Set-TweakRegistry -Path $edgePolicyPath -Name "DiscoverPageContextEnabled" -Value 0
@@ -5397,8 +5061,6 @@ Set-TweakRegistry -Path $edgePolicyPath -Name "CopilotPageContext" -Value 0
 Set-TweakRegistry -Path $edgePolicyPath -Name "CopilotCDPPageContext" -Value 0
 Set-TweakRegistry -Path $edgePolicyPath -Name "NewTabPageBingChatEnabled" -Value 0
 Set-TweakRegistry -Path $edgePolicyPath -Name "EdgeDiscoverEnabled" -Value 0
-
-# Ads, Suggestions, and Promotions
 Set-TweakRegistry -Path $edgePolicyPath -Name "SpotlightExperiencesAndRecommendationsEnabled" -Value 0
 Set-TweakRegistry -Path $edgePolicyPath -Name "ShowRecommendationsEnabled" -Value 0
 Set-TweakRegistry -Path $edgePolicyPath -Name "BingAdsSuppression" -Value 0
@@ -5412,13 +5074,9 @@ Set-TweakRegistry -Path $edgePolicyPath -Name "RelatedMatchesCloudServiceEnabled
 Set-TweakRegistry -Path $edgePolicyPath -Name "SignInCtaOnNtpEnabled" -Value 0
 Set-TweakRegistry -Path $edgePolicyPath -Name "SearchSuggestEnabled" -Value 0
 Set-TweakRegistry -Path $edgePolicyPath -Name "EdgeEnhanceImagesEnabled" -Value 0
-
-# New Tab Page (NTP)
 Set-TweakRegistry -Path $edgePolicyPath -Name "NewTabPageHideDefaultTopSites" -Value 0
 Set-TweakRegistry -Path $edgePolicyPath -Name "NewTabPageQuickLinksEnabled" -Value 0
 Set-TweakRegistry -Path $edgePolicyPath -Name "NewTabPageAllowedBackgroundTypes" -Value 1
-
-# Privacy & Tracking
 Set-TweakRegistry -Path $edgePolicyPath -Name "TrackingPrevention" -Value 3
 Set-TweakRegistry -Path $edgePolicyPath -Name "BlockThirdPartyCookies" -Value 1
 Set-TweakRegistry -Path $edgePolicyPath -Name "ConfigureDoNotTrack" -Value 1
@@ -5426,8 +5084,6 @@ Set-TweakRegistry -Path $edgePolicyPath -Name "EdgeFollowEnabled" -Value 0
 Set-TweakRegistry -Path $edgePolicyPath -Name "AlternateErrorPagesEnabled" -Value 0
 Set-TweakRegistry -Path $edgePolicyPath -Name "AutofillCreditCardEnabled" -Value 0
 Set-TweakRegistry -Path $edgePolicyPath -Name "AutofillAddressEnabled" -Value 0
-
-# UI/UX & Miscellenous Features
 Set-TweakRegistry -Path $edgePolicyPath -Name "WebWidgetAllowed" -Value 0
 Set-TweakRegistry -Path $edgePolicyPath -Name "WebWidgetIsEnabledOnStartup" -Value 0
 Set-TweakRegistry -Path $edgePolicyPath -Name "SearchbarAllowed" -Value 0
@@ -5437,24 +5093,19 @@ Set-TweakRegistry -Path $edgePolicyPath -Name "EdgeCollectionsEnabled" -Value 0
 Set-TweakRegistry -Path $edgePolicyPath -Name "AllowGamesMenu" -Value 0
 Set-TweakRegistry -Path $edgePolicyPath -Name "InAppSupportEnabled" -Value 0
 
-# Set flag untuk notifikasi restart aplikasi pada akhir script
-$global:RequireEdgeRestart = $true
-
-# 10. Konfigurasi Internet Explorer (IE) & Edge Legacy
-Write-Host "-> Mematikan Telemetri & Geolocation Internet Explorer dan Edge Legacy"
+# 7. Konfigurasi Internet Explorer (IE) & Edge Legacy
+Write-Host "-> 7. Mematikan Telemetri & Geolocation Internet Explorer / Edge Legacy" -ForegroundColor Cyan
 Set-TweakRegistry -Path "HKLM:\SOFTWARE\Policies\Microsoft\Edge" -Name "ExperimentationAndConfigurationServiceControl" -Value 0
 Set-TweakRegistry -Path "HKLM:\SOFTWARE\Policies\Microsoft\Edge" -Name "StartupBoostEnabled" -Value 0
 Set-TweakRegistry -Path "HKLM:\SOFTWARE\Policies\Microsoft\Edge" -Name "ResolveNavigationErrorsUseWebService" -Value 0
 Set-TweakRegistry -Path "HKLM:\SOFTWARE\Policies\Microsoft\Edge" -Name "FamilySafetySettingsEnabled" -Value 0
 Set-TweakRegistry -Path "HKLM:\SOFTWARE\Policies\Microsoft\Edge" -Name "SiteSafetyServicesEnabled" -Value 0
-
 Set-TweakRegistry -Path "HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge\Main" -Name "PreventLiveTileDataCollection" -Value 1
 Set-TweakRegistry -Path "HKCU:\SOFTWARE\Classes\Local Settings\Software\Microsoft\Windows\CurrentVersion\AppContainer\Storage\microsoft.microsoftedge_8wekyb3d8bbwe\MicrosoftEdge\Main" -Name "PreventLiveTileDataCollection" -Value 1
 Set-TweakRegistry -Path "HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge\SearchScopes" -Name "ShowSearchSuggestionsGlobal" -Value 0
 Set-TweakRegistry -Path "HKCU:\SOFTWARE\Classes\Local Settings\Software\Microsoft\Windows\CurrentVersion\AppContainer\Storage\microsoft.microsoftedge_8wekyb3d8bbwe\MicrosoftEdge\SearchScopes" -Name "ShowSearchSuggestionsGlobal" -Value 0
 Set-TweakRegistry -Path "HKLM:\SOFTWARE\Policies\Microsoft\MicrosoftEdge\BooksLibrary" -Name "EnableExtendedBooksTelemetry" -Value 0
 Set-TweakRegistry -Path "HKCU:\SOFTWARE\Classes\Local Settings\Software\Microsoft\Windows\CurrentVersion\AppContainer\Storage\microsoft.microsoftedge_8wekyb3d8bbwe\MicrosoftEdge\BooksLibrary" -Name "EnableExtendedBooksTelemetry" -Value 0
-
 Set-TweakRegistry -Path "HKCU:\Software\Policies\Microsoft\Internet Explorer\Geolocation" -Name "PolicyDisableGeolocation" -Value 1
 Set-TweakRegistry -Path "HKLM:\SOFTWARE\Policies\Microsoft\Internet Explorer\Safety\PrivacIE" -Name "DisableLogging" -Value 1
 Set-TweakRegistry -Path "HKLM:\SOFTWARE\Policies\Microsoft\Internet Explorer\SQM" -Name "DisableCustomerImprovementProgram" -Value 0
@@ -5462,82 +5113,57 @@ Set-TweakRegistry -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\CurrentVersio
 Set-TweakRegistry -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\CurrentVersion\Internet Settings" -Name "EnableSSL3Fallback" -Value 0
 Set-TweakRegistry -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\CurrentVersion\Internet Settings" -Name "PreventIgnoreCertErrors" -Value 1
 
-# 11. Konfigurasi Google Chrome (Telemetri & Software Reporter Tool)
-Write-Host "-> Menerapkan Kebijakan Privasi Google Chrome"
+# 8. Konfigurasi Google Chrome & Mozilla Firefox
+Write-Host "-> 8. Melumpuhkan Telemetri Google Chrome & Mozilla Firefox" -ForegroundColor Cyan
 Set-TweakRegistry -Path "HKLM:\SOFTWARE\Policies\Google\Chrome" -Name "ChromeCleanupReportingEnabled" -Value 0
 Set-TweakRegistry -Path "HKLM:\SOFTWARE\Policies\Google\Chrome" -Name "ChromeCleanupEnabled" -Value 0
 Set-TweakRegistry -Path "HKLM:\SOFTWARE\Policies\Google\Chrome" -Name "MetricsReportingEnabled" -Value 0
 
-# Melumpuhkan Software Reporter Tool (Chrome)
-Write-Host "   Melumpuhkan Chrome Software Reporter Tool..."
-$chromeSrtProcess = "software_reporter_tool"
-if (Get-Process -Name $chromeSrtProcess -ErrorAction SilentlyContinue) {
-    Stop-Process -Name $chromeSrtProcess -Force -ErrorAction SilentlyContinue
+if (Get-Process -Name "software_reporter_tool" -ErrorAction SilentlyContinue) {
+    Stop-Process -Name "software_reporter_tool" -Force -ErrorAction SilentlyContinue
 }
 Set-TweakRegistry -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\software_reporter_tool.exe" -Name "Debugger" -Value "$env:SYSTEMROOT\System32\taskkill.exe" -Type "String"
 
 try {
-    $disallowPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer"
-    $disallowRunPath = "$disallowPath\DisallowRun"
-    Set-TweakRegistry -Path $disallowPath -Name "DisallowRun" -Value 1 -Type "DWord"
     if (-not (Test-Path $disallowRunPath)) { New-Item -Path $disallowRunPath -Force -ErrorAction SilentlyContinue | Out-Null }
-    
     $existingEntries = Get-ItemProperty -Path $disallowRunPath -ErrorAction SilentlyContinue
     $alreadyBlocked = $false
-    
     if ($existingEntries) {
-        foreach ($prop in $existingEntries.psobject.properties) {
-            if ($prop.Value -eq "software_reporter_tool.exe") {
-                $alreadyBlocked = $true; break
-            }
-        }
+        foreach ($prop in $existingEntries.psobject.properties) { if ($prop.Value -eq "software_reporter_tool.exe") { $alreadyBlocked = $true; break } }
     }
-    
     if (-not $alreadyBlocked) {
         $nextIndex = 1
         while ($existingEntries.psobject.properties.Name -contains [string]$nextIndex) { $nextIndex++ }
         Set-ItemProperty -Path $disallowRunPath -Name [string]$nextIndex -Value "software_reporter_tool.exe" -Type "String" -Force -ErrorAction SilentlyContinue
     }
-} catch { Write-Warning "Gagal mengatur DisallowRun untuk Chrome SRT: $_" }
+} catch {}
 
-
-# 12. Konfigurasi Mozilla Firefox
-Write-Host "-> Menerapkan Kebijakan Privasi Mozilla Firefox"
 Set-TweakRegistry -Path "HKLM:\SOFTWARE\Policies\Mozilla\Firefox" -Name "DisableDefaultBrowserAgent" -Value 1
 Set-TweakRegistry -Path "HKLM:\SOFTWARE\Policies\Mozilla\Firefox" -Name "DisableTelemetry" -Value 1
-
 Disable-TweakTask -TaskPath "\Mozilla\" -TaskName "Firefox Default Browser Agent 308046B0AF4A39CB"
 Disable-TweakTask -TaskPath "\Mozilla\" -TaskName "Firefox Default Browser Agent D2CEEC440E2074BD"
 
-
-# 13. Konfigurasi Dropbox Update Service
-Write-Host "-> Mematikan Telemetri dan Auto-Update Dropbox"
-$dropboxServices = @("dbupdate", "dbupdatem")
-foreach ($svcName in $dropboxServices) {
+# 9. Konfigurasi Dropbox Update Service & Gaming Telemetry (Razer/Logitech)
+Write-Host "-> 9. Mematikan Service Telemetri Dropbox dan Aksesoris Gaming" -ForegroundColor Cyan
+$thirdPartyServices = @("dbupdate", "dbupdatem", "Razer Game Scanner Service", "LogiRegistryService")
+foreach ($svcName in $thirdPartyServices) {
     try {
         $svc = Get-Service -Name $svcName -ErrorAction SilentlyContinue
         if ($svc) {
             if ($svc.Status -eq 'Running') { Stop-Service -Name $svcName -Force -ErrorAction SilentlyContinue }
             Set-Service -Name $svcName -StartupType Disabled -ErrorAction SilentlyContinue
-            Write-Host "   Service dimatikan: $svcName"
         }
-    } catch { Write-Warning "   Gagal mematikan service Dropbox: $svcName." }
+    } catch {}
 }
-
 Disable-TweakTask -TaskPath "\" -TaskName "DropboxUpdateTaskMachineUA"
 Disable-TweakTask -TaskPath "\" -TaskName "DropboxUpdateTaskMachineCore"
 
-
-# 14. Konfigurasi Windows Media Player
-Write-Host "-> Mematikan Telemetri Windows Media Player"
+# 10. Konfigurasi Windows Media Player & Environment Variables
+Write-Host "-> 10. Mematikan Windows Media Player & Log Telemetry .NET/PS" -ForegroundColor Cyan
 Set-TweakRegistry -Path "HKCU:\SOFTWARE\Microsoft\MediaPlayer\Preferences" -Name "UsageTracking" -Value 0
-
-# 15. Mematikan Pencarian Metadata & Telemetri Windows Media Player
-Write-Host "-> Mematikan Pencarian Metadata dan Sharing Service Windows Media Player"
-$wmpPolicyPath = "HKCU:\Software\Policies\Microsoft\WindowsMediaPlayer"
-Set-TweakRegistry -Path $wmpPolicyPath -Name "PreventCDDVDMetadataRetrieval" -Value 1
-Set-TweakRegistry -Path $wmpPolicyPath -Name "PreventMusicFileMetadataRetrieval" -Value 1
-Set-TweakRegistry -Path $wmpPolicyPath -Name "PreventRadioPresetsRetrieval" -Value 1
+Set-TweakRegistry -Path "HKCU:\Software\Policies\Microsoft\WindowsMediaPlayer" -Name "PreventCDDVDMetadataRetrieval" -Value 1
+Set-TweakRegistry -Path "HKCU:\Software\Policies\Microsoft\WindowsMediaPlayer" -Name "PreventMusicFileMetadataRetrieval" -Value 1
+Set-TweakRegistry -Path "HKCU:\Software\Policies\Microsoft\WindowsMediaPlayer" -Name "PreventRadioPresetsRetrieval" -Value 1
 Set-TweakRegistry -Path "HKLM:\SOFTWARE\Policies\Microsoft\WMDRM" -Name "DisableOnline" -Value 1
 
 try {
@@ -5546,32 +5172,13 @@ try {
         if ($wmpSvc.Status -eq 'Running') { Stop-Service -Name "WMPNetworkSvc" -Force -ErrorAction SilentlyContinue }
         Set-Service -Name "WMPNetworkSvc" -StartupType Disabled -ErrorAction SilentlyContinue
     }
-} catch { Write-Warning "Gagal mematikan Windows Media Player Network Sharing Service." }
+} catch {}
 
-
-# 16. Mematikan Telemetri .NET Core CLI dan PowerShell (Environment Variables)
-Write-Host "-> Mematikan Telemetri .NET Core CLI dan PowerShell"
 [System.Environment]::SetEnvironmentVariable('DOTNET_CLI_TELEMETRY_OPTOUT', '1', [System.EnvironmentVariableTarget]::Machine)
 [System.Environment]::SetEnvironmentVariable('POWERSHELL_TELEMETRY_OPTOUT', '1', [System.EnvironmentVariableTarget]::Machine)
 
-
-# 17. Mematikan Service Pelacakan Pihak Ketiga (Razer & Logitech)
-Write-Host "-> Mematikan Service Pelacakan Razer dan Logitech"
-$gamingServices = @("Razer Game Scanner Service", "LogiRegistryService")
-foreach ($svcName in $gamingServices) {
-    try {
-        $svc = Get-Service -Name $svcName -ErrorAction SilentlyContinue
-        if ($svc) {
-            if ($svc.Status -eq 'Running') { Stop-Service -Name $svcName -Force -ErrorAction SilentlyContinue }
-            Set-Service -Name $svcName -StartupType Disabled -ErrorAction SilentlyContinue
-            Write-Host "   Service dimatikan: $svcName"
-        }
-    } catch { Write-Warning "   Gagal mematikan service gaming: $svcName" }
-}
-
-
-# 18. Konfigurasi CCleaner (Mematikan Iklan, Telemetri, dan Update Otomatis)
-Write-Host "-> Menerapkan Kebijakan Privasi dan mematikan Iklan CCleaner"
+# 11. Konfigurasi CCleaner (Mematikan Iklan, Telemetri, dan Update Otomatis)
+Write-Host "-> 11. Menerapkan Kebijakan Privasi CCleaner" -ForegroundColor Cyan
 $ccleanerPath = "HKCU:\Software\Piriform\CCleaner"
 Set-TweakRegistry -Path $ccleanerPath -Name "Monitoring" -Value 0
 Set-TweakRegistry -Path $ccleanerPath -Name "HelpImproveCCleaner" -Value 0
@@ -5587,18 +5194,15 @@ Set-TweakRegistry -Path $ccleanerPath -Name "(Cfg)GetIpmForTrial" -Value 0
 Set-TweakRegistry -Path $ccleanerPath -Name "(Cfg)SoftwareUpdater" -Value 0
 Set-TweakRegistry -Path $ccleanerPath -Name "(Cfg)SoftwareUpdaterIpm" -Value 0
 
-
-# Display Explorer/Browser Restart Notice
-if ($global:RequireEdgeRestart) {
-    Write-Host ""
-    Write-Host "CATATAN: Beberapa pengaturan memerlukan restart pada aplikasi Google Chrome, Mozilla Firefox, atau Microsoft Edge agar berfungsi penuh." -ForegroundColor Cyan
-}
-
-Write-Host "=== Konfigurasi Program Selesai ==="
+# ---------------------------------------------------------------------
+# FINALISASI (ONE-TIME RESTART NOTICE)
+# ---------------------------------------------------------------------
+Write-Host "`nCATATAN: Beberapa pengaturan memerlukan Anda merestart browser (Edge, Chrome, Firefox) atau VS Code agar perubahan dapat berfungsi penuh." -ForegroundColor Yellow
+Write-Host "=== Configure Program Selesai ===" -ForegroundColor Magenta
 '@
-            } # Tutup switch case "Configure Programs"
-            "Security Improvements" {
-            $masterScript += @'
+                }
+                "Security Improvements" {
+                    $masterScript += @'
 # =====================================================================
 # SCRIPT SECURITY IMPROVEMENTS (NATIVE POWERSHELL)
 # =====================================================================
@@ -5621,7 +5225,7 @@ function Set-TweakRegistry {
             New-Item -Path $Path -Force -ErrorAction SilentlyContinue | Out-Null
         }
         Set-ItemProperty -Path $Path -Name $Name -Value $Value -Type $Type -Force -ErrorAction SilentlyContinue
-        Write-Host "Set Registry: $Path\$Name = $Value"
+        Write-Host "   [Selesai] Mengatur Registry: $Path\$Name = $Value" -ForegroundColor Green
     } catch {
         Write-Warning "Gagal mengatur registry '$Path\$Name': $_"
     }
@@ -5630,10 +5234,10 @@ function Set-TweakRegistry {
 # ---------------------------------------------------------------------
 # EKSEKUSI PENINGKATAN KEAMANAN (SECURITY IMPROVEMENTS)
 # ---------------------------------------------------------------------
-Write-Host "=== Memulai Konfigurasi Peningkatan Keamanan ==="
+Write-Host "=== Memulai Konfigurasi Peningkatan Keamanan ===" -ForegroundColor Magenta
 
 # 1. Mengaktifkan Protokol Keamanan Jaringan Modern (DTLS 1.2 & TLS 1.3)
-Write-Host "-> Menerapkan protokol jaringan aman (TLS 1.3 dan DTLS 1.2)"
+Write-Host "-> 1. Menerapkan protokol jaringan aman (TLS 1.3 dan DTLS 1.2)" -ForegroundColor Cyan
 $schannelPath = "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols"
 
 # DTLS 1.2
@@ -5654,38 +5258,35 @@ Set-TweakRegistry -Path "HKLM:\SOFTWARE\WOW6432Node\Microsoft\.NETFramework\v2.0
 Set-TweakRegistry -Path "HKLM:\SOFTWARE\Microsoft\.NETFramework\v4.0.30319" -Name "SystemDefaultTlsVersions" -Value 1
 Set-TweakRegistry -Path "HKLM:\SOFTWARE\WOW6432Node\Microsoft\.NETFramework\v4.0.30319" -Name "SystemDefaultTlsVersions" -Value 1
 
-
 # 2. Mematikan Riwayat Cloud Clipboard (Mencegah Pencurian Data)
-Write-Host "-> Mematikan Sinkronisasi dan Riwayat Clipboard (Mencegah pencurian password tersalin)"
+Write-Host "-> 2. Mematikan Sinkronisasi dan Riwayat Clipboard (Mencegah pencurian password)" -ForegroundColor Cyan
 Set-TweakRegistry -Path "HKCU:\Software\Microsoft\Clipboard" -Name "CloudClipboardAutomaticUpload" -Value 0
 
 # 3. Mengaktifkan Perlindungan Memori Eksekusi (DEP & SEHOP)
-Write-Host "-> Mengaktifkan perlindungan memori tingkat lanjut (DEP & SEHOP)"
+Write-Host "-> 3. Mengaktifkan perlindungan memori tingkat lanjut (DEP & SEHOP)" -ForegroundColor Cyan
 Set-TweakRegistry -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Explorer" -Name "NoDataExecutionPrevention" -Value 0
 Set-TweakRegistry -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System" -Name "DisableHHDEP" -Value 0
 Set-TweakRegistry -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\kernel" -Name "DisableExceptionChainValidation" -Value 0
 
-
 # 4. Mencegah Downgrade Attack pada PowerShell 2.0
-Write-Host "-> Mencabut fitur usang PowerShell 2.0 (Mencegah Serangan Downgrade)"
+Write-Host "-> 4. Mencabut fitur usang PowerShell 2.0 (Mencegah Serangan Downgrade)" -ForegroundColor Cyan
 $ps2Features = @("MicrosoftWindowsPowerShellV2", "MicrosoftWindowsPowerShellV2Root")
 foreach ($featureName in $ps2Features) {
     try {
         $feature = Get-WindowsOptionalFeature -FeatureName $featureName -Online -ErrorAction SilentlyContinue
         if ($feature -and $feature.State -ne 'Disabled') {
             Disable-WindowsOptionalFeature -FeatureName $featureName -Online -NoRestart -ErrorAction Stop | Out-Null
-            Write-Host "   Berhasil mencabut fitur $featureName."
+            Write-Host "   [Selesai] Berhasil mencabut fitur $featureName." -ForegroundColor Green
         } else {
-            Write-Host "   Fitur $featureName sudah dicabut."
+            Write-Host "   [Dilewati] Fitur $featureName sudah dicabut." -ForegroundColor DarkGray
         }
     } catch {
         Write-Warning "   Gagal mencabut fitur ${featureName}: $_"
     }
 }
 
-
 # 5. Mematikan Windows Connect Now (WCN) yang rentan eksploitasi
-Write-Host "-> Mematikan fitur rentan Windows Connect Now (WCN)"
+Write-Host "-> 5. Mematikan fitur rentan Windows Connect Now (WCN)" -ForegroundColor Cyan
 $wcnPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WCN"
 Set-TweakRegistry -Path "$wcnPath\UI" -Name "DisableWcnUi" -Value 1
 Set-TweakRegistry -Path "$wcnPath\Registrars" -Name "DisableFlashConfigRegistrar" -Value 0
@@ -5694,11 +5295,15 @@ Set-TweakRegistry -Path "$wcnPath\Registrars" -Name "DisableUPnPRegistrar" -Valu
 Set-TweakRegistry -Path "$wcnPath\Registrars" -Name "DisableWPDRegistrar" -Value 0
 Set-TweakRegistry -Path "$wcnPath\Registrars" -Name "EnableRegistrars" -Value 0
 
-Write-Host "=== Security Improvements Selesai ==="
+# ---------------------------------------------------------------------
+# FINALISASI
+# ---------------------------------------------------------------------
+Write-Host "`nCATATAN: Beberapa pengaturan keamanan (terutama proteksi memori DEP/SEHOP) baru akan aktif sepenuhnya setelah komputer di-RESTART." -ForegroundColor Yellow
+Write-Host "=== Security Improvements Selesai ===" -ForegroundColor Magenta
 '@
-        }
+                }
                 "Block Tracking Hosts" {
-                $masterScript += @'
+                    $masterScript += @'
 # =====================================================================
 # SCRIPT BLOCK TRACKING HOSTS (NATIVE POWERSHELL)
 # =====================================================================
@@ -5747,35 +5352,35 @@ function Add-BlockHost {
     if ($linesToAdd.Count -gt 0) {
         try {
             Add-Content -Path $hostsPath -Value $linesToAdd -Encoding UTF8 -ErrorAction Stop
-            Write-Host "   Berhasil menambahkan $($Domains.Count) host(s) ke daftar blokir."
+            Write-Host "   [Selesai] Berhasil menambahkan $($Domains.Count) host(s) ke daftar blokir." -ForegroundColor Green
         } catch {
-            Write-Warning "   Gagal menulis ke file hosts. Pastikan anti-virus tidak memblokir modifikasi file hosts: $_"
+            Write-Warning "   [Error] Gagal menulis ke file hosts. Pastikan anti-virus tidak memblokir modifikasi: $_"
         }
     } else {
-        Write-Host "   Semua host tersebut sudah terblokir. Dilewati."
+        Write-Host "   [Dilewati] Semua host tersebut sudah terblokir." -ForegroundColor DarkGray
     }
 }
 
 # ---------------------------------------------------------------------
 # EKSEKUSI PEMBLOKIRAN HOSTS
 # ---------------------------------------------------------------------
-Write-Host "=== Memulai Pemblokiran Tracking Hosts ==="
+Write-Host "=== Memulai Pemblokiran Tracking Hosts ===" -ForegroundColor Magenta
 
 # 1. Memblokir Telemetri Dropbox
-Write-Host "-> Memblokir host telemetri Dropbox..."
+Write-Host "-> 1. Memblokir host telemetri Dropbox..." -ForegroundColor Cyan
 Add-BlockHost -Domains @(
     "telemetry.dropbox.com",
     "telemetry.v.dropbox.com"
 )
 
 # 2. Memblokir Host Spotify Live Tile
-Write-Host "-> Memblokir host Spotify Live Tile..."
+Write-Host "-> 2. Memblokir host Spotify Live Tile..." -ForegroundColor Cyan
 Add-BlockHost -Domains @(
     "spclient.wg.spotify.com"
 )
 
 # 3. Memblokir Host Laporan Crash & Telemetri Windows
-Write-Host "-> Memblokir host Windows Crash Report & Telemetry..."
+Write-Host "-> 3. Memblokir host Windows Crash Report & Telemetry..." -ForegroundColor Cyan
 Add-BlockHost -Domains @(
     "oca.telemetry.microsoft.com",
     "oca.microsoft.com",
@@ -5783,7 +5388,7 @@ Add-BlockHost -Domains @(
 )
 
 # 4. Memblokir Host Windows Error Reporting (Watson & Blob Storage)
-Write-Host "-> Memblokir host Windows Error Reporting (Watson & Diagnostic Logs)..."
+Write-Host "-> 4. Memblokir host Windows Error Reporting (Watson & Diagnostic Logs)..." -ForegroundColor Cyan
 Add-BlockHost -Domains @(
     "watson.telemetry.microsoft.com",
     "umwatsonc.events.data.microsoft.com",
@@ -5800,7 +5405,7 @@ Add-BlockHost -Domains @(
 )
 
 # 5. Memblokir Host Telemetri & User Experience (UX)
-Write-Host "-> Memblokir host Telemetri dan User Experience..."
+Write-Host "-> 5. Memblokir host Telemetri dan User Experience..." -ForegroundColor Cyan
 Add-BlockHost -Domains @(
     "functional.events.data.microsoft.com",
     "browser.events.data.msn.com",
@@ -5819,14 +5424,14 @@ Add-BlockHost -Domains @(
 )
 
 # 6. Memblokir Host Sinkronisasi Konfigurasi Jarak Jauh (Remote Sync)
-Write-Host "-> Memblokir host Remote Configuration Sync..."
+Write-Host "-> 6. Memblokir host Remote Configuration Sync..." -ForegroundColor Cyan
 Add-BlockHost -Domains @(
     "settings-win.data.microsoft.com",
     "settings.data.microsoft.com"
 )
 
 # 7. Memblokir Host Pembaruan & Data Peta (Maps Data)
-Write-Host "-> Memblokir host Maps Data & Updates..."
+Write-Host "-> 7. Memblokir host Maps Data & Updates..." -ForegroundColor Cyan
 Add-BlockHost -Domains @(
     "maps.windows.com",
     "ecn.dev.virtualearth.net",
@@ -5835,7 +5440,7 @@ Add-BlockHost -Domains @(
 )
 
 # 8. Memblokir Iklan Spotlight, Widget, & Saran MSN
-Write-Host "-> Memblokir host Spotlight Ads & Suggestions..."
+Write-Host "-> 8. Memblokir host Spotlight Ads & Suggestions..." -ForegroundColor Cyan
 Add-BlockHost -Domains @(
     "arc.msn.com",
     "ris.api.iris.microsoft.com",
@@ -5853,7 +5458,7 @@ Add-BlockHost -Domains @(
 )
 
 # 9. Memblokir Cortana, Live Tiles, & Azure Edge CDN Services
-Write-Host "-> Memblokir host Cortana, Live Tiles, dan Widget Services..."
+Write-Host "-> 9. Memblokir host Cortana, Live Tiles, dan Widget Services..." -ForegroundColor Cyan
 Add-BlockHost -Domains @(
     "business.bing.com",
     "c.bing.com",
@@ -5881,37 +5486,58 @@ Add-BlockHost -Domains @(
     "tile-service.weather.microsoft.com"
 )
 
-Write-Host "=== Block Tracking Host Selesai ==="
+Write-Host "=== Block Tracking Host Selesai ===" -ForegroundColor Magenta
 '@
-            }
+                }
                 "UI For Privacy" {
                     $masterScript += @'
 # =====================================================================
 # UI FOR PRIVACY - KONFIGURASI ANTARMUKA & PENGATURAN PRIVASI WINDOWS
 # =====================================================================
 
-Write-Host "-> Menerapkan pengaturan UI For Privacy..." -ForegroundColor Cyan
-
-# 1. Fungsi Pembantu untuk Mempercepat Modifikasi Registri
-function Set-PrivacyReg {
-    param([string]$Path, [string]$Name, $Value, [string]$Type = "DWord")
-    if (-not (Test-Path -LiteralPath $Path)) {
-        New-Item -Path $Path -Force -ErrorAction SilentlyContinue | Out-Null
-    }
-    Set-ItemProperty -LiteralPath $Path -Name $Name -Value $Value -Type $Type -ErrorAction SilentlyContinue
+# 1. Pastikan script berjalan sebagai Administrator
+if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    Write-Warning "Memerlukan hak akses Administrator. Harap jalankan aplikasi sebagai Administrator."
+    Exit 1
 }
 
-# 2. Menonaktifkan Tips Online, Notifikasi Aplikasi, & Live Tiles
+# ---------------------------------------------------------------------
+# FUNGSI PEMBANTU (HELPER FUNCTIONS)
+# ---------------------------------------------------------------------
+
+# Fungsi Pembantu untuk Mempercepat Modifikasi Registri
+function Set-PrivacyReg {
+    param([string]$Path, [string]$Name, $Value, [string]$Type = "DWord")
+    try {
+        if (-not (Test-Path -LiteralPath $Path)) {
+            New-Item -Path $Path -Force -ErrorAction SilentlyContinue | Out-Null
+        }
+        Set-ItemProperty -LiteralPath $Path -Name $Name -Value $Value -Type $Type -Force -ErrorAction SilentlyContinue
+        Write-Host "   [Selesai] Registry: $Path\$Name = $Value" -ForegroundColor Green
+    } catch {
+        Write-Warning "   Gagal mengatur registry '$Path\$Name': $_"
+    }
+}
+
+# ---------------------------------------------------------------------
+# EKSEKUSI KONFIGURASI ANTARMUKA PRIVASI
+# ---------------------------------------------------------------------
+Write-Host "=== Memulai Konfigurasi UI For Privacy ===" -ForegroundColor Magenta
+
+# 1. Menonaktifkan Tips Online, Notifikasi Aplikasi, & Live Tiles
+Write-Host "-> 1. Mematikan Tips Online, Notifikasi Lockscreen, & Live Tiles..." -ForegroundColor Cyan
 Set-PrivacyReg "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System" "AllowOnlineTips" 0
 Set-PrivacyReg "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System" "DisableLockScreenAppNotifications" 1
 Set-PrivacyReg "HKCU:\SOFTWARE\Policies\Microsoft\Windows\CurrentVersion\PushNotifications" "NoTileApplicationNotification" 1
 
-# 3. Menonaktifkan Telemetri UI (Recent Apps, Usage Tracking, Backtracking)
+# 2. Menonaktifkan Telemetri UI (Recent Apps, Usage Tracking, Backtracking)
+Write-Host "-> 2. Mematikan Telemetri UI (Pelacakan Aplikasi & Recent Apps)..." -ForegroundColor Cyan
 Set-PrivacyReg "HKCU:\Software\Policies\Microsoft\Windows\EdgeUI" "DisableMFUTracking" 1
 Set-PrivacyReg "HKCU:\Software\Policies\Microsoft\Windows\EdgeUI" "DisableRecentApps" 1
 Set-PrivacyReg "HKCU:\Software\Policies\Microsoft\Windows\EdgeUI" "TurnOffBackstack" 1
 
-# 4. Membersihkan Windows Explorer (Riwayat, Wizard, Sinkronisasi Iklan)
+# 3. Membersihkan Windows Explorer (Riwayat, Wizard, Sinkronisasi Iklan)
+Write-Host "-> 3. Membersihkan Windows Explorer (Riwayat Dokumen & Iklan OneDrive)..." -ForegroundColor Cyan
 $expPolicies = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer"
 Set-PrivacyReg $expPolicies "NoInternetOpenWith" 1
 Set-PrivacyReg $expPolicies "NoOnlinePrintsWizard" 1
@@ -5924,7 +5550,8 @@ Set-PrivacyReg "HKCU:\Software\Microsoft\Windows\CurrentVersion\Policies\Explore
 Set-PrivacyReg "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" "ShowSyncProviderNotifications" 0
 Set-PrivacyReg "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer" "ShowRecent" 0
 
-# 5. Menyembunyikan Folder "3D Objects" dari This PC
+# 4. Menyembunyikan Folder "3D Objects" dari This PC
+Write-Host "-> 4. Menyembunyikan Folder '3D Objects' dari This PC..." -ForegroundColor Cyan
 $3dObj1 = "HKLM:\Software\Microsoft\Windows\CurrentVersion\Explorer\FolderDescriptions\{31C0DD25-9439-4F12-BF41-7FF4EDA38722}\PropertyBag"
 $3dObj2 = "HKLM:\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\FolderDescriptions\{31C0DD25-9439-4F12-BF41-7FF4EDA38722}\PropertyBag"
 Set-PrivacyReg $3dObj1 "ThisPCPolicy" "Hide" "String"
@@ -5935,11 +5562,13 @@ Set-PrivacyReg "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\HideMyC
 $namespace3D = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\MyComputer\NameSpace\{0DB7E03F-FC29-4DC6-9020-FF41B59E513A}"
 if (Test-Path $namespace3D) {
     Remove-Item -Path $namespace3D -Force -Recurse -ErrorAction SilentlyContinue
+    Write-Host "   [Selesai] Menghapus Namespace 3D Objects lama." -ForegroundColor Green
 }
 Set-PrivacyReg $namespace3D "HiddenByDefault" 1
 Set-PrivacyReg $namespace3D "HideIfEnabled" 36354489 # 0x22ab9b9
 
-# 6. Menghapus File yang Baru Digunakan dari Quick Access
+# 5. Menghapus File yang Baru Digunakan dari Quick Access
+Write-Host "-> 5. Menghapus File yang Baru Digunakan dari Quick Access..." -ForegroundColor Cyan
 $delegateFolders = @(
     "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\HomeFolderDesktop\NameSpace\DelegateFolders\{3134ef9c-6b18-4996-ad04-ed5912e00eb5}",
     "HKLM:\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Explorer\HomeFolderDesktop\NameSpace\DelegateFolders\{3134ef9c-6b18-4996-ad04-ed5912e00eb5}"
@@ -5947,21 +5576,31 @@ $delegateFolders = @(
 foreach ($folder in $delegateFolders) {
     if (Test-Path $folder) {
         Remove-ItemProperty -Path $folder -Name "(default)" -ErrorAction SilentlyContinue
+        Write-Host "   [Selesai] Menghapus Delegate Folder Quick Access pada: $folder" -ForegroundColor Green
+    } else {
+        Write-Host "   [Dilewati] Delegate Folder tidak ditemukan pada: $folder" -ForegroundColor DarkGray
     }
 }
 
-# 7. Menonaktifkan Hibernation (Mempercepat Startup & Keamanan Data)
-Write-Host "-> Mematikan Hibernation..." -ForegroundColor Cyan
-Invoke-Expression "powercfg -h off"
+# 6. Menonaktifkan Hibernation (Mempercepat Startup & Keamanan Data)
+Write-Host "-> 6. Menonaktifkan Fitur Hibernation (Menghapus hiberfil.sys)..." -ForegroundColor Cyan
+try {
+    # Menggunakan metode native start-process untuk memanggil powercfg dengan aman
+    Start-Process -FilePath "powercfg.exe" -ArgumentList "/h off" -NoNewWindow -Wait -ErrorAction Stop
+    Write-Host "   [Selesai] Fitur Hibernation berhasil dimatikan." -ForegroundColor Green
+} catch {
+    Write-Warning "   [Gagal] Tidak dapat mematikan Hibernation: $_"
+}
 
-Write-Host "-> Pengaturan UI For Privacy selesai diterapkan!" -ForegroundColor Green
-Write-Host "   (Restart explorer.exe atau komputer kamu agar efek UI terlihat)" -ForegroundColor Yellow
-
-Write-Host "=== UI For Privacy Selesai ==="
+# ---------------------------------------------------------------------
+# FINALISASI
+# ---------------------------------------------------------------------
+Write-Host "`nCATATAN: Beberapa perubahan visual antarmuka baru akan terlihat sepenuhnya setelah Anda me-RESTART komputer atau restart 'explorer.exe'." -ForegroundColor Yellow
+Write-Host "=== UI For Privacy Selesai ===" -ForegroundColor Magenta
 '@
                 }
                 "Remove Bloatware" {
-            $masterScript += @'
+                    $masterScript += @'
 # =====================================================================
 # SCRIPT REMOVE BLOATWARE (NATIVE POWERSHELL)
 # =====================================================================
@@ -5980,10 +5619,10 @@ if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
 function Set-PrivacyReg {
     param ([string]$Path, [string]$Name, $Value, [string]$Type = "DWORD")
     $psPath = $Path -replace "HKLM:", "Registry::HKLM" -replace "HKCU:", "Registry::HKCU"
-    if (-not (Test-Path $psPath)) {
-        New-Item -Path $psPath -Force -ErrorAction SilentlyContinue | Out-Null
-    }
-    Set-ItemProperty -Path $psPath -Name $Name -Value $Value -Type $Type -Force -ErrorAction SilentlyContinue
+    try {
+        if (-not (Test-Path $psPath)) { New-Item -Path $psPath -Force -ErrorAction SilentlyContinue | Out-Null }
+        Set-ItemProperty -Path $psPath -Name $Name -Value $Value -Type $Type -Force -ErrorAction SilentlyContinue
+    } catch {}
 }
 
 # B. Injeksi WIN32 API untuk mendapatkan hak akses TrustedInstaller
@@ -6065,9 +5704,7 @@ function Invoke-SoftDelete ($TargetGlob) {
             $oldPath = "$filePath.OLD"
             Move-Item -LiteralPath $filePath -Destination $oldPath -Force -ErrorAction SilentlyContinue
             Write-Host "   [Soft-Deleted] $filePath" -ForegroundColor DarkGray
-        } catch {
-            Write-Warning "   Gagal memproses berkas: $filePath"
-        }
+        } catch {}
     }
 }
 
@@ -6078,85 +5715,48 @@ Write-Host "=== Memulai Pembersihan Bloatware Secara Menyeluruh ===" -Foreground
 
 $userSid = (New-Object System.Security.Principal.NTAccount($env:USERNAME)).Translate([System.Security.Principal.SecurityIdentifier]).Value
 
-# 2. Menghapus Aplikasi Bawaan (Standard UWP Apps)
-Write-Host "-> Menghapus & Deprovisioning Aplikasi Bawaan (UWP)..." -ForegroundColor Cyan
+# 1. Menghapus Aplikasi Bawaan (Standard UWP Apps)
+Write-Host "-> 1. Menghapus & Deprovisioning Aplikasi Bawaan (UWP)..." -ForegroundColor Cyan
 
 $bloatwareApps = @(
-    "Microsoft.MicrosoftOfficeHub_8wekyb3d8bbwe",          # Office 365 App
-    "Microsoft.Office.OneNote_8wekyb3d8bbwe",              # OneNote
-    "Microsoft.Office.Sway_8wekyb3d8bbwe",                 # Sway
-    "Microsoft.WindowsPhone_8wekyb3d8bbwe",                # Phone Companion
-    "Microsoft.CommsPhone_8wekyb3d8bbwe",                  # Microsoft Phone
-    "Microsoft.YourPhone_8wekyb3d8bbwe",                   # Phone Link
-    "king.com.CandyCrushSaga_kgqvnymyfvs32",               # Candy Crush Saga
-    "king.com.CandyCrushSodaSaga_kgqvnymyfvs32",           # Candy Crush Soda Saga
-    "ShazamEntertainmentLtd.Shazam_pqbynwjfrbcg4",         # Shazam
-    "Flipboard.Flipboard_3f5azkryzdbc4",                   # Flipboard
-    "9E2F88E3.Twitter_wgeqdkkx372wm",                      # Twitter
-    "ClearChannelRadioDigital.iHeartRadio_a76a11dkgb644",  # iHeartRadio
-    "D5EA27B7.Duolingo-LearnLanguagesforFree_yx6k7tf7xvsea",# Duolingo
-    "AdobeSystemsIncorporated.AdobePhotoshopExpress_ynb6jyjzte8ga", # PS Express
-    "PandoraMediaInc.29680B314EFC2_n619g4d5j0fnw",         # Pandora
-    "46928bounde.EclipseManager_a5h4egax66k6y",            # Eclipse Manager
-    "ActiproSoftwareLLC.562882FEEB491_24pqs290vpjk0",      # Code Writer
-    "SpotifyAB.SpotifyMusic_zpdnekdrzrea0",                # Spotify
-    "Microsoft.549981C3F5F10_8wekyb3d8bbwe",               # Cortana
-    "Microsoft.Getstarted_8wekyb3d8bbwe",                  # Microsoft Tips
-    "Microsoft.Messaging_8wekyb3d8bbwe",                   # Microsoft Messaging
-    "Microsoft.MixedReality.Portal_8wekyb3d8bbwe",         # Mixed Reality Portal
-    "Microsoft.WindowsFeedbackHub_8wekyb3d8bbwe",          # Feedback Hub
-    "Microsoft.MSPaint_8wekyb3d8bbwe",                     # Paint 3D
-    "Microsoft.WindowsMaps_8wekyb3d8bbwe",                 # Windows Maps
-    "Microsoft.MinecraftUWP_8wekyb3d8bbwe",                # Minecraft for Windows
-    "Microsoft.People_8wekyb3d8bbwe",                      # Microsoft People
-    "Microsoft.Wallet_8wekyb3d8bbwe",                      # Microsoft Pay
-    "Microsoft.OneConnect_8wekyb3d8bbwe",                  # Mobile Plans
-    "Microsoft.MicrosoftSolitaireCollection_8wekyb3d8bbwe",# Solitaire Collection
-    "Microsoft.SkypeApp_kzf8qxf38zg5c",                    # Skype
-    "Microsoft.GroupMe10_kzf8qxf38zg5c",                   # GroupMe
-    "Microsoft.RemoteDesktop_8wekyb3d8bbwe",               # Microsoft Remote Desktop
-    "Microsoft.NetworkSpeedTest_8wekyb3d8bbwe",            # Network Speed Test
-    "Microsoft.Todos_8wekyb3d8bbwe",                       # Microsoft To Do
-    "Microsoft.BingWeather_8wekyb3d8bbwe",                 # MSN Weather
-    "Microsoft.BingSports_8wekyb3d8bbwe",                  # MSN Sports
-    "Microsoft.BingNews_8wekyb3d8bbwe",                    # MSN News
-    "Microsoft.BingFinance_8wekyb3d8bbwe",                 # MSN Money
-    "Windows.Print3D_cw5n1h2txyewy",                       # Print 3D
-    "Microsoft.3DBuilder_8wekyb3d8bbwe",                   # 3D Builder
-    "Microsoft.Microsoft3DViewer_8wekyb3d8bbwe",           # 3D Viewer
-    "Microsoft.XboxApp_8wekyb3d8bbwe",                     # Xbox Console Companion
-    "Microsoft.Xbox.TCUI_8wekyb3d8bbwe",                   # Xbox Live in-game experience
-    "Microsoft.XboxSpeechToTextOverlay_8wekyb3d8bbwe",     # Xbox Speech To Text Overlay
-    "Microsoft.XboxIdentityProvider_8wekyb3d8bbwe",        # Xbox Identity Provider
-    "Microsoft.GamingApp_8wekyb3d8bbwe",                   # Xbox App
-    "Microsoft.XboxGamingOverlay_8wekyb3d8bbwe",           # Game Bar Overlay
-    "Microsoft.XboxGameOverlay_8wekyb3d8bbwe"              # Xbox Game Overlay
+    "Microsoft.MicrosoftOfficeHub_8wekyb3d8bbwe", "Microsoft.Office.OneNote_8wekyb3d8bbwe", "Microsoft.Office.Sway_8wekyb3d8bbwe",
+    "Microsoft.WindowsPhone_8wekyb3d8bbwe", "Microsoft.CommsPhone_8wekyb3d8bbwe", "Microsoft.YourPhone_8wekyb3d8bbwe",
+    "king.com.CandyCrushSaga_kgqvnymyfvs32", "king.com.CandyCrushSodaSaga_kgqvnymyfvs32", "ShazamEntertainmentLtd.Shazam_pqbynwjfrbcg4",
+    "Flipboard.Flipboard_3f5azkryzdbc4", "9E2F88E3.Twitter_wgeqdkkx372wm", "ClearChannelRadioDigital.iHeartRadio_a76a11dkgb644",
+    "D5EA27B7.Duolingo-LearnLanguagesforFree_yx6k7tf7xvsea", "AdobeSystemsIncorporated.AdobePhotoshopExpress_ynb6jyjzte8ga",
+    "PandoraMediaInc.29680B314EFC2_n619g4d5j0fnw", "46928bounde.EclipseManager_a5h4egax66k6y", "ActiproSoftwareLLC.562882FEEB491_24pqs290vpjk0",
+    "SpotifyAB.SpotifyMusic_zpdnekdrzrea0", "Microsoft.549981C3F5F10_8wekyb3d8bbwe", "Microsoft.Getstarted_8wekyb3d8bbwe",
+    "Microsoft.Messaging_8wekyb3d8bbwe", "Microsoft.MixedReality.Portal_8wekyb3d8bbwe", "Microsoft.WindowsFeedbackHub_8wekyb3d8bbwe",
+    "Microsoft.MSPaint_8wekyb3d8bbwe", "Microsoft.WindowsMaps_8wekyb3d8bbwe", "Microsoft.MinecraftUWP_8wekyb3d8bbwe",
+    "Microsoft.People_8wekyb3d8bbwe", "Microsoft.Wallet_8wekyb3d8bbwe", "Microsoft.OneConnect_8wekyb3d8bbwe",
+    "Microsoft.MicrosoftSolitaireCollection_8wekyb3d8bbwe", "Microsoft.SkypeApp_kzf8qxf38zg5c", "Microsoft.GroupMe10_kzf8qxf38zg5c",
+    "Microsoft.RemoteDesktop_8wekyb3d8bbwe", "Microsoft.NetworkSpeedTest_8wekyb3d8bbwe", "Microsoft.Todos_8wekyb3d8bbwe",
+    "Microsoft.BingWeather_8wekyb3d8bbwe", "Microsoft.BingSports_8wekyb3d8bbwe", "Microsoft.BingNews_8wekyb3d8bbwe",
+    "Microsoft.BingFinance_8wekyb3d8bbwe", "Windows.Print3D_cw5n1h2txyewy", "Microsoft.3DBuilder_8wekyb3d8bbwe",
+    "Microsoft.Microsoft3DViewer_8wekyb3d8bbwe", "Microsoft.XboxApp_8wekyb3d8bbwe", "Microsoft.Xbox.TCUI_8wekyb3d8bbwe",
+    "Microsoft.XboxSpeechToTextOverlay_8wekyb3d8bbwe", "Microsoft.XboxIdentityProvider_8wekyb3d8bbwe", "Microsoft.GamingApp_8wekyb3d8bbwe",
+    "Microsoft.XboxGamingOverlay_8wekyb3d8bbwe", "Microsoft.XboxGameOverlay_8wekyb3d8bbwe"
 )
 
 foreach ($appFamily in $bloatwareApps) {
     $appName = $appFamily.Split('_')[0]
-    Write-Host "   Menghapus: $appName..." -ForegroundColor Yellow
+    Write-Host "   Menghapus: $appName..." -ForegroundColor DarkCyan
     Get-AppxPackage -Name $appName -AllUsers -ErrorAction SilentlyContinue | Remove-AppxPackage -AllUsers -ErrorAction SilentlyContinue
     $deprovisionPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Appx\AppxAllUserStore\Deprovisioned\$appFamily"
-    if (-not (Test-Path $deprovisionPath)) {
-        New-Item -Path $deprovisionPath -Force -ErrorAction SilentlyContinue | Out-Null
-    }
+    if (-not (Test-Path $deprovisionPath)) { New-Item -Path $deprovisionPath -Force -ErrorAction SilentlyContinue | Out-Null }
 }
 
-# 3. Menghapus System Apps Lanjutan (Menggunakan EndOfLife Bypass)
-Write-Host "-> Menghapus System Apps (Callable UI, People, Take a Test, dll)..." -ForegroundColor Cyan
+# 2. Menghapus System Apps Lanjutan (Menggunakan EndOfLife Bypass)
+Write-Host "-> 2. Menghapus System Apps Lanjutan (Bypass Privilege)..." -ForegroundColor Cyan
 
 # Aktifkan hak restorasi dan pengambilalihan kepemilikan berkas dilindungi
 [Privileges]::AddPrivilege('SeRestorePrivilege') | Out-Null
 [Privileges]::AddPrivilege('SeTakeOwnershipPrivilege') | Out-Null
 
 $advancedSystemApps = @(
-    "Microsoft.Windows.CallingShellApp_cw5n1h2txyewy",
-    "Microsoft.XboxGameCallableUI_cw5n1h2txyewy",
-    "Microsoft.Windows.PeopleExperienceHost_cw5n1h2txyewy",
-    "Microsoft.Windows.SecureAssessmentBrowser_cw5n1h2txyewy",
-    "Microsoft.WindowsFeedback_cw5n1h2txyewy",
-    "NarratorQuickStart_8wekyb3d8bbwe",
+    "Microsoft.Windows.CallingShellApp_cw5n1h2txyewy", "Microsoft.XboxGameCallableUI_cw5n1h2txyewy",
+    "Microsoft.Windows.PeopleExperienceHost_cw5n1h2txyewy", "Microsoft.Windows.SecureAssessmentBrowser_cw5n1h2txyewy",
+    "Microsoft.WindowsFeedback_cw5n1h2txyewy", "NarratorQuickStart_8wekyb3d8bbwe",
     "MicrosoftWindows.UndockedDevKit_cw5n1h2txyewy"
 )
 
@@ -6168,58 +5768,40 @@ foreach ($appFamily in $advancedSystemApps) {
     $deprovPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Appx\AppxAllUserStore\Deprovisioned\$appFamily"
     
     if (-not (Test-Path $eolPath)) { New-Item -Path $eolPath -Force -ErrorAction SilentlyContinue | Out-Null }
-    
     Get-AppxPackage -Name $appName -AllUsers -ErrorAction SilentlyContinue | Remove-AppxPackage -AllUsers -ErrorAction SilentlyContinue
-    
     if (-not (Test-Path $deprovPath)) { New-Item -Path $deprovPath -Force -ErrorAction SilentlyContinue | Out-Null }
     if (Test-Path $eolPath) { Remove-Item -Path $eolPath -Force -ErrorAction SilentlyContinue | Out-Null }
 }
 
-# 4. Cleanup Sisa Folder SystemApps & WindowsApps (Soft-Delete)
-Write-Host "-> Membersihkan Sisa Direktori SystemApps & Cache..." -ForegroundColor Cyan
+# 3. Cleanup Sisa Folder SystemApps & WindowsApps (Soft-Delete)
+Write-Host "-> 3. Membersihkan Sisa Direktori SystemApps & Cache..." -ForegroundColor Cyan
 
 $softDeletePaths = @(
-    "%SYSTEMROOT%\SystemApps\Microsoft.XboxGameCallableUI_cw5n1h2txyewy\*",
-    "%SYSTEMROOT%\XboxGameCallableUI\*",
+    "%SYSTEMROOT%\SystemApps\Microsoft.XboxGameCallableUI_cw5n1h2txyewy\*", "%SYSTEMROOT%\XboxGameCallableUI\*",
     "%SYSTEMDRIVE%\Program Files\WindowsApps\Microsoft.XboxGameCallableUI_*_cw5n1h2txyewy\*",
     "%LOCALAPPDATA%\Packages\Microsoft.XboxGameCallableUI_cw5n1h2txyewy\*",
-    "%PROGRAMDATA%\Microsoft\Windows\AppRepository\Packages\Microsoft.XboxGameCallableUI_*_cw5n1h2txyewy\*",
-    
-    "%SYSTEMROOT%\SystemApps\Microsoft.Windows.PeopleExperienceHost_cw5n1h2txyewy\*",
-    "%SYSTEMROOT%\PeopleExperienceHost\*",
+    "%SYSTEMROOT%\SystemApps\Microsoft.Windows.PeopleExperienceHost_cw5n1h2txyewy\*", "%SYSTEMROOT%\PeopleExperienceHost\*",
     "%SYSTEMDRIVE%\Program Files\WindowsApps\Microsoft.Windows.PeopleExperienceHost_*_cw5n1h2txyewy\*",
     "%LOCALAPPDATA%\Packages\Microsoft.Windows.PeopleExperienceHost_cw5n1h2txyewy\*",
-    "%PROGRAMDATA%\Microsoft\Windows\AppRepository\Packages\Microsoft.Windows.PeopleExperienceHost_*_cw5n1h2txyewy\*",
-    
-    "%SYSTEMROOT%\SystemApps\Microsoft.Windows.SecureAssessmentBrowser_cw5n1h2txyewy\*",
-    "%SYSTEMROOT%\SecureAssessmentBrowser\*",
+    "%SYSTEMROOT%\SystemApps\Microsoft.Windows.SecureAssessmentBrowser_cw5n1h2txyewy\*", "%SYSTEMROOT%\SecureAssessmentBrowser\*",
     "%SYSTEMDRIVE%\Program Files\WindowsApps\Microsoft.Windows.SecureAssessmentBrowser_*_cw5n1h2txyewy\*",
     "%LOCALAPPDATA%\Packages\Microsoft.Windows.SecureAssessmentBrowser_cw5n1h2txyewy\*",
-    "%PROGRAMDATA%\Microsoft\Windows\AppRepository\Packages\Microsoft.Windows.SecureAssessmentBrowser_*_cw5n1h2txyewy\*",
-    
-    "%SYSTEMROOT%\SystemApps\Microsoft.WindowsFeedback_cw5n1h2txyewy\*",
-    "%SYSTEMROOT%\WindowsFeedback\*",
+    "%SYSTEMROOT%\SystemApps\Microsoft.WindowsFeedback_cw5n1h2txyewy\*", "%SYSTEMROOT%\WindowsFeedback\*",
     "%SYSTEMDRIVE%\Program Files\WindowsApps\Microsoft.WindowsFeedback_*_cw5n1h2txyewy\*",
     "%LOCALAPPDATA%\Packages\Microsoft.WindowsFeedback_cw5n1h2txyewy\*",
-    "%PROGRAMDATA%\Microsoft\Windows\AppRepository\Packages\Microsoft.WindowsFeedback_*_cw5n1h2txyewy\*",
-    
-    "%SYSTEMROOT%\SystemApps\Windows.Print3D_cw5n1h2txyewy\*",
-    "%LOCALAPPDATA%\Packages\Windows.Print3D_cw5n1h2txyewy\*",
+    "%SYSTEMROOT%\SystemApps\Windows.Print3D_cw5n1h2txyewy\*", "%LOCALAPPDATA%\Packages\Windows.Print3D_cw5n1h2txyewy\*",
     "%PROGRAMDATA%\Microsoft\Windows\AppRepository\Packages\Windows.Print3D_*cw5n1h2txyewy*",
     "%SYSTEMDRIVE%\Program Files\WindowsApps\Windows.Print3D_*cw5n1h2txyewy*"
 )
 
-foreach ($path in $softDeletePaths) {
-    Invoke-SoftDelete $path
-}
+foreach ($path in $softDeletePaths) { Invoke-SoftDelete $path }
 
 # Matikan hak akses khusus kembali ke mode normal (Keamanan Sistem)
 [Privileges]::RemovePrivilege('SeRestorePrivilege') | Out-Null
 [Privileges]::RemovePrivilege('SeTakeOwnershipPrivilege') | Out-Null
 
-
-# 5. Membersihkan OneDrive Secara Menyeluruh
-Write-Host "-> Mematikan dan Menghapus OneDrive..." -ForegroundColor Cyan
+# 4. Membersihkan OneDrive Secara Menyeluruh
+Write-Host "-> 4. Mematikan dan Menghapus Instalasi OneDrive..." -ForegroundColor Cyan
 
 Stop-Process -Name "OneDrive" -Force -ErrorAction SilentlyContinue
 Remove-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "OneDriveSetup" -ErrorAction SilentlyContinue
@@ -6227,19 +5809,13 @@ Remove-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" 
 
 $odSetup32 = "$env:SystemRoot\System32\OneDriveSetup.exe"
 $odSetup64 = "$env:SystemRoot\SysWOW64\OneDriveSetup.exe"
-if (Test-Path $odSetup32) {
-    Start-Process -FilePath $odSetup32 -ArgumentList "/uninstall" -Wait -NoNewWindow
-} elseif (Test-Path $odSetup64) {
-    Start-Process -FilePath $odSetup64 -ArgumentList "/uninstall" -Wait -NoNewWindow
-}
+if (Test-Path $odSetup32) { Start-Process -FilePath $odSetup32 -ArgumentList "/uninstall" -Wait -NoNewWindow }
+elseif (Test-Path $odSetup64) { Start-Process -FilePath $odSetup64 -ArgumentList "/uninstall" -Wait -NoNewWindow }
 
-# Evaluasi Direktori Shell OS
 $userShellPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders"
 $userShellEntries = Get-ItemProperty -Path $userShellPath
 $isRedirected = $false
-foreach ($prop in $userShellEntries.PSObject.Properties) {
-    if ($prop.Value -like "*\OneDrive*") { $isRedirected = $true; break }
-}
+foreach ($prop in $userShellEntries.PSObject.Properties) { if ($prop.Value -like "*\OneDrive*") { $isRedirected = $true; break } }
 
 if (-not $isRedirected) {
     $oneDriveFolder = "$env:USERPROFILE\OneDrive"
@@ -6261,8 +5837,7 @@ foreach ($path in $cachePaths) {
 }
 
 $shortcuts = @(
-    "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\OneDrive.lnk",
-    "$env:USERPROFILE\Links\OneDrive.lnk",
+    "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\OneDrive.lnk", "$env:USERPROFILE\Links\OneDrive.lnk",
     "$env:SYSTEMROOT\ServiceProfiles\LocalService\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\OneDrive.lnk",
     "$env:SYSTEMROOT\ServiceProfiles\NetworkService\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\OneDrive.lnk"
 )
@@ -6275,12 +5850,10 @@ Set-PrivacyReg "HKCU:\Software\Classes\Wow6432Node\CLSID\{018D5C66-4533-4307-9B5
 Remove-ItemProperty -Path "HKCU:\Environment" -Name "OneDrive" -ErrorAction SilentlyContinue
 
 $tasks = @("OneDrive Reporting Task-*", "OneDrive Standalone Update Task-*", "OneDrive Per-Machine Standalone Update")
-foreach ($taskName in $tasks) {
-    Get-ScheduledTask -TaskName $taskName -ErrorAction Ignore | Disable-ScheduledTask -ErrorAction SilentlyContinue
-}
+foreach ($taskName in $tasks) { Get-ScheduledTask -TaskName $taskName -ErrorAction Ignore | Disable-ScheduledTask -ErrorAction SilentlyContinue }
 
-# 6. Menonaktifkan Windows Copilot & Meet Now
-Write-Host "-> Menonaktifkan Windows Copilot & Meet Now..." -ForegroundColor Yellow
+# 5. Menonaktifkan Windows Copilot & Meet Now
+Write-Host "-> 5. Menonaktifkan Windows Copilot & Meet Now..." -ForegroundColor Cyan
 
 Set-PrivacyReg "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsCopilot" "TurnOffWindowsCopilot" 1
 Set-PrivacyReg "HKCU:\SOFTWARE\Policies\Microsoft\Windows\WindowsCopilot" "TurnOffWindowsCopilot" 1
@@ -6290,14 +5863,10 @@ Set-PrivacyReg "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advance
 Set-PrivacyReg "HKLM:\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer" "HideSCAMeetNow" 1
 Set-PrivacyReg "HKCU:\Software\Microsoft\Narrator\QuickStart" "SkipQuickStart" 1
 
-# 7. Mematikan Layanan Tidak Penting (Services)
-Write-Host "-> Mematikan Background Services (Xbox, Maps, Messaging, UserData)..." -ForegroundColor Yellow
+# 6. Mematikan Layanan Tidak Penting (Services)
+Write-Host "-> 6. Mematikan Background Services (Xbox, Maps, Messaging, UserData)..." -ForegroundColor Cyan
 
-$ServicesToDisable = @(
-    'XblGameSave', 'XboxNetApiSvc', 'XblAuthManager', 
-    'MapsBroker', 'RetailDemo'
-)
-
+$ServicesToDisable = @('XblGameSave', 'XboxNetApiSvc', 'XblAuthManager', 'MapsBroker', 'RetailDemo')
 foreach ($svcName in $ServicesToDisable) {
     $svc = Get-Service -Name $svcName -ErrorAction SilentlyContinue
     if ($svc) {
@@ -6311,7 +5880,6 @@ Get-Service -Name "UserDataSvc*" -ErrorAction SilentlyContinue | ForEach-Object 
     if ($_.Status -eq 'Running') { Stop-Service -Name $name -Force -ErrorAction SilentlyContinue }
     Set-PrivacyReg "HKLM:\SYSTEM\CurrentControlSet\Services\$name" "Start" 4
 }
-
 Get-Service -Name "MessagingService*" -ErrorAction SilentlyContinue | ForEach-Object {
     $name = $_.Name
     if ($_.Status -eq 'Running') { Stop-Service -Name $name -Force -ErrorAction SilentlyContinue }
@@ -6327,7 +5895,7 @@ Write-Host " Semua bloatware dan telemetri telah dibersihkan." -ForegroundColor 
 Write-Host " Silakan RESTART komputer Anda agar perubahan Registry & Service aktif." -ForegroundColor Yellow
 Write-Host "=======================================================================\n" -ForegroundColor Green
 
-Write-Host "=== Remove Bloatware Selesai ==="
+Write-Host "=== Remove Bloatware Selesai ===" -ForegroundColor Magenta
 '@
                 }
             }
@@ -6354,8 +5922,8 @@ Write-Host "=================================================" -ForegroundColor 
                 
                 # Buka PowerShell baru (TIDAK HIDDEN agar user bisa melihat prosesnya)
                 # Parameter -Wait membuat aplikasi Waroeng Tools menahan diri sampai jendela biru tertutup
-                $psArgs = "-NoProfile -ExecutionPolicy Bypass -File `"$tempPs1`""
-                Start-Process "powershell.exe" -ArgumentList $psArgs -Wait
+                $psArgs = "-NoExit -NoProfile -ExecutionPolicy Bypass -File `"$tempPs1`""
+                Start-Process "powershell.exe" -ArgumentList $psArgs -Verb RunAs -Wait
                 
                 # Hapus jejak
                 Remove-Item -Path $tempPs1 -Force -ErrorAction SilentlyContinue
@@ -6575,7 +6143,8 @@ function Restore-Task {
             }
         }
     } catch {
-        Write-Warning "   [GAGAL] Gagal memulihkan tugas $Name: $($_.Exception.Message)"
+        # PERBAIKAN: Menggunakan ${Name} agar titik dua tidak error
+        Write-Warning "   [GAGAL] Gagal memulihkan tugas ${Name}: $($_.Exception.Message)"
     }
 }
 
@@ -6599,7 +6168,8 @@ function Restore-Service {
             Write-Host "   [OK] Memulai kembali layanan: $Name" -ForegroundColor DarkGray
         }
     } catch {
-        Write-Warning "   [GAGAL] Gagal memulihkan layanan $Name: $($_.Exception.Message)"
+        # PERBAIKAN: Menggunakan ${Name} agar titik dua tidak error
+        Write-Warning "   [GAGAL] Gagal memulihkan layanan ${Name}: $($_.Exception.Message)"
     }
 }
 
@@ -6685,14 +6255,14 @@ if (Test-Path $compatTelOldPath) {
 # ---------------------------------------------------------------------
 Write-Host "`n-> Memulihkan Tugas Terjadwal (Scheduled Tasks)..." -ForegroundColor Cyan
 
-Restore-Task -Path "\Microsoft\Windows\Autochk\" -Name "Proxy" [cite: 1697, 1698]
-Restore-Task -Path "\Microsoft\Windows\Customer Experience Improvement Program\" -Name "KernelCeipTask" [cite: 1707, 1708]
-Restore-Task -Path "\Microsoft\Windows\Customer Experience Improvement Program\" -Name "BthSQM" [cite: 1717, 1718]
-Restore-Task -Path "\Microsoft\Windows\DiskDiagnostic\" -Name "Microsoft-Windows-DiskDiagnosticDataCollector" [cite: 1727, 1728]
-Restore-Task -Path "\Microsoft\Windows\DiskDiagnostic\" -Name "Microsoft-Windows-DiskDiagnosticResolver" -Disable $true [cite: 1737, 1738]
-Restore-Task -Path "\Microsoft\Windows\Customer Experience Improvement Program\" -Name "Consolidator" [cite: 1747, 1748]
-Restore-Task -Path "\Microsoft\Windows\Customer Experience Improvement Program\" -Name "Uploader" [cite: 1757, 1758]
-Restore-Task -Path "\Microsoft\Windows\Customer Experience Improvement Program\Server\" -Name "ServerCeipAssistant" [cite: 1767, 1768]
+Restore-Task -Path "\Microsoft\Windows\Autochk\" -Name "Proxy"
+Restore-Task -Path "\Microsoft\Windows\Customer Experience Improvement Program\" -Name "KernelCeipTask"
+Restore-Task -Path "\Microsoft\Windows\Customer Experience Improvement Program\" -Name "BthSQM"
+Restore-Task -Path "\Microsoft\Windows\DiskDiagnostic\" -Name "Microsoft-Windows-DiskDiagnosticDataCollector"
+Restore-Task -Path "\Microsoft\Windows\DiskDiagnostic\" -Name "Microsoft-Windows-DiskDiagnosticResolver" -Disable $true
+Restore-Task -Path "\Microsoft\Windows\Customer Experience Improvement Program\" -Name "Consolidator"
+Restore-Task -Path "\Microsoft\Windows\Customer Experience Improvement Program\" -Name "Uploader"
+Restore-Task -Path "\Microsoft\Windows\Customer Experience Improvement Program\Server\" -Name "ServerCeipAssistant"
 Restore-Task -Path "\Microsoft\Windows\Customer Experience Improvement Program\Server\" -Name "ServerRoleCollector"
 Restore-Task -Path "\Microsoft\Windows\Customer Experience Improvement Program\Server\" -Name "ServerRoleUsageCollector"
 Restore-Task -Path "\Microsoft\Windows\Application Experience\" -Name "Microsoft Compatibility Appraiser"
@@ -6704,11 +6274,10 @@ Restore-Task -Path "\Microsoft\Windows\Application Experience\" -Name "Microsoft
 Write-Host "`n-> Memulihkan Layanan Telemetri (Services)..." -ForegroundColor Cyan
 
 # Mengembalikan DiagTrack (Connected User Experiences and Telemetry) ke Automatic dan dijalankan
-Restore-Service -Name "DiagTrack" -StartupType "Automatic" -Start $true [cite: 1492]
+Restore-Service -Name "DiagTrack" -StartupType "Automatic" -Start $true
 
 # Mengembalikan dmwappushservice ke Manual (Default Windows)
-Restore-Service -Name "dmwappushservice" -StartupType "Manual" [cite: 1536]
-
+Restore-Service -Name "dmwappushservice" -StartupType "Manual"
 
 # ---------------------------------------------------------------------
 # SELESAI
@@ -7377,8 +6946,8 @@ Write-Host "=================================================" -ForegroundColor 
                             $revertScript | Out-File -FilePath $tempPs1 -Encoding utf8
                             
                             # Menjalankan PowerShell secara TERBUKA (Tidak Hidden)
-                            $psArgs = "-NoProfile -ExecutionPolicy Bypass -File `"$tempPs1`""
-                            Start-Process "powershell.exe" -ArgumentList $psArgs -Wait
+                            $psArgs = "-NoExit -NoProfile -ExecutionPolicy Bypass -File `"$tempPs1`""
+                            Start-Process "powershell.exe" -ArgumentList $psArgs -Verb RunAs -Wait
                             
                             # Pembersihan file temporary
                             Remove-Item -Path $tempPs1 -Force -ErrorAction SilentlyContinue
@@ -7509,6 +7078,123 @@ function Action-RepSource {
     }
 }
 
+# =========================================================================
+# ACTIONS: SYSTEM REPAIR (FITUR BARU)
+# =========================================================================
+
+function Action-RepBlueScreen {
+    Write-Log "Action Triggered: Open BlueScreenView (Auto-Download & Clean)"
+    
+    $url = "https://www.nirsoft.net/utils/bluescreenview-x64.zip"
+    $zipPath = "$env:TEMP\bluescreenview_x64.zip"
+    $extractDir = "$env:TEMP\BlueScreenView_Temp"
+    $exePath = "$extractDir\BlueScreenView.exe"
+
+    $msg = "Aplikasi BlueScreenView akan diunduh otomatis secara aman dari NirSoft (~130 KB), lalu dijalankan.`n`nSetelah Anda selesai menggunakannya dan MENUTUP aplikasinya, semua file temporary akan LANGSUNG DIHAPUS BERSIH dari PC.`n`nLanjutkan?"
+    
+    if ([System.Windows.Forms.MessageBox]::Show($msg, "BlueScreenView Portabel", "YesNo", "Information") -eq "Yes") {
+        Write-Log "Preparing download environment..."
+        
+        try {
+            # Bersihkan sisa-sisa folder lama jika sebelumnya pernah ada error terputus
+            if (Test-Path $extractDir) { Remove-Item $extractDir -Recurse -Force -ErrorAction SilentlyContinue }
+            if (Test-Path $zipPath) { Remove-Item $zipPath -Force -ErrorAction SilentlyContinue }
+
+            Write-Log "Downloading BlueScreenView x64..."
+            # Memastikan protokol TLS 1.2 aktif agar download tidak diblokir Windows
+            [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
+            Invoke-WebRequest -Uri $url -OutFile $zipPath -UseBasicParsing
+
+            Write-Log "Extracting package..."
+            Expand-Archive -Path $zipPath -DestinationPath $extractDir -Force
+
+            if (Test-Path $exePath) {
+                Write-Log "Launching BlueScreenView..."
+                # Jalankan program dan ambil data prosesnya (PID)
+                $process = Start-Process -FilePath $exePath -PassThru
+
+                # TRICK UTAMA: Jalankan PowerShell tersembunyi di background untuk memantau kapan aplikasi ditutup
+                # Jika aplikasi ditutup, background script akan menghapus folder & zip temporary-nya.
+                $cleanupCmd = "Wait-Process -Id $($process.Id); Start-Sleep -Seconds 2; Remove-Item -Path '$extractDir' -Recurse -Force -ErrorAction SilentlyContinue; Remove-Item -Path '$zipPath' -Force -ErrorAction SilentlyContinue"
+                Start-Process powershell -ArgumentList "-NoProfile -WindowStyle Hidden -Command `"$cleanupCmd`""
+
+                Write-Log "BlueScreenView running. Cleanup monitor scheduled successfully."
+                [System.Windows.Forms.MessageBox]::Show("BlueScreenView berhasil dijalankan!`n`nSilakan lakukan analisa crash dump Anda. Jika sudah selesai, cukup tutup jendela BlueScreenView, dan sistem akan menghapus file sisa otomatis.", "Sukses", "OK", "Information")
+            } else {
+                throw "File BlueScreenView.exe tidak ditemukan di dalam paket ekstraksi."
+            }
+
+        } catch {
+            Write-Log "Error during BlueScreenView execution: $($_.Exception.Message)"
+            $errIcon = [System.Windows.Forms.MessageBoxIcon]::Error
+            [System.Windows.Forms.MessageBox]::Show("Gagal mengunduh atau mengekstrak BlueScreenView.`nPastikan PC Anda terhubung ke internet.`n`nDetail Error: $($_.Exception.Message)", "Error", "OK", $errIcon)
+        }
+    } else {
+        Write-Log "Process Cancelled: User aborted BlueScreenView auto-run."
+    }
+}
+
+# Fitur 5: Reset Windows Policy
+function Action-RepResetPolicy {
+    Write-Log "Action Triggered: Reset Windows Policy"
+    $msg = "Proses ini akan menghapus semua konfigurasi Local Group Policy (GPO) dan mengembalikannya ke bawaan pabrik.`nSangat berguna jika fitur Windows Anda dikunci oleh virus.`n`nLanjutkan proses reset?"
+    
+    if ([System.Windows.Forms.MessageBox]::Show($msg, "Konfirmasi Reset Policy", "YesNo", "Warning") -eq "Yes") {
+        Write-Log "Process Started: Resetting Group Policy..."
+        
+        # Menghapus folder konfigurasi GPO lalu melakukan gpupdate secara paksa
+        $cmd = "RD /S /Q `"%WinDir%\System32\GroupPolicyUsers`" & RD /S /Q `"%WinDir%\System32\GroupPolicy`" & gpupdate /force & echo. & echo RESET POLICY SELESAI! & pause"
+        Start-Process cmd -ArgumentList "/c title Waroeng Tools - Reset Policy && $cmd" -Verb RunAs
+    } else {
+        Write-Log "Process Cancelled: User aborted Reset Policy."
+    }
+}
+
+# Fitur 11: Restart File Explorer
+function Action-RepRestartExplorer {
+    Write-Log "Action Triggered: Restart File Explorer"
+    try {
+        Stop-Process -Name "explorer" -Force -ErrorAction SilentlyContinue
+        Write-Log "Success: Explorer process stopped."
+        
+        # Jeda sejenak untuk memberi waktu Windows memproses kill command
+        Start-Sleep -Seconds 1
+        
+        # Windows biasanya akan merestart otomatis, tapi jika tidak, kita pancing
+        if (!(Get-Process -Name "explorer" -ErrorAction SilentlyContinue)) {
+            Start-Process "explorer.exe"
+        }
+    } catch {
+        Write-Log "Failed: Unable to restart File Explorer. $($_.Exception.Message)"
+        [System.Windows.Forms.MessageBox]::Show("Gagal merestart File Explorer.", "Error", "OK", "Error")
+    }
+}
+
+# Fitur 16: Memory Diagnostic (mdsched.exe)
+function Action-RepMemoryDiag {
+    Write-Log "Action Triggered: Launch Windows Memory Diagnostic"
+    try {
+        Start-Process "mdsched.exe"
+        Write-Log "Success: mdsched.exe launched."
+    } catch {
+        Write-Log "Failed: Unable to launch Memory Diagnostic."
+        [System.Windows.Forms.MessageBox]::Show("Gagal membuka Windows Memory Diagnostic.", "Error", "OK", "Error")
+    }
+}
+
+# Fitur 18: Advanced Startup Options
+function Action-RepAdvStartup {
+    Write-Log "Action Triggered: Reboot to Advanced Startup Options"
+    $msg = "Komputer akan segera direstart secara paksa untuk masuk ke menu Advanced Startup (Safe Mode, System Restore, Startup Repair, dll).`n`nPastikan semua pekerjaan/data Anda sudah di-save.`n`nLanjutkan Restart sekarang?"
+    
+    if ([System.Windows.Forms.MessageBox]::Show($msg, "Konfirmasi Advanced Startup", "YesNo", "Warning") -eq "Yes") {
+        Write-Log "Process Started: Initiating reboot to Advanced Startup..."
+        Start-Process "shutdown.exe" -ArgumentList "/r /o /f /t 0" -NoNewWindow
+    } else {
+        Write-Log "Process Cancelled: User aborted Advanced Startup reboot."
+    }
+}
+
 function Render-SystemRepair {
     $contentPanel.Controls.Clear()
     $cP = if ($global:IsDarkMode) { $ThemePalettes.Dark } else { $ThemePalettes.Light }
@@ -7542,7 +7228,7 @@ function Render-SystemRepair {
     $bannerCard.Controls.Add($lblTitle)
 
     $lblSubTitle = New-Object System.Windows.Forms.Label
-    $lblSubTitle.Text = "Perbaiki file sistem Windows yang korup, error disk, atau kerusakan komponen (SFC & DISM)."
+    $lblSubTitle.Text = "Pusat perbaikan file sistem Windows, memori, dan recovery OS dari kerusakan tingkat lanjut."
     $lblSubTitle.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Regular)
     $lblSubTitle.ForeColor = [System.Drawing.Color]::LightGray
     $lblSubTitle.AutoSize = $true
@@ -7551,25 +7237,28 @@ function Render-SystemRepair {
 
     $pnlMain.Controls.Add($bannerCard)
 
-    # --- 2. GRID UNTUK ACTION CARDS ---
+    # --- 2. GRID UNTUK ACTION CARDS (DIUBAH MENJADI 2 KOLOM) ---
     $flpCards = New-Object System.Windows.Forms.FlowLayoutPanel
-    $flpCards.Location = New-Object System.Drawing.Point(25, 160)
-    $flpCards.Size = New-Object System.Drawing.Size(770, 0)
+    $flpCards.Location = New-Object System.Drawing.Point(30, 160)
+    $flpCards.Width = 735 # Dikunci sesuai lebar banner agar pas 2 kartu
+    $flpCards.MaximumSize = New-Object System.Drawing.Size(735, 0)
     $flpCards.AutoSize = $true
     $flpCards.AutoSizeMode = "GrowAndShrink"
     $flpCards.AutoScroll = $false 
-    $flpCards.FlowDirection = "TopDown"
-    $flpCards.WrapContents = $false
+    $flpCards.FlowDirection = "LeftToRight" # Kiri ke kanan
+    $flpCards.WrapContents = $true # Bungkus ke bawah jika tidak muat
+    $flpCards.Padding = New-Object System.Windows.Forms.Padding(0, 0, 0, 40)
 
-    # --- HELPER FUNCTION UNTUK KARTU TOMBOL (ANTI-ERROR HOVER) ---
+    # --- HELPER FUNCTION UNTUK KARTU TOMBOL ---
     function Create-ActionCard ($Title, $Desc, $IconCode, $ColorName, $ActionScript) {
         $card = New-Object System.Windows.Forms.Panel
-        $card.Size = New-Object System.Drawing.Size(735, 90)
-        $card.Margin = New-Object System.Windows.Forms.Padding(5, 5, 15, 10)
+        # Ukuran kartu diperkecil agar muat 2 baris
+        $card.Size = New-Object System.Drawing.Size(350, 110)
+        $card.Margin = New-Object System.Windows.Forms.Padding(0, 10, 15, 10)
         $card.BackColor = $cP.Card
         $card.Cursor = [System.Windows.Forms.Cursors]::Hand
 
-        $rad = 15
+        $rad = 12
         $path = New-Object System.Drawing.Drawing2D.GraphicsPath
         $path.AddArc(0, 0, $rad, $rad, 180, 90)
         $path.AddArc($card.Width - $rad, 0, $rad, $rad, 270, 90)
@@ -7582,29 +7271,31 @@ function Render-SystemRepair {
         $ico.Text = [char]$IconCode
         $ico.Font = New-Object System.Drawing.Font("Segoe MDL2 Assets", 24)
         $ico.AutoSize = $true
-        $ico.Location = New-Object System.Drawing.Point(20, 25)
+        $ico.Location = New-Object System.Drawing.Point(15, 30)
         try { $ico.ForeColor = [System.Drawing.Color]::FromName($ColorName) } catch { $ico.ForeColor = $cP.Accent }
         $card.Controls.Add($ico)
 
         $lTitle = New-Object System.Windows.Forms.Label
         $lTitle.Text = $Title
-        $lTitle.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
+        $lTitle.Font = New-Object System.Drawing.Font("Segoe UI", 11, [System.Drawing.FontStyle]::Bold)
         $lTitle.ForeColor = $cP.Text
-        $lTitle.Location = New-Object System.Drawing.Point(80, 20)
-        $lTitle.AutoSize = $true
+        $lTitle.Location = New-Object System.Drawing.Point(65, 15)
+        $lTitle.Size = New-Object System.Drawing.Size(270, 25)
+        $lTitle.AutoSize = $false
+        $lTitle.AutoEllipsis = $true
         $card.Controls.Add($lTitle)
 
         $lSub = New-Object System.Windows.Forms.Label
         $lSub.Text = $Desc
         $lSub.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Regular)
         $lSub.ForeColor = [System.Drawing.Color]::Gray
-        $lSub.Location = New-Object System.Drawing.Point(80, 48)
-        $lSub.Size = New-Object System.Drawing.Size(630, 20)
+        $lSub.Location = New-Object System.Drawing.Point(65, 42)
+        $lSub.Size = New-Object System.Drawing.Size(270, 55)
         $lSub.AutoSize = $false
         $lSub.AutoEllipsis = $true
         $card.Controls.Add($lSub)
 
-        # Efek Hover (Dievaluasi Real-Time agar bebas error)
+        # Efek Hover
         $card.Add_MouseEnter({ $this.BackColor = if ($global:IsDarkMode) { [System.Drawing.Color]::FromArgb(45, 45, 55) } else { [System.Drawing.Color]::FromArgb(235, 235, 235) } })
         $card.Add_MouseLeave({ $this.BackColor = if ($global:IsDarkMode) { [System.Drawing.Color]::FromArgb(30, 30, 35) } else { [System.Drawing.Color]::White } })
 
@@ -7628,7 +7319,12 @@ function Render-SystemRepair {
     # --- 3. MEMASUKKAN TOMBOL ACTION ---
     $flpCards.Controls.Add((Create-ActionCard "Standard System Repair" "Jalankan SFC /Scannow & DISM Online Repair secara berurutan. (Rekomendasi Utama)" 0xE90F "DeepSkyBlue" { Action-RepStandard }))
     $flpCards.Controls.Add((Create-ActionCard "Check Disk (CHKDSK)" "Periksa drive sistem (C:) dari error filesystem. Membutuhkan Restart PC." 0xE7F1 "Orange" { Action-RepChkdsk }))
-    $flpCards.Controls.Add((Create-ActionCard "Repair with Custom Source" "Jalankan DISM menggunakan file 'install.wim' lokal. Gunakan jika Standard Repair gagal." 0xE88E "MediumOrchid" { Action-RepSource }))
+    $flpCards.Controls.Add((Create-ActionCard "Custom Source Repair" "Jalankan DISM menggunakan file 'install.wim' lokal. (Bila Standard gagal)." 0xE88E "MediumOrchid" { Action-RepSource }))
+    $flpCards.Controls.Add((Create-ActionCard "Restart File Explorer" "Solusi instan mengatasi taskbar/desktop yang tiba-tiba freeze atau blank." 0xE72C "DodgerBlue" { Action-RepRestartExplorer }))
+    $flpCards.Controls.Add((Create-ActionCard "Reset Windows Policy" "Kembalikan Local Group Policy ke bawaan pabrik. Berguna memulihkan efek virus." 0xE777 "MediumSeaGreen" { Action-RepResetPolicy }))
+    $flpCards.Controls.Add((Create-ActionCard "Diagnosa BlueScreen" "Buka utilitas BlueScreenView untuk mengetahui penyebab PC crash/BSOD." 0xE78C "Crimson" { Action-RepBlueScreen }))
+    $flpCards.Controls.Add((Create-ActionCard "Memory Diagnostic" "Jalankan mdsched.exe untuk mengecek apakah RAM Anda rusak atau bermasalah." 0xE9A1 "DarkOrange" { Action-RepMemoryDiag }))
+    $flpCards.Controls.Add((Create-ActionCard "Advanced Startup" "Restart paksa ke menu Safe Mode, Startup Repair, atau System Restore." 0xE826 "SlateGray" { Action-RepAdvStartup }))
 
     $pnlMain.Controls.Add($flpCards)
     $contentPanel.Controls.Add($pnlMain)
@@ -7695,6 +7391,53 @@ function Action-ReportDxDiag {
     Start-Process "dxdiag.exe"
 }
 
+function Action-ReportBattery {
+    Write-Log "Aksi Dipicu Pengguna memulai ekspor Laporan Baterai"
+    
+    $msg = "Proses ini akan menghasilkan laporan detail kondisi dan kesehatan baterai laptop Anda (HTML) lalu menyimpannya di Desktop.`n`nLanjutkan?"
+    if ([System.Windows.Forms.MessageBox]::Show($msg, "Konfirmasi Ekspor", "YesNo", "Information") -eq "Yes") {
+        Write-Log "Proses Dimulai Membuat Laporan Baterai"
+        $desktopPath = [Environment]::GetFolderPath("Desktop")
+        $fileName = "Battery_Report.html"
+        $fullPath = Join-Path $desktopPath $fileName
+        
+        $form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
+        try {
+            Start-Process "powercfg" -ArgumentList "/batteryreport /output `"$fullPath`"" -Wait -WindowStyle Hidden
+            $form.Cursor = [System.Windows.Forms.Cursors]::Default
+            
+            if (Test-Path $fullPath) {
+                Write-Log "Sukses Laporan Baterai berhasil dibuat"
+                [System.Windows.Forms.MessageBox]::Show("Laporan Baterai berhasil disimpan di Desktop!", "Sukses", "OK", "Information")
+                Invoke-Item $fullPath
+            } else {
+                Write-Log "Gagal Laporan Baterai gagal dibuat"
+                [System.Windows.Forms.MessageBox]::Show("Gagal membuat laporan baterai. Pastikan perangkat Anda memiliki baterai.", "Error", "OK", "Error")
+            }
+        } catch {
+            $form.Cursor = [System.Windows.Forms.Cursors]::Default
+            Write-Log "Gagal Terjadi kesalahan saat membuat laporan baterai"
+            [System.Windows.Forms.MessageBox]::Show("Terjadi kesalahan sistem.", "Error", "OK", "Error")
+        }
+    } else {
+        Write-Log "Proses Dibatalkan Pengguna membatalkan ekspor baterai"
+    }
+}
+
+# Fitur Baru: View Active Connections
+function Action-ReportNetstat {
+    Write-Log "Aksi Dipicu Pengguna melihat koneksi internet aktif"
+    
+    $msg = "Akan membuka jendela Command Prompt berisi daftar seluruh koneksi jaringan (Netstat) untuk mengecek port aktif dan mendeteksi indikasi aktivitas mencurigakan.`n`nLanjutkan?"
+    if ([System.Windows.Forms.MessageBox]::Show($msg, "Informasi Jaringan", "YesNo", "Information") -eq "Yes") {
+        Write-Log "Proses Dimulai Membuka netstat"
+        # Menjalankan netstat dan menahan jendela tetap terbuka dengan /k
+        Start-Process "cmd.exe" -ArgumentList "/k netstat -ano"
+    } else {
+        Write-Log "Proses Dibatalkan Pengguna membatalkan cek koneksi"
+    }
+}
+
 function Render-SystemReport {
     $contentPanel.Controls.Clear()
     $cP = if ($global:IsDarkMode) { $ThemePalettes.Dark } else { $ThemePalettes.Light }
@@ -7702,7 +7445,7 @@ function Render-SystemReport {
     $pnlMain = New-Object System.Windows.Forms.Panel
     $pnlMain.Dock = "Fill"
     $pnlMain.BackColor = $cP.Bg
-    $pnlMain.AutoScroll = $true # SCROLL UTAMA HALAMAN
+    $pnlMain.AutoScroll = $true 
 
     # --- 1. HEADER BANNER ---
     $bannerCard = New-Object System.Windows.Forms.Panel
@@ -7728,7 +7471,7 @@ function Render-SystemReport {
     $bannerCard.Controls.Add($lblTitle)
 
     $lblSubTitle = New-Object System.Windows.Forms.Label
-    $lblSubTitle.Text = "Ekspor laporan mendetail mengenai komponen Hardware dan Software (MSINFO & DxDiag)."
+    $lblSubTitle.Text = "Ekspor laporan mendetail mengenai komponen Hardware dan Software."
     $lblSubTitle.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Regular)
     $lblSubTitle.ForeColor = [System.Drawing.Color]::LightGray
     $lblSubTitle.AutoSize = $true
@@ -7737,21 +7480,25 @@ function Render-SystemReport {
 
     $pnlMain.Controls.Add($bannerCard)
 
-    # --- 2. GRID UNTUK ACTION CARDS ---
+# --- 2. GRID UNTUK ACTION CARDS (UBAH KE 2 KOLOM) ---
     $flpCards = New-Object System.Windows.Forms.FlowLayoutPanel
     $flpCards.Location = New-Object System.Drawing.Point(25, 160)
-    $flpCards.Size = New-Object System.Drawing.Size(770, 0)
+    $flpCards.Size = New-Object System.Drawing.Size(750, 0)
+    
+    # TAMBAHKAN BARIS INI: Batas maksimal lebar agar kartu dipaksa turun ke bawah
+    $flpCards.MaximumSize = New-Object System.Drawing.Size(750, 0) 
+    
     $flpCards.AutoSize = $true
     $flpCards.AutoSizeMode = "GrowAndShrink"
     $flpCards.AutoScroll = $false 
-    $flpCards.FlowDirection = "TopDown"
-    $flpCards.WrapContents = $false
+    $flpCards.FlowDirection = "LeftToRight"
+    $flpCards.WrapContents = $true
 
-    # --- HELPER FUNCTION UNTUK KARTU TOMBOL (ANTI-ERROR HOVER) ---
     function Create-ActionCard ($Title, $Desc, $IconCode, $ColorName, $ActionScript) {
         $card = New-Object System.Windows.Forms.Panel
-        $card.Size = New-Object System.Drawing.Size(735, 90)
-        $card.Margin = New-Object System.Windows.Forms.Padding(5, 5, 15, 10)
+        # UBAH UKURAN KARTU MENJADI LEBIH KECIL (355x100)
+        $card.Size = New-Object System.Drawing.Size(355, 100)
+        $card.Margin = New-Object System.Windows.Forms.Padding(5, 5, 10, 10)
         $card.BackColor = $cP.Card
         $card.Cursor = [System.Windows.Forms.Cursors]::Hand
 
@@ -7768,15 +7515,17 @@ function Render-SystemReport {
         $ico.Text = [char]$IconCode
         $ico.Font = New-Object System.Drawing.Font("Segoe MDL2 Assets", 24)
         $ico.AutoSize = $true
-        $ico.Location = New-Object System.Drawing.Point(20, 25)
+        # Posisi ikon digeser sedikit ke kiri (dari 15 ke 12)
+        $ico.Location = New-Object System.Drawing.Point(12, 25)
         try { $ico.ForeColor = [System.Drawing.Color]::FromName($ColorName) } catch { $ico.ForeColor = $cP.Accent }
         $card.Controls.Add($ico)
 
         $lTitle = New-Object System.Windows.Forms.Label
         $lTitle.Text = $Title
-        $lTitle.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
+        $lTitle.Font = New-Object System.Drawing.Font("Segoe UI", 11, [System.Drawing.FontStyle]::Bold)
         $lTitle.ForeColor = $cP.Text
-        $lTitle.Location = New-Object System.Drawing.Point(80, 20)
+        # Posisi teks judul digeser lebih ke kanan (dari 70 ke 85)
+        $lTitle.Location = New-Object System.Drawing.Point(85, 15)
         $lTitle.AutoSize = $true
         $card.Controls.Add($lTitle)
 
@@ -7784,13 +7533,14 @@ function Render-SystemReport {
         $lSub.Text = $Desc
         $lSub.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Regular)
         $lSub.ForeColor = [System.Drawing.Color]::Gray
-        $lSub.Location = New-Object System.Drawing.Point(80, 48)
-        $lSub.Size = New-Object System.Drawing.Size(630, 20)
+        # Posisi teks deskripsi digeser lebih ke kanan (dari 70 ke 85)
+        $lSub.Location = New-Object System.Drawing.Point(85, 40)
+        # Lebar area deskripsi disesuaikan agar tetap muat di dalam kartu
+        $lSub.Size = New-Object System.Drawing.Size(255, 50)
         $lSub.AutoSize = $false
         $lSub.AutoEllipsis = $true
         $card.Controls.Add($lSub)
 
-        # Efek Hover (Dievaluasi Real-Time agar bebas error)
         $card.Add_MouseEnter({ $this.BackColor = if ($global:IsDarkMode) { [System.Drawing.Color]::FromArgb(45, 45, 55) } else { [System.Drawing.Color]::FromArgb(235, 235, 235) } })
         $card.Add_MouseLeave({ $this.BackColor = if ($global:IsDarkMode) { [System.Drawing.Color]::FromArgb(30, 30, 35) } else { [System.Drawing.Color]::White } })
 
@@ -7812,8 +7562,10 @@ function Render-SystemReport {
     }
 
     # --- 3. MEMASUKKAN TOMBOL ACTION ---
-    $flpCards.Controls.Add((Create-ActionCard "Export Full System Report (.NFO)" "Generate laporan mendetail tentang Hardware & Software via MSINFO32 ke Desktop." 0xF0E3 "Teal" { Action-ReportNFO }))
-    $flpCards.Controls.Add((Create-ActionCard "Open DirectX Diagnostic (DxDiag)" "Membuka alat DxDiag untuk melihat driver Grafis, Suara, dan Input." 0xE968 "CornflowerBlue" { Action-ReportDxDiag }))
+    $flpCards.Controls.Add((Create-ActionCard "Export Full NFO" "Generate laporan tentang Hardware Software via MSINFO32 ke Desktop." 0xF0E3 "Teal" { Action-ReportNFO }))
+    $flpCards.Controls.Add((Create-ActionCard "DirectX Diagnostic" "Membuka alat DxDiag untuk melihat driver Grafis Suara dan Input." 0xE968 "CornflowerBlue" { Action-ReportDxDiag }))
+    $flpCards.Controls.Add((Create-ActionCard "Battery Health Info" "Melihat kapasitas dan daya tahan baterai lalu membukanya otomatis." 0xEC02 "LimeGreen" { Action-ReportBattery }))
+    $flpCards.Controls.Add((Create-ActionCard "Active Connections" "Cek koneksi internet aktif untuk mendeteksi malware atau port bahaya." 0xE839 "DarkOrange" { Action-ReportNetstat }))
 
     $pnlMain.Controls.Add($flpCards)
     $contentPanel.Controls.Add($pnlMain)
@@ -7991,6 +7743,41 @@ function Action-BackupDriver {
     }
 }
 
+function Action-BackupPolicy {
+    Write-Log "Aksi Dipicu Pengguna memulai Backup Group Policy"
+    
+    $msg = "Fitur ini akan menyalin folder pengaturan Local Group Policy Anda ke Desktop agar aman jika sewaktu waktu terjadi kerusakan saat diubah.`n`nLanjutkan?"
+    if ([System.Windows.Forms.MessageBox]::Show($msg, "Konfirmasi Backup Policy", "YesNo", "Information") -eq "Yes") {
+        
+        $desktopPath = [Environment]::GetFolderPath("Desktop")
+        $dateStr = Get-Date -Format "yyyyMMdd_HHmm"
+        $backupDir = Join-Path $desktopPath "WaroengPolicyBackup_$dateStr"
+        
+        Write-Log "Proses Dimulai Mencadangkan Group Policy"
+        $form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
+        
+        try {
+            $gpPath = "$env:SystemRoot\System32\GroupPolicy"
+            if (Test-Path $gpPath) {
+                Copy-Item -Path $gpPath -Destination $backupDir -Recurse -Force
+                $form.Cursor = [System.Windows.Forms.Cursors]::Default
+                Write-Log "Sukses Backup Group Policy berhasil"
+                [System.Windows.Forms.MessageBox]::Show("Backup Policy berhasil diamankan di Desktop!`nFolder: $backupDir", "Sukses", "OK", "Information")
+            } else {
+                $form.Cursor = [System.Windows.Forms.Cursors]::Default
+                Write-Log "Gagal Folder Group Policy tidak ditemukan"
+                [System.Windows.Forms.MessageBox]::Show("Folder Group Policy bawaan sistem tidak ditemukan.", "Info", "OK", "Information")
+            }
+        } catch {
+            $form.Cursor = [System.Windows.Forms.Cursors]::Default
+            Write-Log "Gagal Terjadi kesalahan saat mencadangkan Group Policy"
+            [System.Windows.Forms.MessageBox]::Show("Gagal mencadangkan Policy. Pastikan Anda menjalankan program sebagai Administrator.", "Error", "OK", "Error")
+        }
+    } else {
+        Write-Log "Proses Dibatalkan Pengguna membatalkan Backup Group Policy"
+    }
+}
+
 function Render-BackupRestore {
     $contentPanel.Controls.Clear()
     $cP = if ($global:IsDarkMode) { $ThemePalettes.Dark } else { $ThemePalettes.Light }
@@ -7998,7 +7785,7 @@ function Render-BackupRestore {
     $pnlMain = New-Object System.Windows.Forms.Panel
     $pnlMain.Dock = "Fill"
     $pnlMain.BackColor = $cP.Bg
-    $pnlMain.AutoScroll = $true # SCROLL UTAMA HALAMAN
+    $pnlMain.AutoScroll = $true 
 
     # --- 1. HEADER BANNER ---
     $bannerCard = New-Object System.Windows.Forms.Panel
@@ -8016,7 +7803,7 @@ function Render-BackupRestore {
     $bannerCard.Region = New-Object System.Drawing.Region($banPath)
 
     $lblTitle = New-Object System.Windows.Forms.Label
-    $lblTitle.Text = "Backup / Restore Center"
+    $lblTitle.Text = "Backup dan Restore Center"
     $lblTitle.Font = New-Object System.Drawing.Font("Segoe UI", 18, [System.Drawing.FontStyle]::Bold)
     $lblTitle.ForeColor = [System.Drawing.Color]::White
     $lblTitle.AutoSize = $true
@@ -8024,7 +7811,7 @@ function Render-BackupRestore {
     $bannerCard.Controls.Add($lblTitle)
 
     $lblSubTitle = New-Object System.Windows.Forms.Label
-    $lblSubTitle.Text = "Amankan data personal dan ekspor driver sistem sebelum melakukan install ulang Windows."
+    $lblSubTitle.Text = "Amankan data personal dan ekspor driver sistem sebelum instal ulang."
     $lblSubTitle.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Regular)
     $lblSubTitle.ForeColor = [System.Drawing.Color]::LightGray
     $lblSubTitle.AutoSize = $true
@@ -8033,21 +7820,25 @@ function Render-BackupRestore {
 
     $pnlMain.Controls.Add($bannerCard)
 
-    # --- 2. GRID UNTUK ACTION CARDS ---
+  # --- 2. GRID UNTUK ACTION CARDS (UBAH KE 2 KOLOM) ---
     $flpCards = New-Object System.Windows.Forms.FlowLayoutPanel
     $flpCards.Location = New-Object System.Drawing.Point(25, 160)
-    $flpCards.Size = New-Object System.Drawing.Size(770, 0)
+    $flpCards.Size = New-Object System.Drawing.Size(750, 0)
+    
+    # TAMBAHKAN BARIS INI: Batas maksimal lebar agar kartu dipaksa turun ke bawah
+    $flpCards.MaximumSize = New-Object System.Drawing.Size(750, 0) 
+    
     $flpCards.AutoSize = $true
     $flpCards.AutoSizeMode = "GrowAndShrink"
     $flpCards.AutoScroll = $false 
-    $flpCards.FlowDirection = "TopDown"
-    $flpCards.WrapContents = $false
+    $flpCards.FlowDirection = "LeftToRight"
+    $flpCards.WrapContents = $true
 
-    # --- HELPER FUNCTION UNTUK KARTU TOMBOL (ANTI-ERROR HOVER) ---
     function Create-ActionCard ($Title, $Desc, $IconCode, $ColorName, $ActionScript) {
         $card = New-Object System.Windows.Forms.Panel
-        $card.Size = New-Object System.Drawing.Size(735, 90)
-        $card.Margin = New-Object System.Windows.Forms.Padding(5, 5, 15, 10)
+        # UBAH UKURAN KARTU MENJADI LEBIH KECIL (355x100)
+        $card.Size = New-Object System.Drawing.Size(355, 100)
+        $card.Margin = New-Object System.Windows.Forms.Padding(5, 5, 10, 10)
         $card.BackColor = $cP.Card
         $card.Cursor = [System.Windows.Forms.Cursors]::Hand
 
@@ -8064,15 +7855,15 @@ function Render-BackupRestore {
         $ico.Text = [char]$IconCode
         $ico.Font = New-Object System.Drawing.Font("Segoe MDL2 Assets", 24)
         $ico.AutoSize = $true
-        $ico.Location = New-Object System.Drawing.Point(20, 25)
+        $ico.Location = New-Object System.Drawing.Point(15, 25)
         try { $ico.ForeColor = [System.Drawing.Color]::FromName($ColorName) } catch { $ico.ForeColor = $cP.Accent }
         $card.Controls.Add($ico)
 
         $lTitle = New-Object System.Windows.Forms.Label
         $lTitle.Text = $Title
-        $lTitle.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
+        $lTitle.Font = New-Object System.Drawing.Font("Segoe UI", 11, [System.Drawing.FontStyle]::Bold)
         $lTitle.ForeColor = $cP.Text
-        $lTitle.Location = New-Object System.Drawing.Point(80, 20)
+        $lTitle.Location = New-Object System.Drawing.Point(70, 15)
         $lTitle.AutoSize = $true
         $card.Controls.Add($lTitle)
 
@@ -8080,13 +7871,13 @@ function Render-BackupRestore {
         $lSub.Text = $Desc
         $lSub.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Regular)
         $lSub.ForeColor = [System.Drawing.Color]::Gray
-        $lSub.Location = New-Object System.Drawing.Point(80, 48)
-        $lSub.Size = New-Object System.Drawing.Size(630, 20)
+        $lSub.Location = New-Object System.Drawing.Point(70, 40)
+        # SESUAIKAN AREA TEKS DESKRIPSI
+        $lSub.Size = New-Object System.Drawing.Size(270, 50)
         $lSub.AutoSize = $false
         $lSub.AutoEllipsis = $true
         $card.Controls.Add($lSub)
 
-        # Efek Hover (Dievaluasi Real-Time agar bebas error)
         $card.Add_MouseEnter({ $this.BackColor = if ($global:IsDarkMode) { [System.Drawing.Color]::FromArgb(45, 45, 55) } else { [System.Drawing.Color]::FromArgb(235, 235, 235) } })
         $card.Add_MouseLeave({ $this.BackColor = if ($global:IsDarkMode) { [System.Drawing.Color]::FromArgb(30, 30, 35) } else { [System.Drawing.Color]::White } })
 
@@ -8108,9 +7899,10 @@ function Render-BackupRestore {
     }
 
     # --- 3. MEMASUKKAN TOMBOL ACTION ---
-    $flpCards.Controls.Add((Create-ActionCard "Backup Personal Data" "Menyalin file Documents, Downloads, Pictures, dsb. ke folder tujuan yang aman." 0xE74E "DeepSkyBlue" { Action-BackupData }))
-    $flpCards.Controls.Add((Create-ActionCard "Restore Personal Data" "Mengembalikan file dari folder backup (WaroengBackup_...) ke profil User Anda saat ini." 0xE7A7 "LimeGreen" { Action-RestoreData }))
+    $flpCards.Controls.Add((Create-ActionCard "Backup Personal Data" "Menyalin file pribadi dari dokumen foto musik ke folder tujuan yang aman." 0xE74E "DeepSkyBlue" { Action-BackupData }))
+    $flpCards.Controls.Add((Create-ActionCard "Restore Personal Data" "Mengembalikan file dari folder backup Waroeng ke profil User Anda saat ini." 0xE7A7 "LimeGreen" { Action-RestoreData }))
     $flpCards.Controls.Add((Create-ActionCard "Backup System Drivers" "Mengekspor semua driver yang terinstall agar bisa digunakan ulang nanti." 0xE772 "Orange" { Action-BackupDriver }))
+    $flpCards.Controls.Add((Create-ActionCard "Backup Windows Policy" "Mengamankan aturan Group Policy sebelum Anda merubah konfigurasi sistem." 0xE72E "MediumPurple" { Action-BackupPolicy }))
 
     $pnlMain.Controls.Add($flpCards)
     $contentPanel.Controls.Add($pnlMain)
@@ -8211,12 +8003,12 @@ function Get-Note-Error3e3 {
 
 Lakukan langkah manual via Registry Editor:
 
-[1] Tekan tombol Logo Windows + R -> Ketik: REGEDIT -> Enter.
+[1] Tekan tombol Logo Windows + R lalu Ketik: REGEDIT lalu Enter.
 
 [2] Arahkan ke lokasi berikut:
     HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Print\Environments\Windows x64\Drivers\Version-3\Merk_Tipe_Printer_Kamu
 
-    *Catatan: Ganti 'Merk_Tipe_Printer_Kamu' dengan nama folder driver printer yang bermasalah.
+    Catatan: Ganti 'Merk_Tipe_Printer_Kamu' dengan nama folder driver printer yang bermasalah.
 
 [3] Cari key bernama "PrinterDriverAttributes"
 
@@ -8254,7 +8046,7 @@ SOLUSI: Load Driver Intel RST (Rapid Storage Technology) manual.
     - Salin folder hasil ekstrak (D:\RST) ke dalam USB installer Windows.
       Bisa ke folder Drivers, atau langsung di root USB.
     - Saat instalasi Windows dan SSD tidak terdeteksi, klik:
-      Load driver / Browse / Pilih folder Intel RST yang kamu salin tadi / pilih file dengan format .inf
+      Load driver lalu Browse lalu Pilih folder Intel RST yang kamu salin tadi lalu pilih file dengan format .inf
     - Windows akan memuat driver, dan SSD akan muncul.
 
 [4] Catatan Tambahan:
@@ -8270,12 +8062,12 @@ function Get-Note-LOQ {
       SETTING SETUP UNDERVOLT LENOVO LOQ
 =====================================================
 
---- BAGIAN 1: THROTTLESTOP ---
+BAGIAN 1: THROTTLESTOP
 
 [1] Aktifkan Pengaturan BIOS
     - Masuk BIOS (F2/Del).
-    - Cari & Aktifkan: 'Legion Optimization' / 'Unlock Overclocking'.
-    - Save & Exit.
+    - Cari dan Aktifkan: 'Legion Optimization' atau 'Unlock Overclocking'.
+    - Save dan Exit.
 
 [2] Konfigurasi FIVR (Voltage)
     - Buka ThrottleStop (Run as Admin).
@@ -8284,25 +8076,25 @@ function Get-Note-LOQ {
       Jika tertulis Unlocked atau Undervolt Protection, berarti ada pengaturan BIOS lain yang belum diaktifkan.
 
     Lakukan pada (CPU Core), (CPU P Cache), dan (CPU E Cache):
-      -> Centang 'Unlock Adjustable Voltage'
-      -> Range: Pilih '250 mV'
-      -> Offset Voltage: Set ke '-135.7 mV' (atau sesuaikan stabilitas)
+      Centang 'Unlock Adjustable Voltage'
+      Range: Pilih '250 mV'
+      Offset Voltage: Set ke '-135.7 mV' (atau sesuaikan stabilitas)
     
     - Pilih 'OK - Save voltage after ThrottleStop exits'.
-    - Klik Apply -> OK.
+    - Klik Apply lalu OK.
 
 [3] Atur Power Limits (TPL)
     - Klik tombol 'TPL'.
     - Uncheck 'Disable Controls'.
     - Di bagian Clamp, ubah angka jadi 45.
-    - Apply -> OK.
+    - Apply lalu OK.
 
---- BAGIAN 2: MSI AFTERBURNER (GPU) ---
+BAGIAN 2: MSI AFTERBURNER (GPU)
 
 [1] Curve Editor
-    - Buka MSI Afterburner -> Settings.
-    - Tab General -> Uncheck 'Unlock voltage control'.
-    - Kembali ke menu utama -> Tekan 'Ctrl + F' (Curve Editor).
+    - Buka MSI Afterburner lalu Settings.
+    - Tab General lalu Uncheck 'Unlock voltage control'.
+    - Kembali ke menu utama lalu Tekan 'Ctrl + F' (Curve Editor).
     - Cari titik Voltage di '925 mV' atau '900 mV' (beda orang beda racikan).
     - Tekan Shift lalu klik titik voltage nya lalu tarik titik tersebut naik (Frequency) sekitar '+229 MHz'.
     - Kalau sudah tekan Shift dan klik Enter 2x 
@@ -8355,10 +8147,64 @@ Gunakan perintah ini saat instalasi Windows 11 memaksa koneksi internet/akun Mic
        taskkill /F /IM oobenetworkconnectionflow.exe
 
     D. Metode Akun Lokal
-        start ms-cxh:localonly
+       start ms-cxh:localonly
 
 [3] Jika Keyboard tidak muncul?
     Aktifkan On-Screen Keyboard: Ctrl + Windows + O
+"@
+}
+
+function Get-Note-ResetPassword {
+    return @"
+=========================================================
+  CARA RESET PASSWORD WINDOWS (TANPA APLIKASI TAMBAHAN)
+=========================================================
+
+[+] TAHAP 1: MENGGANTI UTILMAN DENGAN CMD
+[1] Di layar Login, tahan tombol Shift di keyboard, lalu klik tombol Power di pojok kanan bawah layar dan pilih Restart.
+
+[2] Setelah masuk ke menu layar biru, pilih menu Troubleshoot, lanjut ke Advanced Options, lalu pilih Command Prompt.
+
+[3] Di dalam layar hitam Command Prompt, ketik perintah berikut satu per satu dan tekan Enter setiap selesai mengetik satu baris:
+    c:
+    cd windows
+    cd system32
+    ren utilman.exe utilman1.exe
+    ren cmd.exe utilman.exe
+    exit
+
+[4] Setelah keluar dari CMD, pilih Continue untuk merestart komputer.
+
+========================================================================================
+
+[+] TAHAP 2: PROSES RESET PASSWORD
+[1] Setelah komputer menyala dan kembali ke layar Login, klik ikon Accessibility di pojok kanan bawah layar. Tombol ini sekarang akan membuka CMD.
+
+[2] Di jendela CMD yang muncul, ketik perintah berikut lalu tekan Enter:
+    control userpasswords2
+
+[3] Jendela User Accounts akan terbuka. Pilih nama akun kamu, lalu klik tombol Reset Password.
+
+[4] Masukkan password baru kamu (atau kosongkan jika tidak ingin memakai password), klik OK, lalu tutup semua jendela.
+
+[5] Silakan login ke Windows menggunakan password baru tersebut.
+
+========================================================================================
+
+[+]TAHAP 3: MENGEMBALIKAN SETTINGAN KE AWAL (PENTING)
+[1] Setelah berhasil masuk ke desktop, ulangi cara pertama yaitu tahan tombol Shift lalu klik Restart.
+
+[2] Pilih menu Troubleshoot, lanjut ke Advanced Options, lalu pilih Command Prompt.
+
+[3] Ketik perintah berikut satu per satu dan tekan Enter di setiap barisnya:
+    c:
+    cd windows
+    cd system32
+    ren utilman.exe cmd.exe
+    ren utilman1.exe utilman.exe
+    exit
+
+[4] Terakhir pilih Continue untuk merestart komputer. Selesai.
 "@
 }
 
@@ -8422,9 +8268,13 @@ function Render-AddSettings {
     # --- 2. CONTAINER FLOW (Untuk isi menunya nanti) ---
     $flowGrid = New-Object System.Windows.Forms.FlowLayoutPanel
     $flowGrid.Location = New-Object System.Drawing.Point(30, 160)
-    $flowGrid.Size = New-Object System.Drawing.Size(735, 400) # Bisa disesuaikan
-    $flowGrid.Anchor = "Top, Bottom, Left, Right"
-    $flowGrid.AutoScroll = $true
+    $flowGrid.Width = 735
+    
+    # PERBAIKAN: Mengunci lebar maksimal di 735, dan membiarkan tinggi (0) memanjang tanpa batas
+    $flowGrid.MaximumSize = New-Object System.Drawing.Size(735, 0)
+    
+    $flowGrid.AutoSize = $true
+    $flowGrid.AutoScroll = $false 
     $flowGrid.Padding = New-Object System.Windows.Forms.Padding(0)
     $pnlMain.Controls.Add($flowGrid)
 
@@ -8481,6 +8331,7 @@ function Render-AddSettings {
     Add-GuideCard "Lenovo LOQ Undervolt" "Panduan ThrottleStop & Afterburner untuk suhu laptop lebih dingin." 0xE945 "Tomato" { Show-NoteWindow "Undervolt Guide" (Get-Note-LOQ) }
     Add-GuideCard "Printer Credentials" "Username & Password yang benar untuk akses printer sharing." 0xE8D7 "Goldenrod" { Show-NoteWindow "Credential Guide" (Get-Note-Credential) }
     Add-GuideCard "Bypass Windows Setup" "Cara melewati kewajiban akun Microsoft saat instalasi Windows 11." 0xE775 "RoyalBlue" { Show-NoteWindow "Bypass Guide" (Get-Note-Bypass) }
+    Add-GuideCard "Reset Windows Password" "Trik membypass utilman untuk reset akun lokal via layar login." 0xE72E "MediumPurple" { Show-NoteWindow "Reset Password Guide" (Get-Note-ResetPassword) }
     
     $contentPanel.Controls.Add($pnlMain)
 }
@@ -8644,6 +8495,174 @@ function Action-CreateRestorePoint {
     [System.Windows.Forms.Cursor]::Current = [System.Windows.Forms.Cursors]::Default
 }
 
+# =========================================================================
+# ACTIONS: FITUR BARU OTHER TOOLS
+# =========================================================================
+
+# 1. Buka Windows Features
+function Action-ToolWinFeatures {
+    Write-Log "Opening Windows Features panel..."
+    Start-Process "optionalfeatures.exe"
+}
+
+# 7. Hibernation Enable/Disable
+function Action-ToolHiberEnable {
+    Write-Log "Enabling Hibernation..."
+    try {
+        Start-Process "powercfg.exe" -ArgumentList "-h on" -Wait -NoNewWindow -WindowStyle Hidden
+        Write-Log "Success: Hibernation Enabled."
+        [System.Windows.Forms.MessageBox]::Show("Hibernasi berhasil diaktifkan.", "Success", "OK", "Information")
+    } catch {
+        Write-Log "Failed to enable Hibernation."
+        [System.Windows.Forms.MessageBox]::Show("Gagal mengaktifkan hibernasi.", "Error", "OK", "Error")
+    }
+}
+
+function Action-ToolHiberDisable {
+    Write-Log "Disabling Hibernation..."
+    try {
+        Start-Process "powercfg.exe" -ArgumentList "-h off" -Wait -NoNewWindow -WindowStyle Hidden
+        Write-Log "Success: Hibernation Disabled."
+        [System.Windows.Forms.MessageBox]::Show("Hibernasi berhasil dimatikan (File hiberfil.sys telah dihapus).", "Success", "OK", "Information")
+    } catch {
+        Write-Log "Failed to disable Hibernation."
+        [System.Windows.Forms.MessageBox]::Show("Gagal mematikan hibernasi.", "Error", "OK", "Error")
+    }
+}
+
+# 8. Superfetch (SysMain) Enable/Disable
+function Action-ToolSysMainEnable {
+    Write-Log "Enabling SysMain (Superfetch)..."
+    try {
+        Set-Service -Name "SysMain" -StartupType Automatic
+        Start-Service -Name "SysMain" -ErrorAction SilentlyContinue
+        Write-Log "Success: SysMain Enabled."
+        [System.Windows.Forms.MessageBox]::Show("Layanan SysMain (Superfetch) berhasil diaktifkan.", "Success", "OK", "Information")
+    } catch {
+        Write-Log "Failed to enable SysMain."
+        [System.Windows.Forms.MessageBox]::Show("Gagal mengaktifkan SysMain.", "Error", "OK", "Error")
+    }
+}
+
+function Action-ToolSysMainDisable {
+    Write-Log "Disabling SysMain (Superfetch)..."
+    try {
+        Stop-Service -Name "SysMain" -Force -ErrorAction SilentlyContinue
+        Set-Service -Name "SysMain" -StartupType Disabled
+        Write-Log "Success: SysMain Disabled."
+        [System.Windows.Forms.MessageBox]::Show("Layanan SysMain (Superfetch) berhasil dimatikan.", "Success", "OK", "Information")
+    } catch {
+        Write-Log "Failed to disable SysMain."
+        [System.Windows.Forms.MessageBox]::Show("Gagal mematikan SysMain.", "Error", "OK", "Error")
+    }
+}
+
+# 9. HAGS (Hardware-Accelerated GPU Scheduling) Enable/Disable
+function Action-ToolHAGSEnable {
+    Write-Log "Enabling HAGS..."
+    $regPath = "HKLM:\SYSTEM\CurrentControlSet\Control\GraphicsDrivers"
+    try {
+        if (!(Test-Path $regPath)) { New-Item -Path $regPath -Force | Out-Null }
+        Set-ItemProperty -Path $regPath -Name "HwSchMode" -Value 2 -Type DWord -Force
+        Write-Log "Success: HAGS Enabled (Registry)."
+        [System.Windows.Forms.MessageBox]::Show("HAGS berhasil diaktifkan. Anda harus RESTART komputer untuk menerapkan perubahan.", "Success", "OK", "Information")
+    } catch {
+        Write-Log "Failed to enable HAGS."
+        [System.Windows.Forms.MessageBox]::Show("Gagal mengubah registry HAGS.", "Error", "OK", "Error")
+    }
+}
+
+function Action-ToolHAGSDisable {
+    Write-Log "Disabling HAGS..."
+    $regPath = "HKLM:\SYSTEM\CurrentControlSet\Control\GraphicsDrivers"
+    try {
+        if (!(Test-Path $regPath)) { New-Item -Path $regPath -Force | Out-Null }
+        Set-ItemProperty -Path $regPath -Name "HwSchMode" -Value 1 -Type DWord -Force
+        Write-Log "Success: HAGS Disabled (Registry)."
+        [System.Windows.Forms.MessageBox]::Show("HAGS berhasil dimatikan. Anda harus RESTART komputer untuk menerapkan perubahan.", "Success", "OK", "Information")
+    } catch {
+        Write-Log "Failed to disable HAGS."
+        [System.Windows.Forms.MessageBox]::Show("Gagal mengubah registry HAGS.", "Error", "OK", "Error")
+    }
+}
+
+# =========================================================================
+# ACTIONS: POWER & BOOT OPTIONS
+# =========================================================================
+
+# 17. Masuk BIOS / UEFI
+function Action-ToolBios {
+    Write-Log "Initiating reboot to BIOS/UEFI..."
+    $confirm = [System.Windows.Forms.MessageBox]::Show("PC akan direstart sekarang dan langsung masuk ke pengaturan BIOS / UEFI. Pastikan Anda sudah menyimpan semua pekerjaan.`n`nLanjutkan?", "Konfirmasi Restart ke BIOS", "YesNo", "Warning")
+    
+    if ($confirm -eq "Yes") {
+        try {
+            Start-Process "shutdown.exe" -ArgumentList "/r /fw /t 1" -NoNewWindow -Wait
+        } catch {
+            Write-Log "Failed to boot to BIOS: $($_.Exception.Message)"
+            [System.Windows.Forms.MessageBox]::Show("Gagal mengeksekusi perintah. Pastikan motherboard Anda mendukung fitur UEFI Boot.", "Error", "OK", "Error")
+        }
+    }
+}
+
+# 19. Force Shutdown
+function Action-ToolForceShutdown {
+    Write-Log "Initiating Force Shutdown..."
+    $confirm = [System.Windows.Forms.MessageBox]::Show("PERINGATAN: PC akan dimatikan SECARA PAKSA.`nData pada aplikasi yang sedang berjalan dan belum di-save akan hilang.`n`nYakin ingin mematikan PC sekarang?", "Konfirmasi Force Shutdown", "YesNo", "Error")
+    
+    if ($confirm -eq "Yes") {
+        Start-Process "shutdown.exe" -ArgumentList "/s /f /t 0" -NoNewWindow
+    }
+}
+
+# 20. Force Restart
+function Action-ToolForceRestart {
+    Write-Log "Initiating Force Restart..."
+    $confirm = [System.Windows.Forms.MessageBox]::Show("PERINGATAN: PC akan direstart SECARA PAKSA.`nData pada aplikasi yang sedang berjalan dan belum di-save akan hilang.`n`nYakin ingin merestart PC sekarang?", "Konfirmasi Force Restart", "YesNo", "Error")
+    
+    if ($confirm -eq "Yes") {
+        Start-Process "shutdown.exe" -ArgumentList "/r /f /t 0" -NoNewWindow
+    }
+}
+
+# Fitur 3: Bersihkan Clear Standby List (Otomatis Download & Hapus)
+function Action-ToolClearStandby {
+    Write-Log "Action Triggered: Clear Standby List (Auto-Download & Clean)"
+    
+    $url = "https://github.com/stefanpejcic/EmptyStandbyList/raw/refs/heads/master/EmptyStandbyList.exe"
+    $exePath = "$env:TEMP\EmptyStandbyList.exe"
+
+    Write-Log "Preparing to clear standby memory..."
+    
+    try {
+        # Pastikan sisa file lama dibersihkan jika sebelumnya ada error
+        if (Test-Path $exePath) { Remove-Item $exePath -Force -ErrorAction SilentlyContinue }
+
+        Write-Log "Downloading EmptyStandbyList.exe..."
+        [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
+        Invoke-WebRequest -Uri $url -OutFile $exePath -UseBasicParsing
+
+        if (Test-Path $exePath) {
+            Write-Log "Executing EmptyStandbyList..."
+            
+            # Eksekusi dengan argumen 'standbylist' dan tunggu (-Wait) sampai prosesnya benar-benar selesai
+            Start-Process -FilePath $exePath -ArgumentList "standbylist" -NoNewWindow -Wait
+            
+            # TRICK ZERO WASTE: Begitu proses di atas selesai, baris ini langsung menghapus file exe-nya
+            Remove-Item -Path $exePath -Force -ErrorAction SilentlyContinue
+            Write-Log "Cleanup successful. File deleted."
+
+            [System.Windows.Forms.MessageBox]::Show("Standby List (Cache RAM) berhasil dibersihkan!`n`nFile utilitas juga sudah langsung dihapus tanpa sisa.", "Sukses", "OK", "Information")
+        } else {
+            throw "File EmptyStandbyList.exe gagal disimpan ke folder Temp."
+        }
+    } catch {
+        Write-Log "Error executing Clear Standby List: $($_.Exception.Message)"
+        $errIcon = [System.Windows.Forms.MessageBoxIcon]::Error
+        [System.Windows.Forms.MessageBox]::Show("Gagal mengunduh atau menjalankan EmptyStandbyList.`nPastikan PC terhubung ke internet.`n`nDetail Error: $($_.Exception.Message)", "Error", "OK", $errIcon)
+    }
+}
+
 function Render-OtherTools {
     $contentPanel.Controls.Clear()
     $cP = if ($global:IsDarkMode) { $ThemePalettes.Dark } else { $ThemePalettes.Light }
@@ -8662,7 +8681,7 @@ function Render-OtherTools {
         $ctrl.Region = New-Object System.Drawing.Region($p)
     }
 
-    # PANEL UTAMA (Scroll vertical dikunci di sini)
+    # PANEL UTAMA
     $pnlMain = New-Object System.Windows.Forms.Panel
     $pnlMain.Dock = "Fill"
     $pnlMain.BackColor = $cP.Bg
@@ -8701,24 +8720,23 @@ function Render-OtherTools {
 
     $pnlMain.Controls.Add($bannerCard)
 
-    # --- 2. CONTAINER FLOW (KUNCI PERBAIKAN DI SINI) ---
+    # --- 2. CONTAINER FLOW ---
     $flowGrid = New-Object System.Windows.Forms.FlowLayoutPanel
     $flowGrid.Location = New-Object System.Drawing.Point(30, 160)
     $flowGrid.Width = 735
-    # Trik Utama: Kunci lebar maksimal di 735 agar kartu otomatis membungkus (wrap) ke bawah
     $flowGrid.MaximumSize = New-Object System.Drawing.Size(735, 0) 
-    $flowGrid.WrapContents = $true       # Memastikan fitur bungkus baris aktif
-    $flowGrid.AutoSize = $true           # Biar memanjang ke bawah mengikuti jumlah baris kartu
+    $flowGrid.WrapContents = $true       
+    $flowGrid.AutoSize = $true           
     $flowGrid.AutoSizeMode = "GrowAndShrink"
-    $flowGrid.AutoScroll = $false        # Matikan scroll internal biar tidak bentrok
-    $flowGrid.Padding = New-Object System.Windows.Forms.Padding(0, 0, 0, 40) # Spasi extra di bawah agar tidak kepotong
+    $flowGrid.AutoScroll = $false        
+    $flowGrid.Padding = New-Object System.Windows.Forms.Padding(0, 0, 0, 40)
     $pnlMain.Controls.Add($flowGrid)
 
     # --- FUNCTION HELPER: CREATE CARD ---
     function Add-ToolCard ($Title, $Desc, $IconCode, $IconColor, $Action) {
         $card = New-Object System.Windows.Forms.Panel
         $card.Size = New-Object System.Drawing.Size(345, 100) 
-        $card.Margin = New-Object System.Windows.Forms.Padding(0, 10, 20, 10) # Jarak antar kartu yang presisi
+        $card.Margin = New-Object System.Windows.Forms.Padding(0, 10, 20, 10) 
         $card.BackColor = if ($global:IsDarkMode) {[System.Drawing.Color]::FromArgb(45, 45, 50)} else {[System.Drawing.Color]::White}
         $card.Cursor = "Hand"
 
@@ -8765,16 +8783,29 @@ function Render-OtherTools {
 
     # --- MENAMBAHKAN TOOLS BAWAAN ---
     Add-ToolCard "Delete Temp Files" "Bersihkan file sampah di C:\Windows\Temp dan %TEMP% user." 0xE74D "Crimson" { Action-ToolTemp } 
-    Add-ToolCard "Reset Network Stack" "Flush DNS, Reset Winsock, & Restart Adapter (Fix Internet)." 0xE909 "DodgerBlue" { Action-ToolNetReset } 
+    Add-ToolCard "Reset Network Stack" "Flush DNS, Reset Winsock, & Restart Adapter." 0xE909 "DodgerBlue" { Action-ToolNetReset } 
     Add-ToolCard "Printer Sharing Fix" "Aktifkan SMB1.0, Fix RPC 11b, & Restart Print Spooler." 0xE749 "Teal" { Action-ToolPrinter } 
     Add-ToolCard "Chrome Ext. Fix" "Paksa aktifkan Manifest V2 extensions via Registry Policy." 0xE774 "Goldenrod" { Action-ToolChrome } 
     Add-ToolCard "Enable GPEdit" "Install Group Policy Editor khusus untuk Windows Home Edition." 0xE7EF "MediumPurple" { Action-ToolGpEdit } 
     Add-ToolCard "Hardware Diagnostic" "Jalankan Windows MSDT untuk cek masalah perangkat keras." 0xE9D9 "MediumSeaGreen" { Action-ToolDiagnostic } 
+    Add-ToolCard "Disable Hyper-V (Off)" "Matikan Hypervisor via bcdedit." 0xEE3F "OrangeRed" { Action-HyperVDisable }
+    Add-ToolCard "Enable Hyper-V (Auto)" "Aktifkan kembali mesin virtualisasi bcdedit." 0xEE3F "LimeGreen" { Action-HyperVEnable }
+    Add-ToolCard "Create Restore Point" "Buat titik keamanan sistem sebelum tweaks." 0xE73E "DodgerBlue" { Action-CreateRestorePoint }
 
-    # --- MENAMBAHKAN KARTU HYPER-V & RESTORE POINT BARU ---
-    Add-ToolCard "Disable Hyper-V (Off)" "Matikan Hypervisor via bcdedit agar Game & Emulator berjalan lancar." 0xEE3F "OrangeRed" { Action-HyperVDisable }
-    Add-ToolCard "Enable Hyper-V (Auto)" "Aktifkan kembali mesin virtualisasi bcdedit untuk WSL, Docker, / VM." 0xEE3F "LimeGreen" { Action-HyperVEnable }
-    Add-ToolCard "Create Restore Point" "Buat titik keamanan sistem (Safety Guard) saat ini sebelum tweaks ekstrem." 0xE73E "DodgerBlue" { Action-CreateRestorePoint }
+    # --- FITUR SISTEM ---
+    Add-ToolCard "Windows Features" "Buka panel untuk menambah/menghapus modul bawaan Windows." 0xE713 "SteelBlue" { Action-ToolWinFeatures }
+    Add-ToolCard "Enable Hibernation" "Aktifkan fitur Hibernasi dan Fast Startup (Powercfg)." 0xE708 "LimeGreen" { Action-ToolHiberEnable }
+    Add-ToolCard "Disable Hibernation" "Matikan Hibernasi untuk menghemat ruang SSD." 0xE708 "OrangeRed" { Action-ToolHiberDisable }
+    Add-ToolCard "Enable Superfetch" "Nyalakan layanan SysMain (Superfetch) untuk cache aplikasi." 0xE9A1 "LimeGreen" { Action-ToolSysMainEnable }
+    Add-ToolCard "Clear Standby List" "Bersihkan cache RAM (Standby Memory) yang menumpuk secara instan (Zero Waste)." 0xE9A1 "MediumSeaGreen" { Action-ToolClearStandby }
+    Add-ToolCard "Disable Superfetch" "Matikan SysMain. Cocok jika disk usage 100% di HDD." 0xE9A1 "OrangeRed" { Action-ToolSysMainDisable }
+    Add-ToolCard "Enable HAGS" "Aktifkan Hardware-Accelerated GPU Scheduling via Registry." 0xE9F5 "LimeGreen" { Action-ToolHAGSEnable }
+    Add-ToolCard "Disable HAGS" "Matikan Hardware-Accelerated GPU Scheduling via Registry." 0xE9F5 "OrangeRed" { Action-ToolHAGSDisable }
+
+    # --- FITUR POWER & BOOT (BARU) ---
+    Add-ToolCard "Masuk BIOS / UEFI" "Restart PC dan langsung menuju layar konfigurasi BIOS/UEFI." 0xE9A2 "MediumPurple" { Action-ToolBios }
+    Add-ToolCard "Force Restart" "Paksa mulai ulang PC seketika. (Abaikan program tertunda)." 0xE777 "OrangeRed" { Action-ToolForceRestart }
+    Add-ToolCard "Force Shutdown" "Paksa matikan PC seketika. (Abaikan program tertunda)." 0xE7E8 "Crimson" { Action-ToolForceShutdown }
 
     # SINKRONISASI RENDER LAYOUT
     $flowGrid.ResumeLayout()
@@ -8785,6 +8816,299 @@ function Render-OtherTools {
 
 # ========================================================
 # SELESAI RENDER OTHER TOOLS
+# ========================================================
+
+# ========================================================
+# MULAI RENDER NETWORK BOOT
+# ========================================================
+function Render-NetworkBootTools {
+    $contentPanel.Controls.Clear()
+    $cP = if ($global:IsDarkMode) { $ThemePalettes.Dark } else { $ThemePalettes.Light }
+    
+    $cardColor = if ($global:IsDarkMode) { [System.Drawing.Color]::FromArgb(35, 35, 40) } else { [System.Drawing.Color]::White }
+    $textColor = if ($global:IsDarkMode) { [System.Drawing.Color]::White } else { [System.Drawing.Color]::Black }
+
+    $softBlue  = [System.Drawing.Color]::FromArgb(24, 119, 210) 
+    $softGray  = [System.Drawing.Color]::FromArgb(110, 120, 130) 
+    $softGreen = [System.Drawing.Color]::FromArgb(60, 160, 110)  
+    $softRed   = [System.Drawing.Color]::FromArgb(225, 95, 95)   
+    $softPurple = [System.Drawing.Color]::FromArgb(140, 90, 210)
+
+    # --- HELPER: PELENGKUNG SUDUT ---
+    $SetRounded = {
+        param($ctrl, $r)
+        if ($ctrl.Width -le 0 -or $ctrl.Height -le 0) { return }
+        $D = $r * 2
+        $p = New-Object System.Drawing.Drawing2D.GraphicsPath
+        $p.AddArc(0, 0, $D, $D, 180, 90)
+        $p.AddArc($ctrl.Width - $D, 0, $D, $D, 270, 90)
+        $p.AddArc($ctrl.Width - $D, $ctrl.Height - $D, $D, $D, 0, 90)
+        $p.AddArc(0, $ctrl.Height - $D, $D, $D, 90, 90)
+        $p.CloseAllFigures()
+        $ctrl.Region = New-Object System.Drawing.Region($p)
+    }
+
+    $pnlMain = New-Object System.Windows.Forms.Panel
+    $pnlMain.Dock = "Fill"
+    $pnlMain.BackColor = $cP.Bg
+    $pnlMain.AutoScroll = $true
+
+    # --- 1. HEADER BANNER ---
+    $bannerCard = New-Object System.Windows.Forms.Panel
+    $bannerCard.Size = New-Object System.Drawing.Size(735, 100)
+    $bannerCard.Location = New-Object System.Drawing.Point(30, 30)
+    $bannerCard.BackColor = $cP.Header 
+    
+    $lblTitle = New-Object System.Windows.Forms.Label
+    $lblTitle.Text = "Network dan Boot Tools"
+    $lblTitle.Font = New-Object System.Drawing.Font("Segoe UI", 18, [System.Drawing.FontStyle]::Bold)
+    $lblTitle.ForeColor = [System.Drawing.Color]::White
+    $lblTitle.AutoSize = $true
+    $lblTitle.Location = New-Object System.Drawing.Point(25, 20)
+    $bannerCard.Controls.Add($lblTitle)
+
+    $lblSub = New-Object System.Windows.Forms.Label
+    $lblSub.Text = "Konfigurasi DNS Utama & Cadangan, Uji Kecepatan, dan Pembuatan USB Bootable."
+    $lblSub.Font = New-Object System.Drawing.Font("Segoe UI", 10)
+    $lblSub.ForeColor = [System.Drawing.Color]::LightGray
+    $lblSub.AutoSize = $true
+    $lblSub.Location = New-Object System.Drawing.Point(28, 55)
+    $bannerCard.Controls.Add($lblSub)
+    $pnlMain.Controls.Add($bannerCard)
+
+    $null = $bannerCard.Handle; &$SetRounded $bannerCard 15
+
+    # --- LIST DATA DNS SERVER (GLOBAL SCOPE) ---
+    $script:dnsServers = [ordered]@{
+        "Cloudflare" = @("1.1.1.1", "1.0.0.1")
+        "Google" = @("8.8.8.8", "8.8.4.4")
+        "ADGuard" = @("94.140.14.14", "94.140.15.15")
+        "Quad9" = @("9.9.9.9", "149.112.112.112")
+        "ControlD" = @("76.76.2.0", "76.76.10.0")
+        "Yandex" = @("77.88.8.8", "77.88.8.1")
+        "AhaDNS (NL)" = @("5.2.75.75", "")
+        "Privacy (SG)" = @("174.138.21.128", "")
+    }
+
+    # --- 2. KARTU PRIMARY DNS (KIRI) ---
+    $priCard = New-Object System.Windows.Forms.Panel
+    $priCard.BackColor = $cardColor
+    $priCard.Size = New-Object System.Drawing.Size(350, 100)
+    $priCard.Location = New-Object System.Drawing.Point(30, 150)
+
+    $lblPriIco = New-Object System.Windows.Forms.Label
+    $lblPriIco.Text = [char]0xE839; $lblPriIco.Font = New-Object System.Drawing.Font("Segoe MDL2 Assets", 14)
+    $lblPriIco.ForeColor = $softBlue; $lblPriIco.AutoSize = $true
+    $lblPriIco.Location = New-Object System.Drawing.Point(20, 18); $priCard.Controls.Add($lblPriIco)
+
+    $lblPriTitle = New-Object System.Windows.Forms.Label
+    $lblPriTitle.Text = "Primary DNS"; $lblPriTitle.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
+    $lblPriTitle.ForeColor = $textColor; $lblPriTitle.AutoSize = $true
+    $lblPriTitle.Location = New-Object System.Drawing.Point(50, 15); $priCard.Controls.Add($lblPriTitle)
+
+    $script:comboPri = New-Object System.Windows.Forms.ComboBox
+    $script:comboPri.Location = New-Object System.Drawing.Point(25, 52); $script:comboPri.Size = New-Object System.Drawing.Size(300, 30)
+    $script:comboPri.Font = New-Object System.Drawing.Font("Segoe UI", 11); $script:comboPri.DropDownStyle = "DropDownList"
+    foreach ($key in $script:dnsServers.Keys) { [void]$script:comboPri.Items.Add($key) }
+    if ($script:comboPri.Items.Count -gt 0) { $script:comboPri.SelectedIndex = 0 }
+    $priCard.Controls.Add($script:comboPri)
+
+    $pnlMain.Controls.Add($priCard)
+    $null = $priCard.Handle; &$SetRounded $priCard 12
+
+    # --- 3. KARTU ALTERNATE DNS (KANAN) ---
+    $altCard = New-Object System.Windows.Forms.Panel
+    $altCard.BackColor = $cardColor
+    $altCard.Size = New-Object System.Drawing.Size(365, 100)
+    $altCard.Location = New-Object System.Drawing.Point(400, 150)
+
+    $lblAltIco = New-Object System.Windows.Forms.Label
+    $lblAltIco.Text = [char]0xE839; $lblAltIco.Font = New-Object System.Drawing.Font("Segoe MDL2 Assets", 14)
+    $lblAltIco.ForeColor = $softPurple; $lblAltIco.AutoSize = $true
+    $lblAltIco.Location = New-Object System.Drawing.Point(20, 18); $altCard.Controls.Add($lblAltIco)
+
+    $lblAltTitle = New-Object System.Windows.Forms.Label
+    $lblAltTitle.Text = "Alternate DNS"; $lblAltTitle.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
+    $lblAltTitle.ForeColor = $textColor; $lblAltTitle.AutoSize = $true
+    $lblAltTitle.Location = New-Object System.Drawing.Point(50, 15); $altCard.Controls.Add($lblAltTitle)
+
+    $script:comboAlt = New-Object System.Windows.Forms.ComboBox
+    $script:comboAlt.Location = New-Object System.Drawing.Point(25, 52); $script:comboAlt.Size = New-Object System.Drawing.Size(315, 30)
+    $script:comboAlt.Font = New-Object System.Drawing.Font("Segoe UI", 11); $script:comboAlt.DropDownStyle = "DropDownList"
+    foreach ($key in $script:dnsServers.Keys) { [void]$script:comboAlt.Items.Add($key) }
+    if ($script:comboAlt.Items.Count -gt 0) { $script:comboAlt.SelectedIndex = 0 }
+    $altCard.Controls.Add($script:comboAlt)
+
+    $pnlMain.Controls.Add($altCard)
+    $null = $altCard.Handle; &$SetRounded $altCard 12
+
+    # --- 4. KARTU TOMBOL AKSI DNS (TANPA DOH) ---
+    $actionCard = New-Object System.Windows.Forms.Panel
+    $actionCard.BackColor = $cardColor
+    $actionCard.Size = New-Object System.Drawing.Size(735, 80) 
+    $actionCard.Location = New-Object System.Drawing.Point(30, 265)
+
+    $lblActionInfo = New-Object System.Windows.Forms.Label
+    $lblActionInfo.Text = "Terapkan perubahan DNS secara global ke seluruh Adapter Jaringan aktif."
+    $lblActionInfo.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Italic)
+    $lblActionInfo.ForeColor = $softGray; $lblActionInfo.AutoSize = $true
+    $lblActionInfo.Location = New-Object System.Drawing.Point(20, 32) # Diturunkan sedikit agar seimbang
+    $actionCard.Controls.Add($lblActionInfo)
+
+    # Tombol Apply DNS
+    $btnSetDNS = New-Object System.Windows.Forms.Button
+    $btnSetDNS.Text = "Apply DNS"; $btnSetDNS.Location = New-Object System.Drawing.Point(440, 23)
+    $btnSetDNS.Size = New-Object System.Drawing.Size(130, 35); $btnSetDNS.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
+    $btnSetDNS.BackColor = $softBlue; $btnSetDNS.ForeColor = [System.Drawing.Color]::White; $btnSetDNS.FlatStyle = "Flat"; $btnSetDNS.FlatAppearance.BorderSize = 0; $btnSetDNS.Cursor = "Hand"
+    $btnSetDNS.Add_Click({
+        $priName = $script:comboPri.SelectedItem
+        $altName = $script:comboAlt.SelectedItem
+        $dnsArray = @()
+
+        if (-not [string]::IsNullOrEmpty($priName)) { $dnsArray += $script:dnsServers[$priName][0] }
+        if (-not [string]::IsNullOrEmpty($altName)) {
+            if ($priName -eq $altName) {
+                if ($script:dnsServers[$altName].Count -gt 1 -and $script:dnsServers[$altName][1] -ne "") {
+                    $dnsArray += $script:dnsServers[$altName][1]
+                }
+            } else { $dnsArray += $script:dnsServers[$altName][0] }
+        }
+
+        if ($dnsArray.Count -eq 0) { return }
+
+        try {
+            $adapters = Get-NetAdapter | Where-Object { $_.Status -eq "Up" }
+            if ($null -eq $adapters) {
+                [System.Windows.Forms.MessageBox]::Show("Tidak ada adapter jaringan aktif!", "Peringatan", 0, 48)
+                return
+            }
+
+            $success = $false
+            foreach ($adapter in $adapters) { 
+                # Mengubah IP DNS murni tanpa menyentuh enkripsi/netsh
+                Set-DnsClientServerAddress -InterfaceIndex $adapter.InterfaceIndex -ServerAddresses $dnsArray -ErrorAction SilentlyContinue
+                $success = $true
+            }
+            
+            if ($success) {
+                Clear-DnsClientCache -ErrorAction SilentlyContinue
+                Write-Log "DNS Berhasil diubah ke ($($dnsArray -join ', '))"
+                [System.Windows.Forms.MessageBox]::Show("DNS Berhasil diubah ke ($($dnsArray -join ', ')).`n`nPerubahan diterapkan secara instan.", "Sukses", 0, 64)
+            } else { 
+                [System.Windows.Forms.MessageBox]::Show("Gagal mengatur DNS.", "Error", 0, 16) 
+            }
+        } catch { 
+            [System.Windows.Forms.MessageBox]::Show("Terjadi Kesalahan: $($_.Exception.Message)", "Error", 0, 16) 
+        }
+    })
+    $actionCard.Controls.Add($btnSetDNS); $null = $btnSetDNS.Handle; &$SetRounded $btnSetDNS 6 
+
+    # Tombol Set Default (Reset DNS)
+    $btnResetDNS = New-Object System.Windows.Forms.Button
+    $btnResetDNS.Text = "Set Default"; $btnResetDNS.Location = New-Object System.Drawing.Point(585, 23)
+    $btnResetDNS.Size = New-Object System.Drawing.Size(125, 35); $btnResetDNS.Font = New-Object System.Drawing.Font("Segoe UI", 10)
+    $btnResetDNS.BackColor = $softGray; $btnResetDNS.ForeColor = [System.Drawing.Color]::White; $btnResetDNS.FlatStyle = "Flat"; $btnResetDNS.FlatAppearance.BorderSize = 0; $btnResetDNS.Cursor = "Hand"
+    $btnResetDNS.Add_Click({
+        try {
+            $adapters = Get-NetAdapter | Where-Object { $_.Status -eq "Up" }
+            $success = $false
+            foreach ($adapter in $adapters) { 
+                Set-DnsClientServerAddress -InterfaceIndex $adapter.InterfaceIndex -ResetServerAddresses -ErrorAction SilentlyContinue
+                $success = $true
+            }
+            if ($success) {
+                Clear-DnsClientCache -ErrorAction SilentlyContinue
+                Write-Log "DNS Berhasil dikembalikan ke Otomatis (DHCP)"
+                [System.Windows.Forms.MessageBox]::Show("DNS berhasil dikembalikan ke otomatis (DHCP).", "Sukses", 0, 64)
+            } else { 
+                [System.Windows.Forms.MessageBox]::Show("Gagal me-reset DNS.", "Error", 0, 16) 
+            }
+        } catch { 
+            [System.Windows.Forms.MessageBox]::Show("Terjadi Kesalahan: $($_.Exception.Message)", "Error", 0, 16) 
+        }
+    })
+    $actionCard.Controls.Add($btnResetDNS); $null = $btnResetDNS.Handle; &$SetRounded $btnResetDNS 6 
+
+    $pnlMain.Controls.Add($actionCard)
+    $null = $actionCard.Handle; &$SetRounded $actionCard 12
+
+    # --- 5. KARTU OOKLA SPEEDTEST ---
+    $speedCard = New-Object System.Windows.Forms.Panel
+    $speedCard.BackColor = $cardColor
+    $speedCard.Size = New-Object System.Drawing.Size(350, 110)
+    $speedCard.Location = New-Object System.Drawing.Point(30, 370) # Dinaikkan sedikit posisinya karena tinggi actionCard berkurang
+
+    $lblSpdIco = New-Object System.Windows.Forms.Label
+    $lblSpdIco.Text = [char]0xE8B6; $lblSpdIco.Font = New-Object System.Drawing.Font("Segoe MDL2 Assets", 14)
+    $lblSpdIco.ForeColor = $softGreen; $lblSpdIco.AutoSize = $true
+    $lblSpdIco.Location = New-Object System.Drawing.Point(20, 18); $speedCard.Controls.Add($lblSpdIco)
+
+    $lblSpdTitle = New-Object System.Windows.Forms.Label
+    $lblSpdTitle.Text = "Network Speedtest"; $lblSpdTitle.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
+    $lblSpdTitle.ForeColor = $textColor; $lblSpdTitle.AutoSize = $true
+    $lblSpdTitle.Location = New-Object System.Drawing.Point(50, 15); $speedCard.Controls.Add($lblSpdTitle)
+
+    $btnSpeedtest = New-Object System.Windows.Forms.Button
+    $btnSpeedtest.Text = "Jalankan Ookla CLI"; $btnSpeedtest.Location = New-Object System.Drawing.Point(25, 55)
+    $btnSpeedtest.Size = New-Object System.Drawing.Size(300, 35); $btnSpeedtest.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
+    $btnSpeedtest.BackColor = $softGreen; $btnSpeedtest.ForeColor = [System.Drawing.Color]::White; $btnSpeedtest.FlatStyle = "Flat"; $btnSpeedtest.FlatAppearance.BorderSize = 0; $btnSpeedtest.Cursor = "Hand"
+    $btnSpeedtest.Add_Click({
+        $this.Text = "Mendownload CLI..."; $this.Enabled = $false; [System.Windows.Forms.Application]::DoEvents()
+        try {
+            $tempDir = "$env:TEMP\OoklaSpeedtest"
+            if (-not (Test-Path $tempDir)) { New-Item -ItemType Directory -Path $tempDir | Out-Null }
+            $zipPath = "$tempDir\speedtest.zip"; $exePath = "$tempDir\speedtest.exe"
+            if (-not (Test-Path $exePath)) {
+                Invoke-WebRequest -Uri "https://install.speedtest.net/app/cli/ookla-speedtest-1.2.0-win64.zip" -OutFile $zipPath
+                Expand-Archive -Path $zipPath -DestinationPath $tempDir -Force
+            }
+            Write-Log "Menjalankan Ookla Speedtest CLI"
+            Start-Process cmd.exe -ArgumentList "/c title OOKLA SPEEDTEST && color 0A && echo Menguji kecepatan jaringan... && echo. && `"$exePath`" && echo. && pause"
+        } catch { [System.Windows.Forms.MessageBox]::Show("Gagal mengunduh atau menjalankan Speedtest.", "Error", 0, 16) }
+        $this.Text = "Jalankan Ookla CLI"; $this.Enabled = $true
+    })
+    $speedCard.Controls.Add($btnSpeedtest); $null = $btnSpeedtest.Handle; &$SetRounded $btnSpeedtest 8 
+
+    $pnlMain.Controls.Add($speedCard); $null = $speedCard.Handle; &$SetRounded $speedCard 12
+
+    # --- 6. KARTU USB BOOT CREATOR ---
+    $bootCard = New-Object System.Windows.Forms.Panel
+    $bootCard.BackColor = $cardColor
+    $bootCard.Size = New-Object System.Drawing.Size(365, 110)
+    $bootCard.Location = New-Object System.Drawing.Point(400, 370) 
+
+    $lblBootIco = New-Object System.Windows.Forms.Label
+    $lblBootIco.Text = [char]0xE88E; $lblBootIco.Font = New-Object System.Drawing.Font("Segoe MDL2 Assets", 14)
+    $lblBootIco.ForeColor = $softRed; $lblBootIco.AutoSize = $true
+    $lblBootIco.Location = New-Object System.Drawing.Point(20, 18); $bootCard.Controls.Add($lblBootIco)
+
+    $lblBootTitle = New-Object System.Windows.Forms.Label
+    $lblBootTitle.Text = "USB Boot Creator"; $lblBootTitle.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
+    $lblBootTitle.ForeColor = $textColor; $lblBootTitle.AutoSize = $true
+    $lblBootTitle.Location = New-Object System.Drawing.Point(50, 15); $bootCard.Controls.Add($lblBootTitle)
+
+    $btnBoot = New-Object System.Windows.Forms.Button
+    $btnBoot.Text = "Buka Rufus Portable"; $btnBoot.Location = New-Object System.Drawing.Point(25, 55)
+    $btnBoot.Size = New-Object System.Drawing.Size(315, 35); $btnBoot.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
+    $btnBoot.BackColor = $softRed; $btnBoot.ForeColor = [System.Drawing.Color]::White; $btnBoot.FlatStyle = "Flat"; $btnBoot.FlatAppearance.BorderSize = 0; $btnBoot.Cursor = "Hand"
+    $btnBoot.Add_Click({
+        $this.Text = "Membuka Rufus..."; $this.Enabled = $false; [System.Windows.Forms.Application]::DoEvents()
+        try {
+            $rufusPath = "$env:TEMP\rufus-portable.exe"
+            if (-not (Test-Path $rufusPath)) { Invoke-WebRequest -Uri "https://github.com/pbatard/rufus/releases/download/v4.4/rufus-4.4p.exe" -OutFile $rufusPath }
+            Write-Log "Membuka Rufus Portable"
+            Start-Process -FilePath $rufusPath
+        } catch { [System.Windows.Forms.MessageBox]::Show("Gagal mengunduh Rufus.", "Error", 0, 16) }
+        $this.Text = "Buka Rufus Portable"; $this.Enabled = $true
+    })
+    $bootCard.Controls.Add($btnBoot); $null = $btnBoot.Handle; &$SetRounded $btnBoot 8 
+
+    $pnlMain.Controls.Add($bootCard); $null = $bootCard.Handle; &$SetRounded $bootCard 12
+
+    $contentPanel.Controls.Add($pnlMain)
+}
+# ========================================================
+# SELESAI RENDER NETWORK BOOT
 # ========================================================
 
 function Navigate-To ($MenuName) {
@@ -8813,6 +9137,9 @@ function Navigate-To ($MenuName) {
         }
         "Windows Tweaks" {
             Render-WindowsTweaks
+        }
+        "Network / Boot" {
+            Render-NetworkBootTools
         }
         "System Repair" {
             Render-SystemRepair
@@ -8855,6 +9182,7 @@ $menuList = @(
     @{Title="Upgrade License";  Icon=0xE8D1},
     @{Title="Download ISO";     Icon=0xE896},
     @{Title="Windows Tweaks";   Icon=0xE82D},
+    @{Title="Network / Boot";   Icon=0xE839},
     @{Title="System Repair";    Icon=0xE90F},
     @{Title="System Report";    Icon=0xF167},
     @{Title="Backup / Restore"; Icon=0xE753},
