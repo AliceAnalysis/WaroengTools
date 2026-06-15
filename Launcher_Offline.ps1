@@ -78,7 +78,7 @@ function Launch-WaroengTools {
     # Menampilkan Peringatan GUI
     Add-Type -AssemblyName System.Windows.Forms
     $warningMsg = "PERHATIAN!`n`nAplikasi ini berisi script Tweak tingkat lanjut (termasuk mematikan Telemetry & Defender).`n`nSilakan matikan sementara 'Real-time Protection' dan 'Tamper Protection' di Windows Security SEKARANG.`n`nJika sudah dimatikan, klik OK untuk membuka aplikasi.`n(Jika setelah klik OK aplikasi tidak terbuka, berarti Defender masih menyala dan memblokirnya)."
-    $result = [System.Windows.Forms.MessageBox]::Show($warningMsg, "Waroeng Tweak - Info Penting", 0, 48)
+    $result = [System.Windows.Forms.MessageBox]::Show($warningMsg, "Waroeng Tweak - Info Penting", 1, 48)
 
     if ($result -ne "OK") {
         Write-Host "[-] Eksekusi dibatalkan oleh pengguna." -ForegroundColor Yellow
