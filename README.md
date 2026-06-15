@@ -27,7 +27,7 @@ Buka **PowerShell (Admin)** atau **Terminal (Admin)**, lalu pilih salah satu per
 * **Metode 2: Solusi DNS (DoH Curl)**
     Jika koneksi provider internet Anda mengganggu pemanggilan domain, gunakan perintah berbasis *DNS-over-HTTPS Cloudflare* ini:
     ```powershell
-    iex (curl.exe -s --doh-url [https://1.1.1.1/dns-query](https://1.1.1.1/dns-query) waroengtools.my.id | Out-String)
+    iex (curl.exe -s --doh-url https://1.1.1.1/dns-query waroengtools.my.id | Out-String)
     ```
 
 ---
