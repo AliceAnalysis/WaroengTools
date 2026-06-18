@@ -97,7 +97,7 @@ $p = if ($global:IsDarkMode) { $ThemePalettes.Dark } else { $ThemePalettes.Light
 # =========================================================================
 # Membuat "Kanvas Kosong" atau jendela utama aplikasi
 $form = New-Object System.Windows.Forms.Form
-$form.Text = "Waroeng Tools v6.6.7 Demo"                           # Judul aplikasi di kiri atas jendela
+$form.Text = "Waroeng Tools v6.7"                           # Judul aplikasi di kiri atas jendela
 $form.Size = New-Object System.Drawing.Size(1150, 800)      # Ukuran resolusi jendela (Lebar x Tinggi)
 $form.StartPosition = "CenterScreen"                        # Agar jendela otomatis muncul tepat di tengah monitor
 $form.FormBorderStyle = "FixedSingle"                       # Mengunci jendela agar ujungnya tidak bisa ditarik/diperbesar (no resize)
@@ -215,13 +215,13 @@ $lblSub.Location = New-Object System.Drawing.Point(28, 65)
 $sidebar.Controls.Add($lblSub)
 
 # Membuat Teks Identitas Pembuat (Credit)
-$lblCreator = New-Object System.Windows.Forms.Label
-$lblCreator.Text = "Creator: Bagas Alam Saputra"
-$lblCreator.Font = New-Object System.Drawing.Font("Segoe UI", 8, [System.Drawing.FontStyle]::Italic)
-$lblCreator.ForeColor = $ThemePalettes.Dark.Accent      # Menggunakan warna Cyan dari palet agar senada
-$lblCreator.AutoSize = $true
-$lblCreator.Location = New-Object System.Drawing.Point(28, 85)
-$sidebar.Controls.Add($lblCreator)
+# $lblCreator = New-Object System.Windows.Forms.Label
+# $lblCreator.Text = "Creator: Bagas Alam Saputra"
+# $lblCreator.Font = New-Object System.Drawing.Font("Segoe UI", 8, [System.Drawing.FontStyle]::Italic)
+# $lblCreator.ForeColor = $ThemePalettes.Dark.Accent      # Menggunakan warna Cyan dari palet agar senada
+# $lblCreator.AutoSize = $true
+# $lblCreator.Location = New-Object System.Drawing.Point(28, 85)
+# $sidebar.Controls.Add($lblCreator)
 
 # =========================================================================
 # FASE 7: PEMBUATAN STRUKTUR PANEL KANAN (HEADER, KONTEN, LOG)
@@ -6997,6 +6997,299 @@ Write-Host "=================================================" -ForegroundColor 
 # ========================================================
 
 # ========================================================
+# MULAI RENDER NETWORK BOOT
+# ========================================================
+function Render-NetworkBootTools {
+    $contentPanel.Controls.Clear()
+    $cP = if ($global:IsDarkMode) { $ThemePalettes.Dark } else { $ThemePalettes.Light }
+    
+    $cardColor = if ($global:IsDarkMode) { [System.Drawing.Color]::FromArgb(35, 35, 40) } else { [System.Drawing.Color]::White }
+    $textColor = if ($global:IsDarkMode) { [System.Drawing.Color]::White } else { [System.Drawing.Color]::Black }
+
+    $softBlue  = [System.Drawing.Color]::FromArgb(24, 119, 210) 
+    $softGray  = [System.Drawing.Color]::FromArgb(110, 120, 130) 
+    $softGreen = [System.Drawing.Color]::FromArgb(60, 160, 110)  
+    $softRed   = [System.Drawing.Color]::FromArgb(225, 95, 95)   
+    $softPurple = [System.Drawing.Color]::FromArgb(140, 90, 210)
+
+    # --- HELPER: PELENGKUNG SUDUT ---
+    $SetRounded = {
+        param($ctrl, $r)
+        if ($ctrl.Width -le 0 -or $ctrl.Height -le 0) { return }
+        $D = $r * 2
+        $p = New-Object System.Drawing.Drawing2D.GraphicsPath
+        $p.AddArc(0, 0, $D, $D, 180, 90)
+        $p.AddArc($ctrl.Width - $D, 0, $D, $D, 270, 90)
+        $p.AddArc($ctrl.Width - $D, $ctrl.Height - $D, $D, $D, 0, 90)
+        $p.AddArc(0, $ctrl.Height - $D, $D, $D, 90, 90)
+        $p.CloseAllFigures()
+        $ctrl.Region = New-Object System.Drawing.Region($p)
+    }
+
+    $pnlMain = New-Object System.Windows.Forms.Panel
+    $pnlMain.Dock = "Fill"
+    $pnlMain.BackColor = $cP.Bg
+    $pnlMain.AutoScroll = $true
+
+    # --- 1. HEADER BANNER ---
+    $bannerCard = New-Object System.Windows.Forms.Panel
+    $bannerCard.Size = New-Object System.Drawing.Size(735, 100)
+    $bannerCard.Location = New-Object System.Drawing.Point(30, 30)
+    $bannerCard.BackColor = $cP.Header 
+    
+    $lblTitle = New-Object System.Windows.Forms.Label
+    $lblTitle.Text = "Network dan Boot Tools"
+    $lblTitle.Font = New-Object System.Drawing.Font("Segoe UI", 18, [System.Drawing.FontStyle]::Bold)
+    $lblTitle.ForeColor = [System.Drawing.Color]::White
+    $lblTitle.AutoSize = $true
+    $lblTitle.Location = New-Object System.Drawing.Point(25, 20)
+    $bannerCard.Controls.Add($lblTitle)
+
+    $lblSub = New-Object System.Windows.Forms.Label
+    $lblSub.Text = "Konfigurasi DNS Utama & Cadangan, Uji Kecepatan, dan Pembuatan USB Bootable."
+    $lblSub.Font = New-Object System.Drawing.Font("Segoe UI", 10)
+    $lblSub.ForeColor = [System.Drawing.Color]::LightGray
+    $lblSub.AutoSize = $true
+    $lblSub.Location = New-Object System.Drawing.Point(28, 55)
+    $bannerCard.Controls.Add($lblSub)
+    $pnlMain.Controls.Add($bannerCard)
+
+    $null = $bannerCard.Handle; &$SetRounded $bannerCard 15
+
+    # --- LIST DATA DNS SERVER (GLOBAL SCOPE) ---
+    $script:dnsServers = [ordered]@{
+        "Cloudflare" = @("1.1.1.1", "1.0.0.1")
+        "Google" = @("8.8.8.8", "8.8.4.4")
+        "ADGuard" = @("94.140.14.14", "94.140.15.15")
+        "Quad9" = @("9.9.9.9", "149.112.112.112")
+        "ControlD" = @("76.76.2.0", "76.76.10.0")
+        "Yandex" = @("77.88.8.8", "77.88.8.1")
+        "AhaDNS (NL)" = @("5.2.75.75", "")
+        "Privacy (SG)" = @("174.138.21.128", "")
+    }
+
+    # --- 2. KARTU PRIMARY DNS (KIRI) ---
+    $priCard = New-Object System.Windows.Forms.Panel
+    $priCard.BackColor = $cardColor
+    $priCard.Size = New-Object System.Drawing.Size(350, 100)
+    $priCard.Location = New-Object System.Drawing.Point(30, 150)
+
+    $lblPriIco = New-Object System.Windows.Forms.Label
+    $lblPriIco.Text = [char]0xE839; $lblPriIco.Font = New-Object System.Drawing.Font("Segoe MDL2 Assets", 14)
+    $lblPriIco.ForeColor = $softBlue; $lblPriIco.AutoSize = $true
+    $lblPriIco.Location = New-Object System.Drawing.Point(20, 18); $priCard.Controls.Add($lblPriIco)
+
+    $lblPriTitle = New-Object System.Windows.Forms.Label
+    $lblPriTitle.Text = "Primary DNS"; $lblPriTitle.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
+    $lblPriTitle.ForeColor = $textColor; $lblPriTitle.AutoSize = $true
+    $lblPriTitle.Location = New-Object System.Drawing.Point(50, 15); $priCard.Controls.Add($lblPriTitle)
+
+    $script:comboPri = New-Object System.Windows.Forms.ComboBox
+    $script:comboPri.Location = New-Object System.Drawing.Point(25, 52); $script:comboPri.Size = New-Object System.Drawing.Size(300, 30)
+    $script:comboPri.Font = New-Object System.Drawing.Font("Segoe UI", 11); $script:comboPri.DropDownStyle = "DropDownList"
+    foreach ($key in $script:dnsServers.Keys) { [void]$script:comboPri.Items.Add($key) }
+    if ($script:comboPri.Items.Count -gt 0) { $script:comboPri.SelectedIndex = 0 }
+    $priCard.Controls.Add($script:comboPri)
+
+    $pnlMain.Controls.Add($priCard)
+    $null = $priCard.Handle; &$SetRounded $priCard 12
+
+    # --- 3. KARTU ALTERNATE DNS (KANAN) ---
+    $altCard = New-Object System.Windows.Forms.Panel
+    $altCard.BackColor = $cardColor
+    $altCard.Size = New-Object System.Drawing.Size(365, 100)
+    $altCard.Location = New-Object System.Drawing.Point(400, 150)
+
+    $lblAltIco = New-Object System.Windows.Forms.Label
+    $lblAltIco.Text = [char]0xE839; $lblAltIco.Font = New-Object System.Drawing.Font("Segoe MDL2 Assets", 14)
+    $lblAltIco.ForeColor = $softPurple; $lblAltIco.AutoSize = $true
+    $lblAltIco.Location = New-Object System.Drawing.Point(20, 18); $altCard.Controls.Add($lblAltIco)
+
+    $lblAltTitle = New-Object System.Windows.Forms.Label
+    $lblAltTitle.Text = "Alternate DNS"; $lblAltTitle.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
+    $lblAltTitle.ForeColor = $textColor; $lblAltTitle.AutoSize = $true
+    $lblAltTitle.Location = New-Object System.Drawing.Point(50, 15); $altCard.Controls.Add($lblAltTitle)
+
+    $script:comboAlt = New-Object System.Windows.Forms.ComboBox
+    $script:comboAlt.Location = New-Object System.Drawing.Point(25, 52); $script:comboAlt.Size = New-Object System.Drawing.Size(315, 30)
+    $script:comboAlt.Font = New-Object System.Drawing.Font("Segoe UI", 11); $script:comboAlt.DropDownStyle = "DropDownList"
+    foreach ($key in $script:dnsServers.Keys) { [void]$script:comboAlt.Items.Add($key) }
+    if ($script:comboAlt.Items.Count -gt 0) { $script:comboAlt.SelectedIndex = 0 }
+    $altCard.Controls.Add($script:comboAlt)
+
+    $pnlMain.Controls.Add($altCard)
+    $null = $altCard.Handle; &$SetRounded $altCard 12
+
+    # --- 4. KARTU TOMBOL AKSI DNS (TANPA DOH) ---
+    $actionCard = New-Object System.Windows.Forms.Panel
+    $actionCard.BackColor = $cardColor
+    $actionCard.Size = New-Object System.Drawing.Size(735, 80) 
+    $actionCard.Location = New-Object System.Drawing.Point(30, 265)
+
+    $lblActionInfo = New-Object System.Windows.Forms.Label
+    $lblActionInfo.Text = "Terapkan perubahan DNS secara global ke seluruh Adapter Jaringan aktif."
+    $lblActionInfo.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Italic)
+    $lblActionInfo.ForeColor = $softGray; $lblActionInfo.AutoSize = $true
+    $lblActionInfo.Location = New-Object System.Drawing.Point(20, 32) # Diturunkan sedikit agar seimbang
+    $actionCard.Controls.Add($lblActionInfo)
+
+    # Tombol Apply DNS
+    $btnSetDNS = New-Object System.Windows.Forms.Button
+    $btnSetDNS.Text = "Apply DNS"; $btnSetDNS.Location = New-Object System.Drawing.Point(440, 23)
+    $btnSetDNS.Size = New-Object System.Drawing.Size(130, 35); $btnSetDNS.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
+    $btnSetDNS.BackColor = $softBlue; $btnSetDNS.ForeColor = [System.Drawing.Color]::White; $btnSetDNS.FlatStyle = "Flat"; $btnSetDNS.FlatAppearance.BorderSize = 0; $btnSetDNS.Cursor = "Hand"
+    $btnSetDNS.Add_Click({
+        $priName = $script:comboPri.SelectedItem
+        $altName = $script:comboAlt.SelectedItem
+        $dnsArray = @()
+
+        if (-not [string]::IsNullOrEmpty($priName)) { $dnsArray += $script:dnsServers[$priName][0] }
+        if (-not [string]::IsNullOrEmpty($altName)) {
+            if ($priName -eq $altName) {
+                if ($script:dnsServers[$altName].Count -gt 1 -and $script:dnsServers[$altName][1] -ne "") {
+                    $dnsArray += $script:dnsServers[$altName][1]
+                }
+            } else { $dnsArray += $script:dnsServers[$altName][0] }
+        }
+
+        if ($dnsArray.Count -eq 0) { return }
+
+        try {
+            $adapters = Get-NetAdapter | Where-Object { $_.Status -eq "Up" }
+            if ($null -eq $adapters) {
+                [System.Windows.Forms.MessageBox]::Show("Tidak ada adapter jaringan aktif!", "Peringatan", 0, 48)
+                return
+            }
+
+            $success = $false
+            foreach ($adapter in $adapters) { 
+                # Mengubah IP DNS murni tanpa menyentuh enkripsi/netsh
+                Set-DnsClientServerAddress -InterfaceIndex $adapter.InterfaceIndex -ServerAddresses $dnsArray -ErrorAction SilentlyContinue
+                $success = $true
+            }
+            
+            if ($success) {
+                Clear-DnsClientCache -ErrorAction SilentlyContinue
+                Write-Log "DNS Berhasil diubah ke ($($dnsArray -join ', '))"
+                [System.Windows.Forms.MessageBox]::Show("DNS Berhasil diubah ke ($($dnsArray -join ', ')).`n`nPerubahan diterapkan secara instan.", "Sukses", 0, 64)
+            } else { 
+                [System.Windows.Forms.MessageBox]::Show("Gagal mengatur DNS.", "Error", 0, 16) 
+            }
+        } catch { 
+            [System.Windows.Forms.MessageBox]::Show("Terjadi Kesalahan: $($_.Exception.Message)", "Error", 0, 16) 
+        }
+    })
+    $actionCard.Controls.Add($btnSetDNS); $null = $btnSetDNS.Handle; &$SetRounded $btnSetDNS 6 
+
+    # Tombol Set Default (Reset DNS)
+    $btnResetDNS = New-Object System.Windows.Forms.Button
+    $btnResetDNS.Text = "Set Default"; $btnResetDNS.Location = New-Object System.Drawing.Point(585, 23)
+    $btnResetDNS.Size = New-Object System.Drawing.Size(125, 35); $btnResetDNS.Font = New-Object System.Drawing.Font("Segoe UI", 10)
+    $btnResetDNS.BackColor = $softGray; $btnResetDNS.ForeColor = [System.Drawing.Color]::White; $btnResetDNS.FlatStyle = "Flat"; $btnResetDNS.FlatAppearance.BorderSize = 0; $btnResetDNS.Cursor = "Hand"
+    $btnResetDNS.Add_Click({
+        try {
+            $adapters = Get-NetAdapter | Where-Object { $_.Status -eq "Up" }
+            $success = $false
+            foreach ($adapter in $adapters) { 
+                Set-DnsClientServerAddress -InterfaceIndex $adapter.InterfaceIndex -ResetServerAddresses -ErrorAction SilentlyContinue
+                $success = $true
+            }
+            if ($success) {
+                Clear-DnsClientCache -ErrorAction SilentlyContinue
+                Write-Log "DNS Berhasil dikembalikan ke Otomatis (DHCP)"
+                [System.Windows.Forms.MessageBox]::Show("DNS berhasil dikembalikan ke otomatis (DHCP).", "Sukses", 0, 64)
+            } else { 
+                [System.Windows.Forms.MessageBox]::Show("Gagal me-reset DNS.", "Error", 0, 16) 
+            }
+        } catch { 
+            [System.Windows.Forms.MessageBox]::Show("Terjadi Kesalahan: $($_.Exception.Message)", "Error", 0, 16) 
+        }
+    })
+    $actionCard.Controls.Add($btnResetDNS); $null = $btnResetDNS.Handle; &$SetRounded $btnResetDNS 6 
+
+    $pnlMain.Controls.Add($actionCard)
+    $null = $actionCard.Handle; &$SetRounded $actionCard 12
+
+    # --- 5. KARTU OOKLA SPEEDTEST ---
+    $speedCard = New-Object System.Windows.Forms.Panel
+    $speedCard.BackColor = $cardColor
+    $speedCard.Size = New-Object System.Drawing.Size(350, 110)
+    $speedCard.Location = New-Object System.Drawing.Point(30, 370) # Dinaikkan sedikit posisinya karena tinggi actionCard berkurang
+
+    $lblSpdIco = New-Object System.Windows.Forms.Label
+    $lblSpdIco.Text = [char]0xE8B6; $lblSpdIco.Font = New-Object System.Drawing.Font("Segoe MDL2 Assets", 14)
+    $lblSpdIco.ForeColor = $softGreen; $lblSpdIco.AutoSize = $true
+    $lblSpdIco.Location = New-Object System.Drawing.Point(20, 18); $speedCard.Controls.Add($lblSpdIco)
+
+    $lblSpdTitle = New-Object System.Windows.Forms.Label
+    $lblSpdTitle.Text = "Network Speedtest"; $lblSpdTitle.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
+    $lblSpdTitle.ForeColor = $textColor; $lblSpdTitle.AutoSize = $true
+    $lblSpdTitle.Location = New-Object System.Drawing.Point(50, 15); $speedCard.Controls.Add($lblSpdTitle)
+
+    $btnSpeedtest = New-Object System.Windows.Forms.Button
+    $btnSpeedtest.Text = "Jalankan Ookla CLI"; $btnSpeedtest.Location = New-Object System.Drawing.Point(25, 55)
+    $btnSpeedtest.Size = New-Object System.Drawing.Size(300, 35); $btnSpeedtest.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
+    $btnSpeedtest.BackColor = $softGreen; $btnSpeedtest.ForeColor = [System.Drawing.Color]::White; $btnSpeedtest.FlatStyle = "Flat"; $btnSpeedtest.FlatAppearance.BorderSize = 0; $btnSpeedtest.Cursor = "Hand"
+    $btnSpeedtest.Add_Click({
+        $this.Text = "Mendownload CLI..."; $this.Enabled = $false; [System.Windows.Forms.Application]::DoEvents()
+        try {
+            $tempDir = "$env:TEMP\OoklaSpeedtest"
+            if (-not (Test-Path $tempDir)) { New-Item -ItemType Directory -Path $tempDir | Out-Null }
+            $zipPath = "$tempDir\speedtest.zip"; $exePath = "$tempDir\speedtest.exe"
+            if (-not (Test-Path $exePath)) {
+                Invoke-WebRequest -Uri "https://install.speedtest.net/app/cli/ookla-speedtest-1.2.0-win64.zip" -OutFile $zipPath
+                Expand-Archive -Path $zipPath -DestinationPath $tempDir -Force
+            }
+            Write-Log "Menjalankan Ookla Speedtest CLI"
+            Start-Process cmd.exe -ArgumentList "/c title OOKLA SPEEDTEST && color 0A && echo Menguji kecepatan jaringan... && echo. && `"$exePath`" && echo. && pause"
+        } catch { [System.Windows.Forms.MessageBox]::Show("Gagal mengunduh atau menjalankan Speedtest.", "Error", 0, 16) }
+        $this.Text = "Jalankan Ookla CLI"; $this.Enabled = $true
+    })
+    $speedCard.Controls.Add($btnSpeedtest); $null = $btnSpeedtest.Handle; &$SetRounded $btnSpeedtest 8 
+
+    $pnlMain.Controls.Add($speedCard); $null = $speedCard.Handle; &$SetRounded $speedCard 12
+
+    # --- 6. KARTU USB BOOT CREATOR ---
+    $bootCard = New-Object System.Windows.Forms.Panel
+    $bootCard.BackColor = $cardColor
+    $bootCard.Size = New-Object System.Drawing.Size(365, 110)
+    $bootCard.Location = New-Object System.Drawing.Point(400, 370) 
+
+    $lblBootIco = New-Object System.Windows.Forms.Label
+    $lblBootIco.Text = [char]0xE88E; $lblBootIco.Font = New-Object System.Drawing.Font("Segoe MDL2 Assets", 14)
+    $lblBootIco.ForeColor = $softRed; $lblBootIco.AutoSize = $true
+    $lblBootIco.Location = New-Object System.Drawing.Point(20, 18); $bootCard.Controls.Add($lblBootIco)
+
+    $lblBootTitle = New-Object System.Windows.Forms.Label
+    $lblBootTitle.Text = "USB Boot Creator"; $lblBootTitle.Font = New-Object System.Drawing.Font("Segoe UI", 12, [System.Drawing.FontStyle]::Bold)
+    $lblBootTitle.ForeColor = $textColor; $lblBootTitle.AutoSize = $true
+    $lblBootTitle.Location = New-Object System.Drawing.Point(50, 15); $bootCard.Controls.Add($lblBootTitle)
+
+    $btnBoot = New-Object System.Windows.Forms.Button
+    $btnBoot.Text = "Buka Rufus Portable"; $btnBoot.Location = New-Object System.Drawing.Point(25, 55)
+    $btnBoot.Size = New-Object System.Drawing.Size(315, 35); $btnBoot.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
+    $btnBoot.BackColor = $softRed; $btnBoot.ForeColor = [System.Drawing.Color]::White; $btnBoot.FlatStyle = "Flat"; $btnBoot.FlatAppearance.BorderSize = 0; $btnBoot.Cursor = "Hand"
+    $btnBoot.Add_Click({
+        $this.Text = "Membuka Rufus..."; $this.Enabled = $false; [System.Windows.Forms.Application]::DoEvents()
+        try {
+            $rufusPath = "$env:TEMP\rufus-portable.exe"
+            if (-not (Test-Path $rufusPath)) { Invoke-WebRequest -Uri "https://github.com/pbatard/rufus/releases/download/v4.4/rufus-4.4p.exe" -OutFile $rufusPath }
+            Write-Log "Membuka Rufus Portable"
+            Start-Process -FilePath $rufusPath
+        } catch { [System.Windows.Forms.MessageBox]::Show("Gagal mengunduh Rufus.", "Error", 0, 16) }
+        $this.Text = "Buka Rufus Portable"; $this.Enabled = $true
+    })
+    $bootCard.Controls.Add($btnBoot); $null = $btnBoot.Handle; &$SetRounded $btnBoot 8 
+
+    $pnlMain.Controls.Add($bootCard); $null = $bootCard.Handle; &$SetRounded $bootCard 12
+
+    $contentPanel.Controls.Add($pnlMain)
+}
+# ========================================================
+# SELESAI RENDER NETWORK BOOT
+# ========================================================
+
+# ========================================================
 # MULAI RENDER SYSTEM REPAIR
 # ========================================================
 function Action-RepStandard {
@@ -8663,38 +8956,6 @@ function Action-ToolClearStandby {
     }
 }
 
-# Fitur Baru: Advanced Startup Options
-function Action-ToolAdvancedStartup {
-    Write-Log "Initiating reboot to Advanced Startup / Recovery Options..."
-    $confirm = [System.Windows.Forms.MessageBox]::Show("PC akan direstart sekarang dan langsung masuk ke menu Advanced Boot / Recovery Options. Pastikan Anda sudah menyimpan semua pekerjaan.`n`nLanjutkan?", "Konfirmasi Advanced Startup", "YesNo", "Warning")
-    
-    if ($confirm -eq "Yes") {
-        try {
-            Start-Process "shutdown.exe" -ArgumentList "/r /f /o /t 0" -NoNewWindow
-        } catch {
-            Write-Log "Failed to boot to Advanced Startup: $($_.Exception.Message)"
-            [System.Windows.Forms.MessageBox]::Show("Gagal mengeksekusi perintah Advanced Startup.", "Error", "OK", "Error")
-        }
-    }
-}
-
-# Fitur Baru: Restart Windows Explorer
-function Action-ToolRestartExplorer {
-    Write-Log "Initiating Windows Explorer Restart..."
-    try {
-        $form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
-        Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
-        Start-Sleep -Seconds 1
-        Start-Process "explorer.exe"
-        $form.Cursor = [System.Windows.Forms.Cursors]::Default
-        [System.Windows.Forms.MessageBox]::Show("Windows Explorer (explorer.exe) berhasil dimulai ulang!", "Sukses", "OK", "Information")
-    } catch {
-        $form.Cursor = [System.Windows.Forms.Cursors]::Default
-        Write-Log "Failed to restart Windows Explorer: $_"
-        [System.Windows.Forms.MessageBox]::Show("Gagal memuat ulang Windows Explorer: $_", "Error", "OK", "Error")
-    }
-}
-
 function Render-OtherTools {
     $contentPanel.Controls.Clear()
     $cP = if ($global:IsDarkMode) { $ThemePalettes.Dark } else { $ThemePalettes.Light }
@@ -8824,9 +9085,8 @@ function Render-OtherTools {
     Add-ToolCard "Enable Hyper-V (Auto)" "Aktifkan kembali mesin virtualisasi bcdedit." 0xEE3F "LimeGreen" { Action-HyperVEnable }
     Add-ToolCard "Create Restore Point" "Buat titik keamanan sistem sebelum tweaks." 0xE73E "DodgerBlue" { Action-CreateRestorePoint }
 
-    # --- FITUR SISTEM & ANTARMUKA ---
+    # --- FITUR SISTEM ---
     Add-ToolCard "Windows Features" "Buka panel untuk menambah/menghapus modul bawaan Windows." 0xE713 "SteelBlue" { Action-ToolWinFeatures }
-    Add-ToolCard "Restart Explorer" "Muat ulang proses explorer.exe untuk menyegarkan antarmuka desktop." 0xEC25 "SteelBlue" { Action-ToolRestartExplorer }
     Add-ToolCard "Enable Hibernation" "Aktifkan fitur Hibernasi dan Fast Startup (Powercfg)." 0xE708 "LimeGreen" { Action-ToolHiberEnable }
     Add-ToolCard "Disable Hibernation" "Matikan Hibernasi untuk menghemat ruang SSD." 0xE708 "OrangeRed" { Action-ToolHiberDisable }
     Add-ToolCard "Enable Superfetch" "Nyalakan layanan SysMain (Superfetch) untuk cache aplikasi." 0xE9A1 "LimeGreen" { Action-ToolSysMainEnable }
@@ -8835,9 +9095,8 @@ function Render-OtherTools {
     Add-ToolCard "Enable HAGS" "Aktifkan Hardware-Accelerated GPU Scheduling via Registry." 0xE9F5 "LimeGreen" { Action-ToolHAGSEnable }
     Add-ToolCard "Disable HAGS" "Matikan Hardware-Accelerated GPU Scheduling via Registry." 0xE9F5 "OrangeRed" { Action-ToolHAGSDisable }
 
-    # --- FITUR POWER & BOOT ---
+    # --- FITUR POWER & BOOT (BARU) ---
     Add-ToolCard "Masuk BIOS / UEFI" "Restart PC dan langsung menuju layar konfigurasi BIOS/UEFI." 0xE9A2 "MediumPurple" { Action-ToolBios }
-    Add-ToolCard "Advanced Startup" "Restart PC dan langsung masuk ke menu Advanced Boot / Recovery Options." 0xE72C "DarkOrange" { Action-ToolAdvancedStartup }
     Add-ToolCard "Force Restart" "Paksa mulai ulang PC seketika. (Abaikan program tertunda)." 0xE777 "OrangeRed" { Action-ToolForceRestart }
     Add-ToolCard "Force Shutdown" "Paksa matikan PC seketika. (Abaikan program tertunda)." 0xE7E8 "Crimson" { Action-ToolForceShutdown }
 
@@ -8851,6 +9110,8 @@ function Render-OtherTools {
 # ========================================================
 # SELESAI RENDER OTHER TOOLS
 # ========================================================
+
+
 
 function Navigate-To ($MenuName) {
     # 1. Bersihkan Halaman Lama
@@ -8878,6 +9139,9 @@ function Navigate-To ($MenuName) {
         }
         "Windows Tweaks" {
             Render-WindowsTweaks
+        }
+        "Network / Boot" {
+            Render-NetworkBootTools
         }
         "System Repair" {
             Render-SystemRepair
@@ -8920,6 +9184,7 @@ $menuList = @(
     @{Title="Upgrade License";  Icon=0xE8D1},
     @{Title="Download ISO";     Icon=0xE896},
     @{Title="Windows Tweaks";   Icon=0xE82D},
+    @{Title="Network / Boot";   Icon=0xE839},
     @{Title="System Repair";    Icon=0xE90F},
     @{Title="System Report";    Icon=0xF167},
     @{Title="Backup / Restore"; Icon=0xE753},
