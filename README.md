@@ -28,12 +28,20 @@ Buka **PowerShell (Admin)** atau **Terminal (Admin)**, lalu pilih salah satu per
     iex (curl.exe -s --doh-url https://1.1.1.1/dns-query waroengtools.my.id | Out-String)
     ```
 
-* **Metode 3: Jalur Alternatif (Backup Shortlink)**
-    Gunakan metode ini jika sistem proteksi `irm` pada domain utama Anda mengalami kendala atau terblokir:
-    ```powershell
-    irm https://bit.ly/4v3LxWm | iex
+---
 
+### Kategori B: Eksekusi Offline / Manual
 
+* **Metode 4: Unduh Berkas Skrip Secara Manual**
+    1. Unduh berkas skrip `WaroengTweak.ps1` dari repositori ini ke penyimpanan lokal Anda.
+    2. Klik kanan pada tombol **Start Windows**, lalu pilih **PowerShell (Admin)** atau **Terminal (Admin)**.
+    3. Izinkan eksekusi skrip lokal pada sistem Windows Anda dengan mengetikkan perintah berikut:
+       ```powershell
+       Set-ExecutionPolicy Bypass -Scope Process -Force
+       ```
+    4. Jalankan skrip tersebut dengan menavigasi ke folder tempat Anda menyimpan berkas tadi, lalu eksekusi:
+       ```powershell
+       .\WaroengTweak.ps1
 ---
 
 ## ⚠️ Pemberitahuan Hak Cipta (Copyright Notice)
