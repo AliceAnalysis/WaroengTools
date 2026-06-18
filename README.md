@@ -32,7 +32,7 @@ Buka **PowerShell (Admin)** atau **Terminal (Admin)**, lalu pilih salah satu per
 
 ### Kategori B: Eksekusi Offline / Manual
 
-* **Metode 4: Unduh Berkas Skrip Secara Manual**
+* **Metode 3: Unduh Berkas Skrip Secara Manual**
     1. Unduh berkas skrip `WaroengTweak.ps1` dari repositori ini ke penyimpanan lokal Anda.
     2. Klik kanan pada tombol **Start Windows**, lalu pilih **PowerShell (Admin)** atau **Terminal (Admin)**.
     3. Izinkan eksekusi skrip lokal pada sistem Windows Anda dengan mengetikkan perintah berikut:
