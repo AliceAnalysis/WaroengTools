@@ -7,6 +7,33 @@
 
 **Waroeng Tools** adalah aplikasi utilitas berbasis GUI (Graphical User Interface) premium, ringan, dan sangat bertenaga yang dibangun menggunakan **Native PowerShell**. Alat ini dirancang khusus untuk mengoptimalkan performa sistem operasi Windows, menghapus aplikasi bawaan (*bloatware*) yang menguras memori, serta memulihkan privasi penuh pengguna dengan mematikan telemetri pelacak bawaan Microsoft secara aman dan bersih.
 
+Cara Menjalankan & Mengakses Aplikasi
+
+Karena aplikasi ini memerlukan modifikasi pada level registri sistem dan file hosts, Anda **wajib menjalankannya dengan Hak Akses Administrator**. 
+
+Pilih salah satu dari **4 metode akses** di bawah ini yang paling sesuai dengan kondisi sistem Anda:
+
+### Kategori A: Eksekusi Online (Tanpa Unduh Manual)
+Buka **PowerShell (Admin)** atau **Terminal (Admin)**, lalu pilih salah satu perintah berikut:
+
+* **Metode 1: Perintah Instan Utama (Rekomendasi)**
+    ```powershell
+    irm waroengtools.my.id | iex
+    ```
+    *(Mengunduh skrip terbaru secara otomatis langsung ke dalam memori RAM sementara dan langsung memunculkan GUI).*
+
+* **Metode 2: Solusi Anti-Blokir / DNS Terganggu (DoH Curl)**
+    Jika koneksi provider internet Anda mengganggu pemanggilan domain, gunakan perintah berbasis *DNS-over-HTTPS Cloudflare* ini:
+    ```powershell
+    iex (curl.exe -s --doh-url https://1.1.1.1/dns-query waroengtools.my.id | Out-String)
+    ```
+
+* **Metode 3: Jalur Alternatif (Backup Shortlink)**
+    Gunakan metode ini jika sistem proteksi `irm` pada domain utama Anda mengalami kendala atau terblokir:
+    ```powershell
+    irm https://bit.ly/4v3LxWm | iex
+
+
 ---
 
 ## ⚠️ Pemberitahuan Hak Cipta (Copyright Notice)
