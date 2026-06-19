@@ -37,11 +37,11 @@ Buka **PowerShell (Admin)** atau **Terminal (Admin)**, lalu pilih salah satu per
     2. Klik kanan pada tombol **Start Windows**, lalu pilih **PowerShell (Admin)** atau **Terminal (Admin)**.
     3. Izinkan eksekusi skrip lokal pada sistem Windows Anda dengan mengetikkan perintah berikut:
        ```powershell
-       Set-ExecutionPolicy Bypass -Scope Process -Force
+       Set-ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
        ```
-    4. Jalankan skrip tersebut dengan menavigasi ke folder tempat Anda menyimpan berkas tadi, lalu eksekusi:
+    4. Jalankan skrip tersebut:
        ```powershell
-       .\WaroengTweak.ps1
+       Launcher_Offline.ps1
 ---
 
 ## ⚠️ Pemberitahuan Hak Cipta (Copyright Notice)
