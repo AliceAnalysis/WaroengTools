@@ -1,10 +1,10 @@
 <#
 :: =====================================================================
-:: WAROENG TOOLS - v6.7.1
+:: WAROENG TOOLS - v6.7
 :: Creator: Bagas Alam Saputra
 :: =====================================================================
 :: 
-:: Update Log v6.7.1
+:: Update Log v6.7
 ::
 :: [SPECIAL THANKS & CREDITS]
 :: - massgrave (MAS)
@@ -97,7 +97,7 @@ $p = if ($global:IsDarkMode) { $ThemePalettes.Dark } else { $ThemePalettes.Light
 # =========================================================================
 # Membuat "Kanvas Kosong" atau jendela utama aplikasi
 $form = New-Object System.Windows.Forms.Form
-$form.Text = "Waroeng Tools v6.7.1"                           # Judul aplikasi di kiri atas jendela
+$form.Text = "Waroeng Tools v6.6.3"                           # Judul aplikasi di kiri atas jendela
 $form.Size = New-Object System.Drawing.Size(1150, 800)      # Ukuran resolusi jendela (Lebar x Tinggi)
 $form.StartPosition = "CenterScreen"                        # Agar jendela otomatis muncul tepat di tengah monitor
 $form.FormBorderStyle = "FixedSingle"                       # Mengunci jendela agar ujungnya tidak bisa ditarik/diperbesar (no resize)
@@ -721,27 +721,21 @@ function Show-StorageDetails ($StorageList, $ThemeColors) {
 # =========================================================================
 # FASE 11: FUNGSI RENDER HALAMAN DASHBOARD (TAMPILAN SPESIFIKASI)
 # =========================================================================
-# =========================================================================
-# FASE 11: FUNGSI RENDER HALAMAN DASHBOARD (VERSI ASYNCHRONOUS - FIXED SCOPE)
-# =========================================================================
 function Render-Dashboard {
-    # Menggunakan scope script agar warna tema bisa dibaca di dalam thread event
-    $script:cP = if ($global:IsDarkMode) { $ThemePalettes.Dark } else { $ThemePalettes.Light }
+    $data = Get-DetailedSpecs
+    $cP = if ($global:IsDarkMode) { $ThemePalettes.Dark } else { $ThemePalettes.Light }
 
-    # 1. Bersihkan kontainer utama terlebih dahulu
     $contentPanel.Controls.Clear()
 
-    # 2. Buat Kontainer Utama Dashboard (Menggunakan scope $script:)
-    $script:pnlMain = New-Object System.Windows.Forms.Panel
-    $script:pnlMain.Dock = "Fill"
-    $script:pnlMain.BackColor = $script:cP.Bg
-    $script:pnlMain.AutoScroll = $true 
+    $pnlMain = New-Object System.Windows.Forms.Panel
+    $pnlMain.Dock = "Fill"
+    $pnlMain.BackColor = $cP.Bg
+    $pnlMain.AutoScroll = $true 
 
-    # 3. Render Banner Sambutan Atas
     $bannerCard = New-Object System.Windows.Forms.Panel
     $bannerCard.Size = New-Object System.Drawing.Size(750, 110) 
     $bannerCard.Location = New-Object System.Drawing.Point(30, 30) 
-    $bannerCard.BackColor = $script:cP.Header 
+    $bannerCard.BackColor = $cP.Header 
     
     $banRadius = 20 
     $banPath = New-Object System.Drawing.Drawing2D.GraphicsPath
@@ -768,193 +762,140 @@ function Render-Dashboard {
     $lblSubWelcome.Location = New-Object System.Drawing.Point(28, 60)
     $bannerCard.Controls.Add($lblSubWelcome)
 
-    $script:pnlMain.Controls.Add($bannerCard)
+    $pnlMain.Controls.Add($bannerCard)
 
-    # 4. TAMPILKAN LOADING INDIKATOR (Menggunakan scope $script:)
-    $script:pnlLoading = New-Object System.Windows.Forms.Panel
-    $script:pnlLoading.Size = New-Object System.Drawing.Size(750, 200)
-    $script:pnlLoading.Location = New-Object System.Drawing.Point(30, 160)
-    
-    $lblLoadingText = New-Object System.Windows.Forms.Label
-    $lblLoadingText.Text = "Sedang membaca spesifikasi hardware sistem... Mohon tunggu."
-    $lblLoadingText.Font = New-Object System.Drawing.Font("Segoe UI", 11, [System.Drawing.FontStyle]::Italic)
-    $lblLoadingText.ForeColor = $script:cP.Text
-    $lblLoadingText.AutoSize = $true
-    $lblLoadingText.Location = New-Object System.Drawing.Point(5, 20)
-    $script:pnlLoading.Controls.Add($lblLoadingText)
-    
-    $script:pnlMain.Controls.Add($script:pnlLoading)
-    $contentPanel.Controls.Add($script:pnlMain)
+    $flpCards = New-Object System.Windows.Forms.FlowLayoutPanel
+    $flpCards.Location = New-Object System.Drawing.Point(25, 160)
+    $flpCards.MaximumSize = New-Object System.Drawing.Size(770, 0)
+    $flpCards.Size = New-Object System.Drawing.Size(770, 0)
+    $flpCards.AutoSize = $true
+    $flpCards.AutoSizeMode = "GrowAndShrink" 
+    $flpCards.AutoScroll = $false 
+    $flpCards.WrapContents = $true 
+    $flpCards.FlowDirection = "LeftToRight" 
 
-    # =====================================================================
-    # 5. MEKANISME BACKGROUND WORKER (DENGAN SINKRONISASI RUNSPACE)
-    # =====================================================================
-    # Ambil instans Runspace utama (Main Thread GUI) sebelum membuat thread baru
-    $MainRunspace = [System.Management.Automation.Runspaces.Runspace]::DefaultRunspace
-
-    $worker = New-Object System.ComponentModel.BackgroundWorker
-
-    # Tugas Latar Belakang
-    $worker.Add_DoWork({
-        param($sender, $e)
-        try {
-            # PENTING: Suntikkan Runspace utama ke dalam Thread baru ini
-            # Tanpa ini, cmdlet seperti Get-CimInstance akan kehilangan konteks dan crash ($null)
-            [System.Management.Automation.Runspaces.Runspace]::DefaultRunspace = $MainRunspace
-            
-            # Sekarang aman untuk mengeksekusi interogasi hardware
-            $e.Result = Get-DetailedSpecs
-        } 
-        catch {
-            # Jika ada error internal, catat ke konsol tersembunyi untuk debugging
-            Write-Host "Error di dalam Thread DoWork: $_"
-            $e.Result = $null
+    function Create-SpecCard ($Title, $MainValue, $SubValue, $RawData = $null) {
+        $card = New-Object System.Windows.Forms.Panel
+        $card.Size = New-Object System.Drawing.Size(360, 120) 
+        $card.Margin = New-Object System.Windows.Forms.Padding(5, 5, 15, 15)
+        $card.BackColor = $cP.Card
+        
+        $card.Tag = @{
+            NormalColor = $cP.Card
+            HoverColor  = if ($global:IsDarkMode) { [System.Drawing.Color]::FromArgb(55, 55, 60) } else { [System.Drawing.Color]::FromArgb(240, 245, 255) }
+            DataRaw     = $RawData
+            ThemeColors = $cP
         }
-    })
 
-    # Tugas Selesai (Menggambar UI setelah data didapatkan)
-    $worker.Add_RunWorkerCompleted({
-        param($sender, $e)
-        $data = $e.Result
+        $rad = 15
+        $path = New-Object System.Drawing.Drawing2D.GraphicsPath
+        $path.AddArc(0, 0, $rad, $rad, 180, 90)
+        $path.AddArc($card.Width - $rad, 0, $rad, $rad, 270, 90)
+        $path.AddArc($card.Width - $rad, $card.Height - $rad, $rad, $rad, 0, 90)
+        $path.AddArc(0, $card.Height - $rad, $rad, $rad, 90, 90)
+        $path.CloseAllFigures()
+        $card.Region = New-Object System.Drawing.Region($path)
 
-        # Fungsi UI Card diletakkan di sini agar aman dari scope teardown
-        function Create-SpecCard ($Title, $MainValue, $SubValue, $RawData = $null) {
-            $card = New-Object System.Windows.Forms.Panel
-            $card.Size = New-Object System.Drawing.Size(360, 120) 
-            $card.Margin = New-Object System.Windows.Forms.Padding(5, 5, 15, 15)
-            $card.BackColor = $script:cP.Card
+        $lTitle = New-Object System.Windows.Forms.Label
+        $lTitle.Text = $Title
+        $lTitle.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+        $lTitle.ForeColor = $cP.Accent
+        $lTitle.Location = New-Object System.Drawing.Point(15, 12)
+        $lTitle.AutoSize = $true
+        $card.Controls.Add($lTitle)
+
+        $lMain = New-Object System.Windows.Forms.Label
+        $lMain.Text = $MainValue
+        $lMain.Font = New-Object System.Drawing.Font("Segoe UI", 11, [System.Drawing.FontStyle]::Bold)
+        $lMain.ForeColor = $cP.Text
+        $lMain.Location = New-Object System.Drawing.Point(15, 33)
+        $lMain.AutoSize = $false
+        $lMain.Size = New-Object System.Drawing.Size(330, 56) 
+        $lMain.AutoEllipsis = $true
+        $card.Controls.Add($lMain)
+
+        # PERBAIKAN: Memperlebar ruang teks (340) dan Mengaktifkan AutoEllipsis agar tidak terpotong kasar
+        $lSub = New-Object System.Windows.Forms.Label
+        $lSub.Text = $SubValue
+        $lSub.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Regular)
+        $lSub.ForeColor = [System.Drawing.Color]::Gray
+        $lSub.Location = New-Object System.Drawing.Point(15, 92) 
+        $lSub.AutoSize = $false
+        $lSub.Size = New-Object System.Drawing.Size(340, 22)
+        $lSub.AutoEllipsis = $true
+        $card.Controls.Add($lSub)
+
+        if ($Title -eq "PENYIMPANAN" -and $RawData -and $RawData.Count -gt 2) {
+            $icoExpand = New-Object System.Windows.Forms.Label
+            $icoExpand.Text = [char]0xE710 
+            $icoExpand.Font = New-Object System.Drawing.Font("Segoe MDL2 Assets", 10, [System.Drawing.FontStyle]::Bold)
+            $icoExpand.ForeColor = $cP.Accent
+            $icoExpand.Location = New-Object System.Drawing.Point(330, 13)
+            $icoExpand.AutoSize = $true
+            $card.Controls.Add($icoExpand)
+
+            $card.Cursor = "Hand"; $lMain.Cursor = "Hand"; $lSub.Cursor = "Hand"; $icoExpand.Cursor = "Hand"
+
+            $hoverEnter = {
+                $ctrl = $this
+                if ($ctrl -isnot [System.Windows.Forms.Panel]) { $ctrl = $ctrl.Parent }
+                $ctrl.BackColor = $ctrl.Tag.HoverColor
+            }
             
-            $card.Tag = @{
-                NormalColor = $script:cP.Card
-                HoverColor  = if ($global:IsDarkMode) { [System.Drawing.Color]::FromArgb(55, 55, 60) } else { [System.Drawing.Color]::FromArgb(240, 245, 255) }
-                DataRaw     = $RawData
-                ThemeColors = $script:cP
+            $hoverLeave = {
+                $ctrl = $this
+                if ($ctrl -isnot [System.Windows.Forms.Panel]) { $ctrl = $ctrl.Parent }
+                $ctrl.BackColor = $ctrl.Tag.NormalColor
             }
 
-            $rad = 15
-            $path = New-Object System.Drawing.Drawing2D.GraphicsPath
-            $path.AddArc(0, 0, $rad, $rad, 180, 90)
-            $path.AddArc($card.Width - $rad, 0, $rad, $rad, 270, 90)
-            $path.AddArc($card.Width - $rad, $card.Height - $rad, $rad, $rad, 0, 90)
-            $path.AddArc(0, $card.Height - $rad, $rad, $rad, 90, 90)
-            $path.CloseAllFigures()
-            $card.Region = New-Object System.Drawing.Region($path)
+            $card.Add_MouseEnter($hoverEnter); $lMain.Add_MouseEnter($hoverEnter); $lSub.Add_MouseEnter($hoverEnter)
+            $card.Add_MouseLeave($hoverLeave); $lMain.Add_MouseLeave($hoverLeave); $lSub.Add_MouseLeave($hoverLeave)
 
-            $lTitle = New-Object System.Windows.Forms.Label
-            $lTitle.Text = $Title
-            $lTitle.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
-            $lTitle.ForeColor = $script:cP.Accent
-            $lTitle.Location = New-Object System.Drawing.Point(15, 12)
-            $lTitle.AutoSize = $true
-            $card.Controls.Add($lTitle)
-
-            $lMain = New-Object System.Windows.Forms.Label
-            $lMain.Text = $MainValue
-            $lMain.Font = New-Object System.Drawing.Font("Segoe UI", 11, [System.Drawing.FontStyle]::Bold)
-            $lMain.ForeColor = $script:cP.Text
-            $lMain.Location = New-Object System.Drawing.Point(15, 33)
-            $lMain.Size = New-Object System.Drawing.Size(330, 56) 
-            $lMain.AutoEllipsis = $true
-            $card.Controls.Add($lMain)
-
-            $lSub = New-Object System.Windows.Forms.Label
-            $lSub.Text = $SubValue
-            $lSub.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Regular)
-            $lSub.ForeColor = [System.Drawing.Color]::Gray
-            $lSub.Location = New-Object System.Drawing.Point(15, 92) 
-            $lSub.Size = New-Object System.Drawing.Size(340, 22)
-            $lSub.AutoEllipsis = $true
-            $card.Controls.Add($lSub)
-
-            if ($Title -eq "PENYIMPANAN" -and $RawData -and $RawData.Count -gt 2) {
-                $icoExpand = New-Object System.Windows.Forms.Label
-                $icoExpand.Text = [char]0xE710 
-                $icoExpand.Font = New-Object System.Drawing.Font("Segoe MDL2 Assets", 10, [System.Drawing.FontStyle]::Bold)
-                $icoExpand.ForeColor = $script:cP.Accent
-                $icoExpand.Location = New-Object System.Drawing.Point(330, 13)
-                $icoExpand.AutoSize = $true
-                $card.Controls.Add($icoExpand)
-
-                $card.Cursor = "Hand"; $lMain.Cursor = "Hand"; $lSub.Cursor = "Hand"; $icoExpand.Cursor = "Hand"
-
-                $hoverEnter = {
-                    $ctrl = $this
-                    if ($ctrl -isnot [System.Windows.Forms.Panel]) { $ctrl = $ctrl.Parent }
-                    $ctrl.BackColor = $ctrl.Tag.HoverColor
-                }
-                
-                $hoverLeave = {
-                    $ctrl = $this
-                    if ($ctrl -isnot [System.Windows.Forms.Panel]) { $ctrl = $ctrl.Parent }
-                    $ctrl.BackColor = $ctrl.Tag.NormalColor
-                }
-
-                $card.Add_MouseEnter($hoverEnter); $lMain.Add_MouseEnter($hoverEnter); $lSub.Add_MouseEnter($hoverEnter)
-                $card.Add_MouseLeave($hoverLeave); $lMain.Add_MouseLeave($hoverLeave); $lSub.Add_MouseLeave($hoverLeave)
-
-                $actionClick = {
-                    $ctrl = $this
-                    if ($ctrl -isnot [System.Windows.Forms.Panel]) { $ctrl = $ctrl.Parent }
-                    Show-StorageDetails -StorageList $ctrl.Tag.DataRaw -ThemeColors $ctrl.Tag.ThemeColors
-                }
-
-                $card.Add_Click($actionClick); $lMain.Add_Click($actionClick); $lSub.Add_Click($actionClick); $icoExpand.Add_Click($actionClick)
+            $actionClick = {
+                $ctrl = $this
+                if ($ctrl -isnot [System.Windows.Forms.Panel]) { $ctrl = $ctrl.Parent }
+                Show-StorageDetails -StorageList $ctrl.Tag.DataRaw -ThemeColors $ctrl.Tag.ThemeColors
             }
-            return $card
+
+            $card.Add_Click($actionClick); $lMain.Add_Click($actionClick); $lSub.Add_Click($actionClick); $icoExpand.Add_Click($actionClick)
         }
 
-        # Singkirkan panel loading jika pnlMain ada
-        if ($script:pnlMain -and $script:pnlLoading) {
-            $script:pnlMain.Controls.Remove($script:pnlLoading)
-        }
+        return $card
+    }
 
-        # Siapkan FlowLayoutPanel untuk kartu hardware
-        $flpCards = New-Object System.Windows.Forms.FlowLayoutPanel
-        $flpCards.Location = New-Object System.Drawing.Point(25, 160)
-        $flpCards.MaximumSize = New-Object System.Drawing.Size(770, 0)
-        $flpCards.Size = New-Object System.Drawing.Size(770, 0)
-        $flpCards.AutoSize = $true
-        $flpCards.AutoSizeMode = "GrowAndShrink" 
-        $flpCards.AutoScroll = $false 
-        $flpCards.WrapContents = $true 
-        $flpCards.FlowDirection = "LeftToRight"
+    if ($data) {
+        $flpCards.Controls.Add((Create-SpecCard "SISTEM OPERASI" $data.OSVer $data.Model))
+        $flpCards.Controls.Add((Create-SpecCard "PROCESSOR (CPU)" $data.CPU $data.CPU_Sub))
+        $flpCards.Controls.Add((Create-SpecCard "MEMORY (RAM)" $data.RAM_Main $data.RAM_Sub))
+        $flpCards.Controls.Add((Create-SpecCard "GRAPHICS (GPU)" $data.GPU $data.GPU_Sub))
+        
+        if ($data.Storage) {
+            $jmlDrive = $data.Storage.Count
+            if ($jmlDrive -le 2) { $flpCards.Controls.Add((Create-SpecCard "PENYIMPANAN" ($data.Storage -join " | ") "Physical Drive" $null)) } 
+            else { $flpCards.Controls.Add((Create-SpecCard "PENYIMPANAN" "Terdapat $jmlDrive Penyimpanan Fisik" "Klik untuk melihat detail . . . ." $data.Storage)) }
+        } else { $flpCards.Controls.Add((Create-SpecCard "PENYIMPANAN" "No Disk Found" "Physical Drive" $null)) }
+        
+        $flpCards.Controls.Add((Create-SpecCard "STATUS KEAMANAN" $data.AV_Main $data.AV_Sub))
 
-        if ($data) {
-            $flpCards.Controls.Add((Create-SpecCard "SISTEM OPERASI" $data.OSVer $data.Model))
-            $flpCards.Controls.Add((Create-SpecCard "PROCESSOR (CPU)" $data.CPU $data.CPU_Sub))
-            $flpCards.Controls.Add((Create-SpecCard "MEMORY (RAM)" $data.RAM_Main $data.RAM_Sub))
-            $flpCards.Controls.Add((Create-SpecCard "GRAPHICS (GPU)" $data.GPU $data.GPU_Sub))
-            
-            if ($data.Storage) {
-                $jmlDrive = $data.Storage.Count
-                if ($jmlDrive -le 2) { $flpCards.Controls.Add((Create-SpecCard "PENYIMPANAN" ($data.Storage -join " | ") "Physical Drive" $null)) } 
-                else { $flpCards.Controls.Add((Create-SpecCard "PENYIMPANAN" "Terdapat $jmlDrive Penyimpanan Fisik" "Klik untuk melihat detail . . . ." $data.Storage)) }
-            } else { $flpCards.Controls.Add((Create-SpecCard "PENYIMPANAN" "No Disk Found" "Physical Drive" $null)) }
-            
-            $flpCards.Controls.Add((Create-SpecCard "STATUS KEAMANAN" $data.AV_Main $data.AV_Sub))
+        # PERBAIKAN: Menyingkat struktur kalimat sub agar hemat tempat dan aman dari bug clipping
+        $bootMain = "Boot Method : $($data.BootMethod)`r`nSecure Boot : $($data.SecureBoot)"
+        $bootSub  = "BIOS: $($data.BIOSVer)  |  Partition: $($data.Partition)"
+        $flpCards.Controls.Add((Create-SpecCard "BIOS & BOOT SYSTEM" $bootMain $bootSub))
 
-            $bootMain = "Boot Method : $($data.BootMethod)`r`nSecure Boot : $($data.SecureBoot)"
-            $bootSub  = "BIOS: $($data.BIOSVer)  |  Partition: $($data.Partition)"
-            $flpCards.Controls.Add((Create-SpecCard "BIOS & BOOT SYSTEM" $bootMain $bootSub))
+        $flpCards.Controls.Add((Create-SpecCard "KONEKSI JARINGAN" $data.Net_Main $data.Net_Sub))
 
-            $flpCards.Controls.Add((Create-SpecCard "KONEKSI JARINGAN" $data.Net_Main $data.Net_Sub))
-        } else {
-            $lblErr = New-Object System.Windows.Forms.Label
-            $lblErr.Text = "Gagal mengambil informasi sistem secara aman."
-            $lblErr.ForeColor = [System.Drawing.Color]::Red
-            $lblErr.Font = New-Object System.Drawing.Font("Segoe UI", 10, [System.Drawing.FontStyle]::Bold)
-            $lblErr.AutoSize = $true
-            $flpCards.Controls.Add($lblErr)
-        }
+    } else {
+        $lblErr = New-Object System.Windows.Forms.Label
+        $lblErr.Text = "Gagal mengambil informasi sistem."
+        $lblErr.ForeColor = [System.Drawing.Color]::Red
+        $lblErr.AutoSize = $true
+        $flpCards.Controls.Add($lblErr)
+    }
 
-        # Tambahkan flpCards ke pnlMain yang berada di scope script
-        if ($script:pnlMain) {
-            $script:pnlMain.Controls.Add($flpCards)
-        }
-    })
-
-    # Tembakkan Background Worker
-    $worker.RunWorkerAsync()
+    $pnlMain.Controls.Add($flpCards)
+    $contentPanel.Controls.Add($pnlMain)
+    
+    Write-Host "Render Dashboard Berhasil"
 }
 
 # -------------------------------------------------------------------------
