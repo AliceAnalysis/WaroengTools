@@ -97,7 +97,7 @@ $p = if ($global:IsDarkMode) { $ThemePalettes.Dark } else { $ThemePalettes.Light
 # =========================================================================
 # Membuat "Kanvas Kosong" atau jendela utama aplikasi
 $form = New-Object System.Windows.Forms.Form
-$form.Text = "Waroeng Tools v6.6.3"                           # Judul aplikasi di kiri atas jendela
+$form.Text = "Waroeng Tools v6.7"                           # Judul aplikasi di kiri atas jendela
 $form.Size = New-Object System.Drawing.Size(1150, 800)      # Ukuran resolusi jendela (Lebar x Tinggi)
 $form.StartPosition = "CenterScreen"                        # Agar jendela otomatis muncul tepat di tengah monitor
 $form.FormBorderStyle = "FixedSingle"                       # Mengunci jendela agar ujungnya tidak bisa ditarik/diperbesar (no resize)
